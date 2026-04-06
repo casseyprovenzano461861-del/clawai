@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawAI 简单界面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.2rem;
+        }
+
+        .status-badges {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge.running {
+            background: linear-gradient(90deg, #10b981, #059669);
+            color: white;
+        }
+
+        .badge.ready {
+            background: linear-gradient(90deg, #3b82f6, #2563eb);
+            color: white;
+        }
+
+        .badge.warning {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            color: white;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 40px;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid #334155;
+            border-radius: 15px;
+            padding: 25px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #e2e8f0;
+        }
+
+        .card-content {
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        .button {
+            display: inline-block;
+            background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 15px;
+        }
+
+        .button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        .api-section {
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+        }
+
+        .endpoint-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .endpoint {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .method.get {
+            background: #10b981;
+            color: white;
+        }
+
+        .method.post {
+            background: #f59e0b;
+            color: white;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid #334155;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">ClawAI</div>
+            <p class="subtitle">智能安全评估系统 - 简化访问界面</p>
+
+            <div class="status-badges">
+                <div class="badge running" id="backend-status">
+                    <span class="loading"></span>
+                    检查后端状态...
+                </div>
+                <div class="badge ready" id="frontend-status">
+                    <span>✅</span>
+                    前端就绪
+                </div>
+                <div class="badge warning" id="api-status">
+                    <span>⚡</span>
+                    直接访问API
+                </div>
+            </div>
+        </header>
+
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-title">📊 API 文档</div>
+                <div class="card-content">
+                    <p>访问完整的交互式API文档，查看所有可用端点并进行测试。</p>
+                    <a href="http://localhost:8000/docs" target="_blank" class="button">打开 Swagger UI</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">❤️ 健康检查</div>
+                <div class="card-content">
+                    <p>检查后端服务是否正常运行，获取系统状态和版本信息。</p>
+                    <button class="button" onclick="checkHealth()">检查服务健康</button>
+                    <div id="health-result" style="margin-top: 15px; display: none;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🛠️ 工具列表</div>
+                <div class="card-content">
+                    <p>查看已集成的安全工具列表及其可用性状态。</p>
+                    <button class="button" onclick="getTools()">获取工具列表</button>
+                    <div id="tools-result" style="margin-top: 15px; display: none;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🚀 安全扫描</div>
+                <div class="card-content">
+                    <p>执行安全扫描测试，仅用于授权的安全评估。</p>
+
+                    <div style="background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid #ef4444; margin-bottom: 15px;">
+                        <strong>⚠️ 重要安全警告：</strong>
+                        <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 0.9rem;">
+                            <li>仅扫描您拥有权限的网站或系统</li>
+                            <li>未经授权的扫描可能违反法律</li>
+                            <li>建议使用本地测试环境或授权目标</li>
+                            <li>默认使用模拟数据模式，不会发起真实攻击</li>
+                        </ul>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <input type="text" id="target-input" placeholder="输入测试目标 (如: demo.target.com)"
+                               style="width: 100%; padding: 10px; border-radius: 8px; background: #1e293b; color: white; border: 1px solid #334155; margin-bottom: 10px;">
+                        <button class="button" onclick="runTest()">执行安全扫描</button>
+                    </div>
+                    <div id="test-result" style="margin-top: 15px; display: none;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📖 使用指南</div>
+                <div class="card-content">
+                    <p><strong>如何安全地使用ClawAI进行扫描：</strong></p>
+
+                    <div style="margin: 15px 0;">
+                        <strong>1. 合法合规：</strong>
+                        <ul style="margin: 5px 0 15px 20px; font-size: 0.9rem;">
+                            <li>仅扫描您拥有书面授权或属于您的系统</li>
+                            <li>使用本地测试环境（如localhost、127.0.0.1）</li>
+                            <li>避免扫描公共网站，除非获得明确许可</li>
+                        </ul>
+
+                        <strong>2. 测试目标示例：</strong>
+                        <ul style="margin: 5px 0 15px 20px; font-size: 0.9rem;">
+                            <li><code>demo.target.com</code> - 模拟数据测试</li>
+                            <li><code>localhost</code> - 本地服务器测试</li>
+                            <li><code>127.0.0.1</code> - 本机IP地址</li>
+                            <li>您自己的测试服务器IP或域名</li>
+                        </ul>
+
+                        <strong>3. 扫描模式说明：</strong>
+                        <ul style="margin: 5px 0 15px 20px; font-size: 0.9rem;">
+                            <li><strong>模拟模式</strong>：使用预设数据，安全无害</li>
+                            <li><strong>真实模式</strong>：执行真实扫描工具，需要授权</li>
+                            <li>默认使用模拟模式，不会发起真实攻击</li>
+                        </ul>
+
+                        <strong>4. 遇到问题：</strong>
+                        <ul style="margin: 5px 0 15px 20px; font-size: 0.9rem;">
+                            <li>确保后端服务正在运行（检查右上角状态）</li>
+                            <li>如果无法连接，等待几秒后刷新页面</li>
+                            <li>检查浏览器控制台查看详细错误</li>
+                        </ul>
+                    </div>
+
+                    <div style="background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid #10b981; margin-top: 15px;">
+                        <strong>💡 快速开始：</strong>
+                        <p style="margin: 8px 0 0 0; font-size: 0.9rem;">
+                            1. 输入 <code>demo.target.com</code><br>
+                            2. 点击"执行安全扫描"按钮<br>
+                            3. 查看扫描结果，了解系统功能
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2>主要API端点</h2>
+            <div class="endpoint-list">
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <strong>/health</strong> - 系统健康检查
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <strong>/tools</strong> - 获取可用工具列表
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <strong>/docs</strong> - API文档 (Swagger UI)
+                </div>
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <strong>/tools/execute</strong> - 执行工具扫描
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <strong>/api/v1/ai/health</strong> - AI引擎健康检查
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>ClawAI v2.0.0 | 智能安全评估系统</p>
+            <p>双击此HTML文件即可直接访问，无需构建过程</p>
+        </footer>
+    </div>
+
+    <script>
+        // API基础URL
+        const API_BASE = 'http://localhost:8000';
+
+        // 检查后端状态
+        async function checkBackend() {
+            const statusEl = document.getElementById('backend-status');
+            try {
+                const response = await fetch(`${API_BASE}/health`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    statusEl.innerHTML = '<span>✅</span> 后端运行正常';
+                    statusEl.className = 'badge running';
+                    return true;
+                } else {
+                    statusEl.innerHTML = '<span>❌</span> 后端未响应';
+                    statusEl.className = 'badge warning';
+                    return false;
+                }
+            } catch (error) {
+                statusEl.innerHTML = '<span>❌</span> 后端无法访问';
+                statusEl.className = 'badge warning';
+                return false;
+            }
+        }
+
+        // 检查服务健康
+        async function checkHealth() {
+            const resultEl = document.getElementById('health-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<div class="loading"></div> 正在检查...';
+
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(16, 185, 129, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #10b981;">
+                            <strong>✅ 服务正常</strong><br>
+                            状态: ${data.status}<br>
+                            版本: ${data.version}<br>
+                            时间: ${new Date().toLocaleTimeString()}
+                        </div>
+                    `;
+                } else {
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                            <strong>❌ 服务异常</strong><br>
+                            状态码: ${response.status}<br>
+                            请确保后端正在运行
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                        <strong>❌ 连接失败</strong><br>
+                        错误: ${error.message}<br>
+                        请检查后端是否启动
+                    </div>
+                `;
+            }
+        }
+
+        // 获取工具列表
+        async function getTools() {
+            const resultEl = document.getElementById('tools-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<div class="loading"></div> 正在获取工具列表...';
+
+            try {
+                const response = await fetch(`${API_BASE}/tools`);
+                if (response.ok) {
+                    const data = await response.json();
+                    let toolsHtml = '<div style="background: rgba(59, 130, 246, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6;">';
+                    toolsHtml += '<strong>🛠️ 可用工具</strong><br><br>';
+
+                    if (data.tools && data.tools.length > 0) {
+                        data.tools.forEach(tool => {
+                            const statusColor = tool.available ? '#10b981' : '#ef4444';
+                            const statusText = tool.available ? '可用' : '不可用';
+                            toolsHtml += `
+                                <div style="margin-bottom: 8px;">
+                                    <strong>${tool.name}</strong>
+                                    <span style="background: ${statusColor}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; margin-left: 8px;">${statusText}</span>
+                                    <div style="font-size: 0.9rem; color: #94a3b8;">${tool.description || '无描述'}</div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        toolsHtml += '暂无可用工具';
+                    }
+
+                    toolsHtml += '</div>';
+                    resultEl.innerHTML = toolsHtml;
+                } else {
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                            <strong>❌ 获取失败</strong><br>
+                            状态码: ${response.status}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                        <strong>❌ 连接失败</strong><br>
+                        错误: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // 运行测试 - 真实API调用
+        async function runTest() {
+            const target = document.getElementById('target-input').value || 'demo.target.com';
+            const resultEl = document.getElementById('test-result');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<div class="loading"></div> 正在执行安全扫描...';
+
+            try {
+                // 调用快速扫描API端点
+                const response = await fetch(`${API_BASE}/attack/quick-scan`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        target: target
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // 构建结果显示
+                let resultHtml = '<div style="background: rgba(139, 92, 246, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #8b5cf6;">';
+                resultHtml += `<strong>🎯 安全扫描结果: ${data.target}</strong><br>`;
+                resultHtml += `<div style="margin-top: 10px;">`;
+                resultHtml += `执行模式: <strong>${data.execution_mode === 'real' ? '真实扫描' : '模拟模式'}</strong><br>`;
+                resultHtml += `执行时间: ${data.execution_time}<br>`;
+                if (data.warning) {
+                    resultHtml += `<span style="color: #f59e0b;">⚠️ ${data.warning}</span><br>`;
+                }
+                resultHtml += `消息: ${data.message}<br><br>`;
+
+                // 显示nmap端口扫描结果
+                if (data.nmap && data.nmap.ports && data.nmap.ports.length > 0) {
+                    resultHtml += `<strong>端口扫描结果:</strong><br>`;
+                    data.nmap.ports.forEach(port => {
+                        const stateColor = port.state === 'open' ? '#10b981' : '#94a3b8';
+                        resultHtml += `
+                            <div style="margin: 5px 0; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 6px; border-left: 3px solid ${stateColor};">
+                                端口 ${port.port}: ${port.service || 'unknown'} - <span style="color: ${stateColor}">${port.state || 'unknown'}</span>
+                            </div>
+                        `;
+                    });
+                    resultHtml += `<br>`;
+                }
+
+                // 显示whatweb指纹识别结果
+                if (data.whatweb && data.whatweb.fingerprint) {
+                    const fingerprint = data.whatweb.fingerprint;
+                    resultHtml += `<strong>Web指纹识别:</strong><br>`;
+                    resultHtml += `<div style="background: rgba(59, 130, 246, 0.1); padding: 10px; border-radius: 6px; margin: 5px 0;">`;
+
+                    if (fingerprint.web_server) {
+                        resultHtml += `Web服务器: ${fingerprint.web_server}<br>`;
+                    }
+                    if (fingerprint.cms && fingerprint.cms.length > 0) {
+                        resultHtml += `CMS系统: ${fingerprint.cms.join(', ')}<br>`;
+                    }
+                    if (fingerprint.language && fingerprint.language.length > 0) {
+                        resultHtml += `编程语言: ${fingerprint.language.join(', ')}<br>`;
+                    }
+                    if (fingerprint.other && fingerprint.other.length > 0) {
+                        resultHtml += `其他组件: ${fingerprint.other.join(', ')}<br>`;
+                    }
+                    if (data.whatweb.error) {
+                        resultHtml += `<span style="color: #ef4444;">错误: ${data.whatweb.error}</span><br>`;
+                    }
+                    resultHtml += `</div>`;
+                }
+
+                resultHtml += `</div></div>`;
+
+                resultEl.innerHTML = resultHtml;
+
+            } catch (error) {
+                resultEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                        <strong>❌ 测试失败</strong><br>
+                        错误: ${error.message}<br>
+                        请确保后端服务正在运行 (端口 8000)<br>
+                        或检查浏览器控制台查看详细错误
+                    </div>
+                `;
+                console.error('测试错误:', error);
+            }
+        }
+
+        // 页面加载时检查后端状态
+        document.addEventListener('DOMContentLoaded', function() {
+            checkBackend();
+
+            // 每10秒检查一次后端状态
+            setInterval(checkBackend, 10000);
+
+            // 自动填充示例目标
+            document.getElementById('target-input').value = 'demo.target.com';
+        });
+
+        // 添加键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && document.getElementById('target-input').value) {
+                runTest();
+            }
+        });
+    </script>
+</body>
+</html>

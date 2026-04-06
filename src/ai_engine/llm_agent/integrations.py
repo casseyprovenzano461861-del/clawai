@@ -12,8 +12,8 @@ import asyncio
 # 添加模块路径以导入现有ClawAI模块
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from llm_agent.pentest_agent import ClawAIPentestAgent
-from llm_agent.config_manager import LLMConfigManager
+from .pentest_agent import ClawAIPentestAgent
+from .config_manager import LLMConfigManager
 
 logger = logging.getLogger(__name__)
 
