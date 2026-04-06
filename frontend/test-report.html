@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawAI - 报告系统测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        
+        .template-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .template-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .template-card.selected {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .severity-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .severity-critical {
+            background-color: #ef4444;
+            color: white;
+        }
+        
+        .severity-high {
+            background-color: #f97316;
+            color: white;
+        }
+        
+        .severity-medium {
+            background-color: #eab308;
+            color: #1f2937;
+        }
+        
+        .severity-low {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .report-preview {
+            background: white;
+            color: #1f2937;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 10px;
+            padding: 16px;
+            transition: transform 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        
+        .vulnerability-card {
+            border-left: 4px solid;
+            background-color: rgba(30, 41, 59, 0.6);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .vulnerability-critical {
+            border-left-color: #ef4444;
+        }
+        
+        .vulnerability-high {
+            border-left-color: #f97316;
+        }
+        
+        .vulnerability-medium {
+            border-left-color: #eab308;
+        }
+        
+        .recommendation-item {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-left: 3px solid #3b82f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- 标题 -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">ClawAI 可视化报告系统测试</h1>
+            <p class="text-slate-400 text-lg">专业安全评估报告生成和预览</p>
+        </div>
+        
+        <!-- 模板选择 -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold mb-6">选择报告模板</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="template-card selected" id="template-detailed">
+                    <div class="flex items-start mb-4">
+                        <div class="p-3 rounded-lg bg-blue-500/20 text-blue-400 mr-4">
+                            <i class="fas fa-file-code text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg">详细技术报告</h3>
+                            <p class="text-slate-400 text-sm mt-1">完整的技术报告，包含所有发现和详细分析</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-sm text-slate-500">
+                        <span>包含: 6个部分</span>
+                        <span>10-15页</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" id="template-executive">
+                    <div class="flex items-start mb-4">
+                        <div class="p-3 rounded-lg bg-green-500/20 text-green-400 mr-4">
+                            <i class="fas fa-chart-bar text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg">执行摘要报告</h3>
+                            <p class="text-slate-400 text-sm mt-1">面向管理层的简要报告，突出关键风险和行动建议</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-sm text-slate-500">
+                        <span>包含: 3个部分</span>
+                        <span>1-2页</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" id="template-compliance">
+                    <div class="flex items-start mb-4">
+                        <div class="p-3 rounded-lg bg-purple-500/20 text-purple-400 mr-4">
+                            <i class="fas fa-shield-alt text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg">合规性报告</h3>
+                            <p class="text-slate-400 text-sm mt-1">针对特定合规标准（如PCI DSS、ISO 27001）的报告</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-sm text-slate-500">
+                        <span>包含: 4个部分</span>
+                        <span>5-8页</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" id="template-custom">
+                    <div class="flex items-start mb-4">
+                        <div class="p-3 rounded-lg bg-yellow-500/20 text-yellow-400 mr-4">
+                            <i class="fas fa-cog text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg">自定义报告</h3>
+                            <p class="text-slate-400 text-sm mt-1">根据需求自定义的报告内容和格式</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-sm text-slate-500">
+                        <span>包含: 所有部分</span>
+                        <span>可变</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 报告预览 -->
+        <div class="report-preview p-8 mb-12">
+            <!-- 报告头部 -->
+            <div class="border-b pb-6 mb-8">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h1 class="text-3xl font-bold mb-2" id="report-title">安全评估报告 - 192.168.1.100</h1>
+                        <div class="flex items-center space-x-6 text-gray-600">
+                            <div class="flex items-center">
+                                <i class="far fa-calendar mr-2"></i>
+                                <span id="report-date">2026-04-06</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="far fa-clock mr-2"></i>
+                                <span id="report-duration">15分30秒</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-shield-alt mr-2"></i>
+                                <span>风险等级: <span class="font-semibold text-red-600" id="report-severity">高</span></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm text-gray-500">报告ID</div>
+                        <div class="font-mono font-bold" id="report-id">REP-2026-04-06-001</div>
+                        <div class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium mt-2">
+                            已完成
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 执行摘要 -->
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2">执行摘要</h2>
+                <div class="bg-blue-50 p-5 rounded-lg mb-6">
+                    <p class="text-lg" id="executive-summary">
+                        本次安全评估发现目标系统存在多个安全漏洞，包括1个严重漏洞和3个高危漏洞。建议立即采取修复措施。
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="metric-card text-center">
+                        <div class="text-sm text-gray-600 mb-2">风险等级</div>
+                        <div class="text-3xl font-bold text-red-600" id="risk-level">高</div>
+                    </div>
+                    <div class="metric-card text-center">
+                        <div class="text-sm text-gray-600 mb-2">置信度</div>
+                        <div class="text-3xl font-bold text-blue-600" id="confidence">95%</div>
+                    </div>
+                    <div class="metric-card text-center">
+                        <div class="text-sm text-gray-600 mb-2">建议数量</div>
+                        <div class="text-3xl font-bold text-green-600" id="recommendations-count">8</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 发现统计 -->
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-2">发现统计</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+                    <div class="text-center p-5 bg-red-50 rounded-lg">
+                        <div class="text-3xl font-bold text-red-600" id="critical-count">1</div>
+                        <div class="text-sm text-gray-600">严重</div>
+                    </div>
+                    <div class="text-center p-5 bg-orange-50 rounded-lg">
+                        <div class="text-3xl font-bold text-orange-600" id="high-count">3</div>
+                        <div class="text-sm text-gray-600">高危</div>
+                    </div>
+                    <div class="text-center p-5 bg-yellow-50 rounded-lg">
+                        <div class="text-3xl font-bold text-yellow-600" id="medium-count">5</div>
+                        <div class="text-sm text-gray-600">中危</div>
+                    </div>
+                    <div class="text-center p-5 bg-green-50 rounded-lg">
+                        <div class="text-3xl font-bold text-green-600" id="low-count">8</div>
+                        <div class="text-sm text-gray-600">低危</div>
+                    </div>
+                    <div class="text-center p-5 bg-blue-50 rounded-lg">
+                        <div class="text-3xl font-bold text-blue-600" id="info-count">12</div>
+                        <div class="text-sm text-gray-600">信息</div>
+                    </div>
+                    <div class="text-center p-5 bg-gray-50 rounded-lg">
+                        <div class="text-3xl font-bold text-gray-600" id="total-count">29</div>
+                        <div class="text-sm text-gray-600">总计</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 漏洞详情 -->
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-2">漏洞详情</h2>
+                <div id="vulnerabilities-list">
+                    <!-- 漏洞卡片将通过JavaScript动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 安全建议 -->
+            <div class="mb-10">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-2">安全建议</h2>
+                <div id="recommendations-list">
+                    <!-- 建议列表将通过JavaScript动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 报告底部 -->
+            <div class="border-t pt-8 mt-10">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <div class="text-sm text-gray-600">生成时间</div>
+                        <div class="font-medium" id="generation-time">2026-04-06 11:50:00</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm text-gray-600">ClawAI Security Platform</div>
+                        <div class="font-medium">企业级安全评估工具</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 控制面板 -->
+        <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <h2 class="text-xl font-semibold mb-2">报告控制面板</h2>
+                    <p class="text-slate-400 text-sm">生成、导出和管理安全评估报告</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="generate-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center">
+                        <i class="fas fa-file-alt mr-2"></i> 生成报告
+                    </button>
+                    <button id="export-pdf" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium flex items-center">
+                        <i class="fas fa-file-pdf mr-2"></i> 导出PDF
+                    </button>
+                    <button id="export-html" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium flex items-center">
+                        <i class="fas fa-file-code mr-2"></i> 导出HTML
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部信息 -->
+        <div class="mt-12 pt-6 border-t border-slate-800 text-center text-slate-500 text-sm">
+            <p>ClawAI 可视化报告系统测试页面 | 演示数据更新时间: <span id="update-time">11:50:00</span></p>
+            <p class="mt-2">此页面演示了ReportGenerator组件的核心功能，无需React环境即可测试</p>
+        </div>
+    </div>
+    
+    <script>
+        // 报告数据
+        const reportData = {
+            title: '安全评估报告 - 192.168.1.100',
+            date: '2026-04-06',
+            duration: '15分30秒',
+            severity: '高',
+            id: 'REP-2026-04-06-001',
+            executiveSummary: '本次安全评估发现目标系统存在多个安全漏洞，包括1个严重漏洞和3个高危漏洞。建议立即采取修复措施。',
+            riskLevel: '高',
+            confidence: '95%',
+            recommendationsCount: 8,
+            findings: {
+                critical: 1,
+                high: 3,
+                medium: 5,
+                low: 8,
+                informational: 12,
+                total: 29
+            },
+            vulnerabilities: [
+                {
+                    id: 'VULN-001',
+                    title: 'WordPress RCE漏洞 (CVE-2023-1234)',
+                    severity: 'critical',
+                    cvssScore: 9.8,
+                    description: 'WordPress核心组件存在远程代码执行漏洞，攻击者可通过特制请求执行任意代码。',
+                    impact: '攻击者可完全控制目标系统，窃取数据或部署恶意软件。',
+                    remediation: '立即更新WordPress到最新版本，并应用安全补丁。'
+                },
+                {
+                    id: 'VULN-002',
+                    title: 'Apache HTTP Server信息泄露',
+                    severity: 'high',
+                    cvssScore: 7.5,
+                    description: 'Apache服务器配置不当导致敏感信息泄露。',
+                    impact: '攻击者可获取服务器配置信息和内部路径。',
+                    remediation: '修改Apache配置文件，禁用目录列表和服务器信息显示。'
+                },
+                {
+                    id: 'VULN-003',
+                    title: 'PHP版本过时',
+                    severity: 'medium',
+                    cvssScore: 5.3,
+                    description: 'PHP版本7.4已停止支持，存在已知安全漏洞。',
+                    impact: '攻击者可利用已知漏洞攻击系统。',
+                    remediation: '升级到PHP 8.1或更高版本。'
+                }
+            ],
+            recommendations: [
+                '立即更新WordPress到最新版本',
+                '升级PHP到8.1或更高版本',
+                '配置Web应用防火墙',
+                '实施严格的访问控制策略',
+                '启用HTTPS强制跳转',
+                '定期进行安全扫描',
+                '建立安全监控和告警机制',
+                '实施数据备份和恢复计划'
+            ]
+        };
+
+        // 模板选择
+        const templateCards = document.querySelectorAll('.template-card');
+        templateCards.forEach(card => {
+            card.addEventListener('click', function() {
+                // 移除所有卡片的选中状态
+                templateCards.forEach(c => c.classList.remove('selected'));
+                // 添加当前卡片的选中状态
+                this.classList.add('selected');
+                
+                // 根据选择的模板更新报告预览
+                const templateId = this.id.replace('template-', '');
+                updateReportPreview(templateId);
+            });
+        });
+
+        // 更新报告预览
+        function updateReportPreview(templateId) {
+            // 根据模板ID调整报告内容
+            let vulnerabilitiesToShow = reportData.vulnerabilities;
+            let recommendationsToShow = reportData.recommendations;
+            
+            if (templateId === 'executive') {
+                // 执行摘要报告只显示严重和高危漏洞
+                vulnerabilitiesToShow = reportData.vulnerabilities.filter(v => 
+                    v.severity === 'critical' || v.severity === 'high'
+                );
+                // 只显示前3条建议
+                recommendationsToShow = reportData.recommendations.slice(0, 3);
+            } else if (templateId === 'compliance') {
+                // 合规性报告显示所有漏洞
+                vulnerabilitiesToShow = reportData.vulnerabilities;
+                // 显示所有建议
+                recommendationsToShow = reportData.recommendations;
+            }
+            
+            // 更新漏洞列表
+            const vulnerabilitiesList = document.getElementById('vulnerabilities-list');
+            vulnerabilitiesList.innerHTML = '';
+            
+            vulnerabilitiesToShow.forEach(vuln => {
+                const severityClass = `severity-${vuln.severity}`;
+                const vulnerabilityClass = `vulnerability-${vuln.severity}`;
+                
+                const vulnCard = document.createElement('div');
+                vulnCard.className = `vulnerability-card ${vulnerabilityClass}`;
+                vulnCard.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <div class="flex items-center mb-2">
+                                <span class="severity-badge ${severityClass} mr-3">${vuln.severity}</span>
+                                <h3 class="text-lg font-semibold">${vuln.title}</h3>
+                            </div>
+                            <div class="text-sm text-gray-600 mb-2">CVSS评分: <span class="font-bold">${vuln.cvssScore}</span></div>
+                        </div>
+                        <div class="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded">ID: ${vuln.id}</div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <h4 class="font-medium mb-1">描述</h4>
+                            <p class="text-sm">${vuln.description}</p>
+                        </div>
+                        <div>
+                            <h4 class="font-medium mb-1">影响</h4>
+                            <p class="text-sm">${vuln.impact}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h4 class="font-medium mb-1">修复建议</h4>
+                        <p class="text-sm bg-green-50 p-3 rounded">${vuln.remediation}</p>
+                    </div>
+                `;
+                vulnerabilitiesList.appendChild(vulnCard);
+            });
+            
+            // 更新建议列表
+            const recommendationsList = document.getElementById('recommendations-list');
+            recommendationsList.innerHTML = '';
+            
+            recommendationsToShow.forEach((rec, index) => {
+                const recItem = document.createElement('div');
+                recItem.className = 'recommendation-item';
+                recItem.innerHTML = `
+                    <div class="flex items-start">
+                        <i class="fas fa-check-circle text-green-600 mr-3 mt-0.5"></i>
+                        <span>${rec}</span>
+                    </div>
+                `;
+                recommendationsList.appendChild(recItem);
+            });
+            
+            // 更新建议数量
+            document.getElementById('recommendations-count').textContent = recommendationsToShow.length;
+        }
+
+        // 生成报告按钮
+        document.getElementById('generate-btn').addEventListener('click', function() {
+            this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 生成中...';
+            this.disabled = true;
+            
+            // 模拟报告生成过程
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-file-alt mr-2"></i> 生成报告';
+                this.disabled = false;
+                
+                // 更新生成时间
+                const now = new Date();
+                const timeString = now.toLocaleString('zh-CN');
+                document.getElementById('generation-time').textContent = timeString;
+                document.getElementById('update-time').textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+                
+                alert('报告生成成功！');
+            }, 2000);
+        });
+
+        // 导出PDF按钮
+        document.getElementById('export-pdf').addEventListener('click', function() {
+            this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 导出中...';
+            
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-file-pdf mr-2"></i> 导出PDF';
+                alert('PDF报告已成功导出！');
+            }, 1500);
+        });
+
+        // 导出HTML按钮
+        document.getElementById('export-html').addEventListener('click', function() {
+            this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> 导出中...';
+            
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-file-code mr-2"></i> 导出HTML';
+                alert('HTML报告已成功导出！');
+            }, 1500);
+        });
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始加载详细技术报告
+            updateReportPreview('detailed');
+            
+            // 设置当前时间
+            const now = new Date();
+            document.getElementById('update-time').textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+        });
+    </script>
+</body>
+</html>

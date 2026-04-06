@@ -1,0 +1,152 @@
+# Skipfish Web应用程序安全扫描工具配置
+# 参考: https://github.com/spinkham/skipfish
+name: skipfish
+command: skipfish
+category: vulnerability_assessment
+description: "主动的Web应用程序安全侦察工具，通过启发式方法发现漏洞"
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  output_dir: "/tmp/skipfish_output"
+  workers: "10"
+
+command_template: "skipfish -o {output_dir} -W {wordlist} -S {wordlist2} -I {include} -X {exclude} -C {cookies} -u {additional_args} {url}"
+
+parameters:
+  - name: url
+    type: string
+    description: "目标URL（支持HTTP/HTTPS）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9\\.\\-]+(?:\\:[0-9]+)?(?:/[^\\s]*)?$"
+      error_message: "URL格式无效"
+
+  - name: output_dir
+    type: string
+    description: "输出目录路径（容器内路径）"
+    required: false
+    default: "/tmp/skipfish_output"
+    flag: "-o"
+    format: "flag"
+
+  - name: wordlist
+    type: string
+    description: "主字典文件路径"
+    required: false
+    default: "/usr/share/skipfish/dictionaries/complete.wl"
+    flag: "-W"
+    format: "flag"
+
+  - name: wordlist2
+    type: string
+    description: "扩展字典文件路径"
+    required: false
+    flag: "-S"
+    format: "flag"
+
+  - name: include
+    type: string
+    description: "包含的URL模式（正则表达式）"
+    required: false
+    flag: "-I"
+    format: "flag"
+
+  - name: exclude
+    type: string
+    description: "排除的URL模式（正则表达式）"
+    required: false
+    flag: "-X"
+    format: "flag"
+
+  - name: cookies
+    type: string
+    description: "Cookie字符串（name=value; name2=value2）"
+    required: false
+    flag: "-C"
+    format: "flag"
+
+  - name: auth_user
+    type: string
+    description: "HTTP认证用户名"
+    required: false
+    flag: "-A"
+    format: "flag"
+
+  - name: auth_pass
+    type: string
+    description: "HTTP认证密码"
+    required: false
+    flag: "-P"
+    format: "flag"
+
+  - name: workers
+    type: string
+    description: "工作线程数"
+    required: false
+    default: "10"
+    flag: "-g"
+    format: "flag"
+    validation:
+      pattern: "^[0-9]+$"
+      error_message: "工作线程数必须为正整数"
+
+  - name: additional_args
+    type: string
+    description: "额外的Skipfish参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "skipfish_html"  # Skipfish生成HTML报告
+  extract_vulnerabilities: true
+  extract_risk_levels: true
+  extract_summary: true
+  save_raw_output: true
+  formats:
+    - "html"
+    - "json"
+    - "txt"
+
+limits:
+  max_runtime: 7200
+  max_memory: "4g"
+  max_output_size: "100mb"
+  max_requests_per_second: 20
+
+metrics:
+  - name: "issues_found"
+    type: "counter"
+    description: "发现的问题数量"
+    extract_regex: "Issues\\s+found:\\s+(\\d+)"
+
+  - name: "requests_made"
+    type: "gauge"
+    description: "发送的请求数量"
+    extract_regex: "Requests\\s+made:\\s+(\\d+)"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scan\\s+completed\\s+in\\s+([0-9\\.]+)s"
+
+skill_integration:
+  skill_name: "web_security_scanning"
+  required_level: 2
+  input_mapping:
+    url: "target_url"
+  output_mapping:
+    issues: "security_issues"
+    risk_level: "overall_risk"
+  success_criteria:
+    - "exit_code == 0"
+    - "requests_made > 0"
+  failure_handling:
+    retry_count: 0  # Skipfish扫描时间较长，通常不重试
+    fallback_tool: "wapiti"

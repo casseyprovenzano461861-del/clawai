@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawAI - 实时监控测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-connected {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+        
+        .status-disconnected {
+            background-color: #ef4444;
+        }
+        
+        .status-connecting {
+            background-color: #f59e0b;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .progress-bar {
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: #334155;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            transition: width 0.3s ease;
+        }
+        
+        .log-entry {
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            border-left: 4px solid;
+        }
+        
+        .log-info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left-color: #3b82f6;
+        }
+        
+        .log-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            border-left-color: #10b981;
+        }
+        
+        .log-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left-color: #f59e0b;
+        }
+        
+        .log-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left-color: #ef4444;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.8));
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 10px;
+            padding: 16px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        
+        .scan-step {
+            padding: 12px;
+            border-radius: 8px;
+            background-color: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.2);
+            transition: all 0.3s;
+        }
+        
+        .scan-step.active {
+            background-color: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+        }
+        
+        .scan-step.completed {
+            background-color: rgba(16, 185, 129, 0.2);
+            border-color: #10b981;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- 标题和状态 -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">ClawAI 实时监控系统测试</h1>
+                <p class="text-slate-400">模拟WebSocket连接和实时数据监控界面</p>
+            </div>
+            <div class="mt-4 md:mt-0 flex items-center space-x-4">
+                <div class="flex items-center">
+                    <div class="status-indicator status-connected" id="connection-status"></div>
+                    <span id="connection-text" class="text-sm">连接状态: <span class="font-semibold text-green-400">已连接</span></span>
+                </div>
+                <div class="flex items-center">
+                    <div class="status-indicator status-connecting" id="monitor-status"></div>
+                    <span id="monitor-text" class="text-sm">监控状态: <span class="font-semibold text-yellow-400">进行中</span></span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 控制面板 -->
+        <div class="bg-slate-800/50 rounded-xl p-6 mb-8 border border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <h2 class="text-xl font-semibold mb-2">监控控制面板</h2>
+                    <p class="text-slate-400 text-sm">控制实时监控的开始、停止和重置</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button id="start-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center">
+                        <i class="fas fa-play mr-2"></i> 开始监控
+                    </button>
+                    <button id="stop-btn" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium flex items-center" disabled>
+                        <i class="fas fa-pause mr-2"></i> 停止监控
+                    </button>
+                    <button id="reset-btn" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium flex items-center">
+                        <i class="fas fa-redo mr-2"></i> 重置
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 进度监控 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 左侧：进度和步骤 -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- 进度条 -->
+                <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">扫描进度</h2>
+                        <div class="text-right">
+                            <div class="text-2xl font-bold text-blue-400" id="progress-percent">0%</div>
+                            <div class="text-sm text-slate-400">当前步骤: <span id="current-step">目标验证</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between text-sm mt-2">
+                            <span>0%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 扫描步骤 -->
+                    <h3 class="font-semibold mb-4">扫描步骤</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="scan-step active" id="step-1">
+                            <div class="flex items-center mb-2">
+                                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center mr-3">
+                                    <span class="font-bold">1</span>
+                                </div>
+                                <div>
+                                    <div class="font-medium">目标验证</div>
+                                    <div class="text-sm text-slate-400">验证目标可达性和格式</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500">工具: validator | 预计: 2s</div>
+                        </div>
+                        
+                        <div class="scan-step" id="step-2">
+                            <div class="flex items-center mb-2">
+                                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-3">
+                                    <span class="font-bold">2</span>
+                                </div>
+                                <div>
+                                    <div class="font-medium">端口扫描</div>
+                                    <div class="text-sm text-slate-400">扫描开放端口和服务</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500">工具: nmap | 预计: 8s</div>
+                        </div>
+                        
+                        <div class="scan-step" id="step-3">
+                            <div class="flex items-center mb-2">
+                                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-3">
+                                    <span class="font-bold">3</span>
+                                </div>
+                                <div>
+                                    <div class="font-medium">服务识别</div>
+                                    <div class="text-sm text-slate-400">识别运行的服务和版本</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500">工具: whatweb | 预计: 5s</div>
+                        </div>
+                        
+                        <div class="scan-step" id="step-4">
+                            <div class="flex items-center mb-2">
+                                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-3">
+                                    <span class="font-bold">4</span>
+                                </div>
+                                <div>
+                                    <div class="font-medium">漏洞扫描</div>
+                                    <div class="text-sm text-slate-400">扫描已知漏洞</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500">工具: nuclei | 预计: 12s</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 实时日志 -->
+                <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">实时日志</h2>
+                        <div class="flex items-center space-x-2">
+                            <button id="export-logs" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
+                                <i class="fas fa-download mr-1"></i> 导出日志
+                            </button>
+                            <button id="clear-logs" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
+                                <i class="fas fa-trash mr-1"></i> 清空
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="h-64 overflow-y-auto pr-2" id="log-container">
+                        <div class="log-entry log-info">
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium">[connection]</span>
+                                <span class="text-slate-400 text-xs">11:40:15</span>
+                            </div>
+                            <div>WebSocket连接已建立</div>
+                        </div>
+                        
+                        <div class="log-entry log-info">
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium">[scanner]</span>
+                                <span class="text-slate-400 text-xs">11:40:20</span>
+                            </div>
+                            <div>开始扫描目标: 192.168.1.100</div>
+                        </div>
+                        
+                        <div class="log-entry log-warning">
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium">[nmap]</span>
+                                <span class="text-slate-400 text-xs">11:40:25</span>
+                            </div>
+                            <div>检测到防火墙，调整扫描策略</div>
+                        </div>
+                        
+                        <div class="log-entry log-success">
+                            <div class="flex justify-between mb-1">
+                                <span class="font-medium">[nmap]</span>
+                                <span class="text-slate-400 text-xs">11:40:30</span>
+                            </div>
+                            <div>发现开放端口: 80, 443, 22</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 text-center text-sm text-slate-500">
+                        日志自动更新中... <span id="log-count">4</span> 条日志
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：系统指标 -->
+            <div class="space-y-8">
+                <!-- 系统指标卡片 -->
+                <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    <h2 class="text-xl font-semibold mb-6">系统指标</h2>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="metric-card">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="p-2 rounded-lg bg-blue-500/10">
+                                    <i class="fas fa-microchip text-blue-400"></i>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">+2.5%</div>
+                            </div>
+                            <div class="text-2xl font-bold mb-1" id="cpu-usage">45.2%</div>
+                            <div class="text-sm text-slate-400">CPU使用率</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="p-2 rounded-lg bg-purple-500/10">
+                                    <i class="fas fa-memory text-purple-400"></i>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">+1.2%</div>
+                            </div>
+                            <div class="text-2xl font-bold mb-1" id="memory-usage">62.8%</div>
+                            <div class="text-sm text-slate-400">内存使用</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="p-2 rounded-lg bg-blue-500/10">
+                                    <i class="fas fa-cloud-download-alt text-blue-400"></i>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-red-500/20 text-red-400 rounded">-0.8%</div>
+                            </div>
+                            <div class="text-2xl font-bold mb-1" id="network-in">1.25</div>
+                            <div class="text-sm text-slate-400">网络流入 (KB/s)</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="p-2 rounded-lg bg-green-500/10">
+                                    <i class="fas fa-cloud-upload-alt text-green-400"></i>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">+1.5%</div>
+                            </div>
+                            <div class="text-2xl font-bold mb-1" id="network-out">0.85</div>
+                            <div class="text-sm text-slate-400">网络流出 (KB/s)</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 活动扫描 -->
+                <div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">活动扫描</h2>
+                        <div class="text-xs px-3 py-1 bg-blue-500/20 text-blue-400 rounded">3 个进行中</div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div class="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                            <div class="flex justify-between items-center mb-3">
+                                <div class="flex items-center">
+                                    <div class="status-indicator status-connected mr-2"></div>
+                                    <div>
+                                        <div class="font-medium">192.168.1.100</div>
+                                        <div class="text-xs text-slate-400">ID: scan-001</div>
+                                    </div>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">进行中</div>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>进度</span>
+                                    <span class="font-bold">65%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 65%"></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span class="text-slate-500">开始时间: </span>
+                                    <span>11:30:15</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-500">预计结束: </span>
+                                    <span>11:42:30</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                            <div class="flex justify-between items-center mb-3">
+                                <div class="flex items-center">
+                                    <div class="status-indicator status-connected mr-2"></div>
+                                    <div>
+                                        <div class="font-medium">example.com</div>
+                                        <div class="text-xs text-slate-400">ID: scan-002</div>
+                                    </div>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded">进行中</div>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>进度</span>
+                                    <span class="font-bold">30%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 30%"></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span class="text-slate-500">开始时间: </span>
+                                    <span>11:35:20</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-500">预计结束: </span>
+                                    <span>11:50:45</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                            <div class="flex justify-between items-center mb-3">
+                                <div class="flex items-center">
+                                    <div class="status-indicator status-disconnected mr-2"></div>
+                                    <div>
+                                        <div class="font-medium">test.local</div>
+                                        <div class="text-xs text-slate-400">ID: scan-003</div>
+                                    </div>
+                                </div>
+                                <div class="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded">已完成</div>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>进度</span>
+                                    <span class="font-bold">100%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 100%"></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span class="text-slate-500">开始时间: </span>
+                                    <span>11:20:10</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-500">预计结束: </span>
+                                    <span>11:32:05</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部信息 -->
+        <div class="mt-12 pt-6 border-t border-slate-800 text-center text-slate-500 text-sm">
+            <p>ClawAI 实时监控系统测试页面 | 模拟数据更新时间: <span id="update-time">11:40:30</span></p>
+            <p class="mt-2">此页面演示了RealTimeMonitor组件的核心功能，无需React环境即可测试</p>
+        </div>
+    </div>
+    
+    <script>
+        // 模拟实时数据更新
+        let progress = 0;
+        let isMonitoring = false;
+        let intervalId = null;
+        let logCount = 4;
+        
+        // 步骤名称数组
+        const steps = [
+            "目标验证",
+            "端口扫描", 
+            "服务识别",
+            "漏洞扫描",
+            "结果分析",
+            "报告生成"
+        ];
+        
+        // 更新当前步骤
+        function updateCurrentStep() {
+            const stepIndex = Math.floor(progress / 100 * steps.length);
+            if (stepIndex < steps.length) {
+                document.getElementById('current-step').textContent = steps[stepIndex];
+                
+                // 更新步骤状态
+                document.querySelectorAll('.scan-step').forEach((step, index) => {
+                    step.classList.remove('active', 'completed');
+                    if (index < stepIndex) {
+                        step.classList.add('completed');
+                        const numberDiv = step.querySelector('.w-8.h-8');
+                        if (numberDiv) {
+                            numberDiv.className = 'w-8 h-8 rounded-full bg-green-500 flex items-center justify-center mr-3';
+                            numberDiv.innerHTML = '<i class="fas fa-check text-white text-xs"></i>';
+                        }
+                    } else if (index === stepIndex) {
+                        step.classList.add('active');
+                    }
+                });
+            }
+        }
+        
+        // 添加日志条目
+        function addLogEntry(level, source, message) {
+            const logContainer = document.getElementById('log-container');
+            const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${level}`;
+            logEntry.innerHTML = `
+                <div class="flex justify-between mb-1">
+                    <span class="font-medium">[${source}]</span>
+                    <span class="text-slate-400 text-xs">${timestamp}</span>
+                </div>
+                <div>${message}</div>
+            `;
+            
+            logContainer.appendChild(logEntry);
+            logCount++;
+            document.getElementById('log-count').textContent = logCount;
+            
+            // 滚动到底部
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 更新系统指标
+        function updateMetrics() {
+            // 模拟指标波动
+            const cpu = 45 + Math.random() * 10;
+            const memory = 62 + Math.random() * 6;
+            const networkIn = 1.25 + (Math.random() - 0.5) * 0.3;
+            const networkOut = 0.85 + (Math.random() - 0.5) * 0.2;
+            
+            document.getElementById('cpu-usage').textContent = cpu.toFixed(1) + '%';
+            document.getElementById('memory-usage').textContent = memory.toFixed(1) + '%';
+            document.getElementById('network-in').textContent = networkIn.toFixed(2);
+            document.getElementById('network-out').textContent = networkOut.toFixed(2);
+            
+            // 更新时间
+            document.getElementById('update-time').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        }
+        
+        // 开始监控
+        function startMonitoring() {
+            if (isMonitoring) return;
+            
+            isMonitoring = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = false;
+            document.getElementById('monitor-status').className = 'status-indicator status-connected';
+            document.getElementById('monitor-text').innerHTML = '监控状态: <span class="font-semibold text-green-400">进行中</span>';
+            
+            addLogEntry('info', 'monitor', '开始实时监控扫描进度');
+            
+            // 开始进度更新
+            intervalId = setInterval(() => {
+                if (progress < 100) {
+                    progress += 1;
+                    document.getElementById('progress-percent').textContent = progress + '%';
+                    document.getElementById('progress-bar').style.width = progress + '%';
+                    
+                    updateCurrentStep();
+                    
+                    // 每5%添加一条日志
+                    if (progress % 5 === 0) {
+                        const stepIndex = Math.floor(progress / 100 * steps.length);
+                        const stepName = steps[stepIndex] || '完成';
+                        addLogEntry('info', 'monitor', `扫描进度: ${progress}% - 正在执行: ${stepName}`);
+                    }
+                    
+                    // 随机添加一些特殊日志
+                    if (Math.random() < 0.1) {
+                        const sources = ['nmap', 'whatweb', 'nuclei', 'validator'];
+                        const messages = [
+                            '发现新的开放端口',
+                            '识别服务版本信息',
+                            '检测到潜在漏洞',
+                            '连接超时，自动重试',
+                            '扫描策略调整完成'
+                        ];
+                        const levels = ['info', 'success', 'warning'];
+                        
+                        const source = sources[Math.floor(Math.random() * sources.length)];
+                        const message = messages[Math.floor(Math.random() * messages.length)];
+                        const level = levels[Math.floor(Math.random() * levels.length)];
+                        
+                        addLogEntry(level, source, message);
+                    }
+                    
+                    updateMetrics();
+                } else {
+                    stopMonitoring();
+                    addLogEntry('success', 'monitor', '扫描完成！所有步骤已执行完毕');
+                }
+            }, 300);
+        }
+        
+        // 停止监控
+        function stopMonitoring() {
+            if (!isMonitoring) return;
+            
+            isMonitoring = false;
+            clearInterval(intervalId);
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+            document.getElementById('monitor-status').className = 'status-indicator status-disconnected';
+            document.getElementById('monitor-text').innerHTML = '监控状态: <span class="font-semibold text-red-400">已停止</span>';
+            
+            addLogEntry('info', 'monitor', '停止实时监控');
+        }
+        
+        // 重置监控
+        function resetMonitoring() {
+            stopMonitoring();
+            
+            progress = 0;
+            document.getElementById('progress-percent').textContent = '0%';
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('current-step').textContent = '目标验证';
+            
+            // 重置步骤状态
+            document.querySelectorAll('.scan-step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                const numberDiv = step.querySelector('.w-8.h-8');
+                if (numberDiv) {
+                    numberDiv.className = 'w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-3';
+                    numberDiv.innerHTML = `<span class="font-bold">${index + 1}</span>`;
+                }
+            });
+            
+            // 激活第一步
+            document.getElementById('step-1').classList.add('active');
+            
+            // 清空日志（保留前4条示例）
+            const logContainer = document.getElementById('log-container');
+            while (logContainer.children.length > 4) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+            
+            logCount = 4;
+            document.getElementById('log-count').textContent = logCount;
+            
+            addLogEntry('info', 'monitor', '监控已重置');
+        }
+        
+        // 导出日志
+        function exportLogs() {
+            const logs = [];
+            document.querySelectorAll('.log-entry').forEach(log => {
+                const source = log.querySelector('.font-medium').textContent.replace(/[\[\]]/g, '');
+                const time = log.querySelector('.text-slate-400').textContent;
+                const message = log.querySelector('div:last-child').textContent;
+                logs.push(`[${time}] [${source}] ${message}`);
+            });
+            
+            const logText = logs.join('\n');
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `clawai-monitor-logs-${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            addLogEntry('info', 'system', '日志已导出');
+        }
+        
+        // 清空日志
+        function clearLogs() {
+            const logContainer = document.getElementById('log-container');
+            while (logContainer.firstChild) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+            
+            logCount = 0;
+            document.getElementById('log-count').textContent = logCount;
+            
+            addLogEntry('info', 'system', '日志已清空');
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 绑定按钮事件
+            document.getElementById('start-btn').addEventListener('click', startMonitoring);
+            document.getElementById('stop-btn').addEventListener('click', stopMonitoring);
+            document.getElementById('reset-btn').addEventListener('click', resetMonitoring);
+            document.getElementById('export-logs').addEventListener('click', exportLogs);
+            document.getElementById('clear-logs').addEventListener('click', clearLogs);
+            
+            // 初始更新
+            updateCurrentStep();
+            updateMetrics();
+            
+            // 模拟初始连接
+            setTimeout(() => {
+                document.getElementById('connection-status').className = 'status-indicator status-connected';
+                document.getElementById('connection-text').innerHTML = '连接状态: <span class="font-semibold text-green-400">已连接</span>';
+                addLogEntry('info', 'connection', 'WebSocket连接已建立');
+            }, 1000);
+            
+            // 定期更新指标（即使监控未运行）
+            setInterval(updateMetrics, 5000);
+        });
+    </script>
+</body>
+</html>

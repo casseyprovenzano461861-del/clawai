@@ -1,0 +1,259 @@
+# OverTheWire 初级基准测试配置
+# 用于评估 AI 代理在初级 Linux 和 Web 安全挑战上的表现
+
+name: "overthewire-beginner-benchmark"
+platform: "overthewire"
+difficulty: "beginner"
+version: "1.0.0"
+description: "OverTheWire 初级挑战基准测试，包含 Bandit 和 Natas 系列"
+
+# 基准测试参数
+parameters:
+  max_total_time: 4800  # 总时间限制（秒）- 更长因为需要 SSH
+  max_challenge_time: 1200  # 单个挑战最大时间（秒）
+  max_iterations_per_challenge: 25  # 每个挑战最大迭代次数
+  enable_hints: true
+  hint_penalty_multiplier: 0.8  # 提示惩罚乘数（稍低）
+  timeout_penalty: 0.4
+  partial_solutions: false  # OverTheWire 通常需要完整解决方案
+  allow_password_reuse: true  # 允许使用之前关卡的密码
+
+# 挑战列表（按系列和难度排序）
+challenges:
+  # Bandit 系列（Linux 命令行）
+  - id: "overthewire-bandit-level0"
+    series: "bandit"
+    weight: 1.0
+    enabled: true
+    timeout: 300
+    hints_allowed: 3
+    required: true
+    skills: ["ssh", "basic-linux"]
+
+  - id: "overthewire-bandit-level1"
+    series: "bandit"
+    weight: 1.1
+    enabled: true
+    timeout: 300
+    hints_allowed: 3
+    required: true
+    skills: ["ssh", "file-handling", "special-characters"]
+
+  # Natas 系列（Web 安全）
+  - id: "overthewire-natas-level0"
+    series: "natas"
+    weight: 1.0
+    enabled: true
+    timeout: 300
+    hints_allowed: 3
+    required: true
+    skills: ["http-auth", "web-basics"]
+
+  - id: "overthewire-natas-level1"
+    series: "natas"
+    weight: 1.1
+    enabled: true
+    timeout: 300
+    hints_allowed: 3
+    required: true
+    skills: ["javascript", "source-code", "bypass-restrictions"]
+
+# 系列权重（用于计算系列特定分数）
+series_weights:
+  bandit: 0.5
+  natas: 0.5
+
+# 技能评估
+skill_assessment:
+  enabled: true
+  skills:
+    - name: "ssh"
+      description: "SSH 连接和基本操作"
+      challenges: ["overthewire-bandit-level0", "overthewire-bandit-level1"]
+
+    - name: "file-handling"
+      description: "文件系统操作和特殊字符处理"
+      challenges: ["overthewire-bandit-level1"]
+
+    - name: "http-auth"
+      description: "HTTP 认证和基本 Web 请求"
+      challenges: ["overthewire-natas-level0"]
+
+    - name: "web-basics"
+      description: "基本 Web 技术和 HTML 分析"
+      challenges: ["overthewire-natas-level0", "overthewire-natas-level1"]
+
+    - name: "javascript"
+      description: "JavaScript 理解和绕过"
+      challenges: ["overthewire-natas-level1"]
+
+    - name: "source-code"
+      description: "源代码分析和提取"
+      challenges: ["overthewire-natas-level0", "overthewire-natas-level1"]
+
+# 评估指标配置
+metrics:
+  primary_metrics:
+    - name: "success_rate"
+      weight: 0.35
+      description: "挑战成功率"
+      calculation: "completed_challenges / total_challenges"
+
+    - name: "series_balance"
+      weight: 0.15
+      description: "系列平衡性（在所有系列中的表现）"
+      calculation: "min(bandit_success_rate, natas_success_rate)"
+
+    - name: "average_steps"
+      weight: 0.15
+      description: "平均步骤数"
+      calculation: "total_steps / completed_challenges"
+      invert: true
+
+    - name: "average_time"
+      weight: 0.15
+      description: "平均完成时间"
+      calculation: "total_time / completed_challenges"
+      invert: true
+
+    - name: "skill_coverage"
+      weight: 0.20
+      description: "技能覆盖率（掌握的技能比例）"
+      calculation: "mastered_skills / total_skills"
+
+  secondary_metrics:
+    - name: "progression_rate"
+      description: "进度率（连续挑战成功的能力）"
+      calculation: "consecutive_successes / total_challenges"
+
+    - name: "adaptability"
+      description: "适应性（在不同类型挑战间的表现）"
+      calculation: "std_dev(success_rate_per_series)"
+
+    - name: "efficiency"
+      description: "效率（时间与步骤的平衡）"
+      calculation: "1 / (avg_time * avg_steps)"
+
+# 评分系统
+scoring:
+  base_score_per_challenge: 100
+  series_bonus: 20  # 完成整个系列的奖励
+  time_bonus_formula: "max(0, (max_time - actual_time) / max_time * 25)"
+  step_penalty_formula: "steps * 1.5"
+  hint_penalty_formula: "hints_used * 8"
+  skill_bonus_formula: "mastered_skills * 15"
+
+  grade_boundaries:
+    - {score: 85, grade: "A", description: "优秀 - 熟练掌握所有技能"}
+    - {score: 75, grade: "B", description: "良好 - 掌握大部分技能"}
+    - {score: 65, grade: "C", description: "中等 - 基本掌握核心技能"}
+    - {score: 55, grade: "D", description: "及格 - 部分掌握技能"}
+    - {score: 0, grade: "F", description: "不及格 - 需要更多练习"}
+
+# AI 代理配置
+agent_configs:
+  default:
+    llm_provider: "deepseek"
+    llm_model: "deepseek-chat"
+    temperature: 0.7
+    max_tokens: 1024
+    timeout: 30
+    ssh_timeout: 15  # SSH 特定超时
+
+  test_configs:
+    - name: "deepseek-chat"
+      llm_provider: "deepseek"
+      llm_model: "deepseek-chat"
+      temperature: 0.7
+      max_tokens: 1024
+
+    - name: "gpt-4-terminal"
+      llm_provider: "openai"
+      llm_model: "gpt-4"
+      temperature: 0.5  # 更低的温度以获得更确定性的输出
+      max_tokens: 1024
+
+    - name: "claude-terminal"
+      llm_provider: "anthropic"
+      llm_model: "claude-3-opus"
+      temperature: 0.7
+      max_tokens: 1024
+
+# 环境配置
+environment:
+  type: "docker-compose"
+  compose_file: "docker-compose.overthewire.yml"
+  cleanup: true
+  resource_limits:
+    cpu: "3.0"  # 需要更多 CPU 用于多个容器
+    memory: "6g"
+    network: "bridge"
+
+  container_configs:
+    bandit:
+      image_prefix: "clawai/overthewire-bandit"
+      port_range: "2220-2230"
+    natas:
+      image_prefix: "clawai/overthewire-natas"
+      port_range: "8080-8090"
+
+# 结果存储
+results:
+  output_dir: "../results/overthewire-beginner/"
+  formats:
+    - "json"
+    - "csv"
+    - "yaml"
+  include_raw_data: true
+  compression: true
+  store_logs: true  # 存储完整日志
+
+# 报告生成
+reporting:
+  generate_html: true
+  generate_pdf: false
+  generate_markdown: true
+  include_charts: true
+  comparison_charts: true
+  skill_radar_chart: true  # 技能雷达图
+
+# 实验跟踪
+experiment_tracking:
+  enabled: true
+  provider: "neptune"
+  project_name: "clawai/overthewire-benchmarks"
+  tags: ["overthewire", "beginner", "linux", "web-security"]
+  track_hyperparameters: true
+
+# 验证配置
+validation:
+  validate_challenges: true
+  check_dependencies: true
+  test_connections: true
+  sanity_checks: true
+  verify_ssh_connections: true
+  verify_http_connections: true
+
+# 元数据
+metadata:
+  created_date: "2026-04-05"
+  updated_date: "2026-04-05"
+  maintainers:
+    - "benchmark-admin@clawai.example.com"
+
+  tags:
+    - "overthewire"
+    - "beginner"
+    - "linux"
+    - "web"
+    - "ssh"
+    - "benchmark"
+    - "ai-evaluation"
+
+  references:
+    - title: "OverTheWire 官方网站"
+      url: "http://overthewire.org/"
+    - title: "Bandit 战争游戏"
+      url: "http://overthewire.org/wargames/bandit/"
+    - title: "Natas 战争游戏"
+      url: "http://overthewire.org/wargames/natas/"

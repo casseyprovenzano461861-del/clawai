@@ -1,0 +1,153 @@
+# Hydra 网络登录暴力破解工具配置
+# 参考: https://github.com/vanhauser-thc/thc-hydra
+name: hydra
+command: hydra
+category: exploitation
+description: "快速、灵活的登录暴力破解工具，支持多种协议和服务"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  service: "ssh"
+  login: "root"
+  threads: "4"
+
+command_template: "hydra -l {login} -P {passwords} {target} {service} {threads} {additional_args}"
+
+parameters:
+  - name: target
+    type: string
+    description: "目标主机名或IP地址"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^[a-zA-Z0-9\\.\\-]+$"
+      error_message: "目标主机格式无效"
+
+  - name: service
+    type: string
+    description: "目标服务（如ssh, ftp, http-get等）"
+    required: true
+    position: "before_target"
+    options:
+      - "ssh"
+      - "ftp"
+      - "telnet"
+      - "http-get"
+      - "http-post"
+      - "mysql"
+      - "mssql"
+      - "postgres"
+      - "rdp"
+      - "vnc"
+
+  - name: login
+    type: string
+    description: "登录用户名（或用户名文件）"
+    required: false
+    default: "root"
+    flag: "-l"
+    format: "flag"
+
+  - name: passwords
+    type: string
+    description: "密码文件路径（容器内路径）"
+    required: true
+    flag: "-P"
+    format: "flag"
+
+  - name: threads
+    type: string
+    description: "并行任务数"
+    required: false
+    default: "4"
+    flag: "-t"
+    format: "flag"
+    validation:
+      pattern: "^[0-9]+$"
+      error_message: "线程数必须为正整数"
+
+  - name: port
+    type: integer
+    description: "目标端口（如果服务使用非标准端口）"
+    required: false
+    flag: "-s"
+    format: "flag"
+    validation:
+      min: 1
+      max: 65535
+
+  - name: verbose
+    type: boolean
+    description: "详细输出模式"
+    required: false
+    default: false
+    flag: "-v"
+    format: "flag"
+
+  - name: stop_on_success
+    type: boolean
+    description: "发现第一个有效凭证后停止"
+    required: false
+    default: true
+    flag: "-f"
+    format: "flag"
+
+  - name: additional_args
+    type: string
+    description: "额外的Hydra参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "hydra_txt"
+  extract_credentials: true
+  extract_attempts: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "txt"
+
+limits:
+  max_runtime: 7200  # 最长2小时
+  max_memory: "1g"
+  max_output_size: "10mb"
+  max_login_attempts: 10000
+
+metrics:
+  - name: "credentials_found"
+    type: "counter"
+    description: "发现的有效凭证数量"
+    extract_regex: "\\[([0-9]+)\\]\\s+host.*?login:"
+
+  - name: "attempts_made"
+    type: "gauge"
+    description: "尝试的登录次数"
+    extract_regex: "\\[STATUS\\]\\s+([0-9]+)\\s+tasks completed"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "completed\\s+in\\s+([0-9\\.]+)s"
+
+skill_integration:
+  skill_name: "password_bruteforce"
+  required_level: 2
+  input_mapping:
+    target: "target_host"
+    service: "target_service"
+    login: "username"
+  output_mapping:
+    credentials: "found_credentials"
+    success_rate: "bruteforce_success_rate"
+  success_criteria:
+    - "exit_code == 0"
+    - "credentials_found > 0"
+  failure_handling:
+    retry_count: 0  # 暴力破解通常不重试
+    fallback_tool: "medusa"

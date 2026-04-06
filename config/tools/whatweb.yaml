@@ -1,0 +1,148 @@
+# WhatWeb Web 指纹识别工具配置
+# 参考: https://github.com/urbanadventurer/WhatWeb
+name: whatweb
+command: whatweb
+category: reconnaissance
+description: "下一代Web指纹识别工具，识别Web技术、CMS、框架、插件等"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  aggression_level: "3"
+  color_output: true
+
+command_template: "whatweb {aggression} {color} {verbosity} {plugins} {url} {additional_args}"
+
+parameters:
+  - name: url
+    type: string
+    description: "目标URL（支持HTTP/HTTPS）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9\\.\\-]+(?:\\:[0-9]+)?(?:/[^\\s]*)?$"
+      error_message: "URL格式无效，应以 http:// 或 https:// 开头"
+
+  - name: aggression
+    type: string
+    description: "攻击级别（扫描深度）"
+    required: false
+    default: "3"
+    flag: "-a"
+    format: "template"
+    template: "-a {value}"
+    options:
+      - "1"  # 被动检测
+      - "2"  # 主动检测
+      - "3"  # 主动检测+额外插件
+      - "4"  # 完整检测
+
+  - name: color
+    type: boolean
+    description: "启用彩色输出"
+    required: false
+    default: true
+    flag: "--color"
+    format: "flag"
+    options:
+      - "always"
+      - "never"
+      - "auto"
+
+  - name: verbosity
+    type: string
+    description: "详细输出级别"
+    required: false
+    default: "-v"
+    flag: "-v"
+    format: "flag"
+    options:
+      - "-v"    # 详细
+      - "-vv"   # 非常详细
+
+  - name: plugins
+    type: string
+    description: "指定插件或插件类别"
+    required: false
+    flag: "-p"
+    format: "flag"
+    options:
+      - "all"           # 所有插件
+      - "passive"       # 被动插件
+      - "aggressive"    # 主动插件
+      - "stealthy"      # 隐秘插件
+
+  - name: log_xml
+    type: boolean
+    description: "输出XML格式日志"
+    required: false
+    default: false
+    flag: "--log-xml"
+    format: "flag"
+
+  - name: log_json
+    type: boolean
+    description: "输出JSON格式日志"
+    required: false
+    default: true
+    flag: "--log-json"
+    format: "flag"
+
+  - name: additional_args
+    type: string
+    description: "额外的WhatWeb参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "whatweb_json"  # 使用内置的WhatWeb JSON解析器
+  extract_technologies: true
+  extract_versions: true
+  extract_categories: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "xml"
+    - "txt"
+
+limits:
+  max_runtime: 300
+  max_memory: "512m"
+  max_output_size: "5mb"
+  max_targets: 10
+
+metrics:
+  - name: "technologies_detected"
+    type: "counter"
+    description: "检测到的技术数量"
+    extract_regex: "Found\\s+(\\d+)\\s+technologies"
+
+  - name: "plugins_used"
+    type: "gauge"
+    description: "使用的插件数量"
+    extract_regex: "Plugins\\s+used:\\s+(\\d+)"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scan\\s+completed\\s+in\\s+([0-9\\.]+)\\s+seconds"
+
+skill_integration:
+  skill_name: "web_fingerprinting"
+  required_level: 1
+  input_mapping:
+    url: "target_url"
+  output_mapping:
+    technologies: "web_technologies"
+    versions: "technology_versions"
+  success_criteria:
+    - "exit_code == 0"
+    - "technologies_detected > 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "wappalyzer"

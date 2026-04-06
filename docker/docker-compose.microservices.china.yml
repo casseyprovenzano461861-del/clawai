@@ -1,0 +1,213 @@
+# ClawAI 微服务架构 Docker Compose 配置 - 中国镜像优化版
+# 使用国内镜像源，解决网络连接问题
+
+version: '3.8'
+
+services:
+  # Redis 缓存和消息队列 - 使用官方镜像
+  redis:
+    image: redis:7-alpine
+    container_name: clawai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - clawai-microservices
+
+  # PostgreSQL 数据库（含 pgvector 扩展）
+  postgres:
+    image: postgres:16-alpine
+    container_name: clawai-postgres
+    environment:
+      POSTGRES_DB: clawai
+      POSTGRES_USER: clawai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clawai123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clawai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clawai-microservices
+
+  # API 网关服务 - 本地构建
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: clawai-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8080
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - AI_ENGINE_URL=http://ai-engine:8081
+      - TOOL_EXECUTOR_URL=http://tool-executor:8082
+      - DATA_SERVICE_URL=http://data-service:8083
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-clawai-micro-jwt-secret-change-me}
+      - SECRET_KEY=${SECRET_KEY:-clawai-micro-secret-key-change-me}
+    depends_on:
+      - ai-engine
+      - tool-executor
+      - data-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - clawai-microservices
+
+  # AI 引擎服务 - 本地构建
+  ai-engine:
+    build:
+      context: .
+      dockerfile: services/ai-engine/Dockerfile
+    container_name: clawai-ai-engine
+    ports:
+      - "8081:8081"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8081
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - DATABASE_URL=postgresql://clawai:${POSTGRES_PASSWORD:-clawai123}@postgres:5432/clawai
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=https://api.deepseek.com
+      - DEEPSEEK_MODEL=deepseek-chat
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_TYPE=${LLM_TYPE:-deepseek}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - clawai-microservices
+
+  # 工具执行服务 - 本地构建
+  tool-executor:
+    build:
+      context: .
+      dockerfile: services/tool-executor/Dockerfile
+    container_name: clawai-tool-executor
+    ports:
+      - "8082:8082"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8082
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - TOOL_TIMEOUT=${TOOL_TIMEOUT:-300}
+      - CONTAINER_MEMORY_LIMIT=${CONTAINER_MEMORY_LIMIT:-1g}
+      - CONTAINER_CPU_LIMIT=${CONTAINER_CPU_LIMIT:-1.0}
+      - KALI_IMAGE=${KALI_IMAGE:-kalilinux/kali-rolling:latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/config:ro
+      - tool_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - clawai-microservices
+
+  # 数据服务 - 本地构建
+  data-service:
+    build:
+      context: ./services/data-service
+      dockerfile: Dockerfile
+    container_name: clawai-data-service
+    ports:
+      - "8083:8083"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8083
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - DATABASE_URL=postgresql://clawai:${POSTGRES_PASSWORD:-clawai123}@postgres:5432/clawai
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-clawai-micro-jwt-secret-change-me}
+      - SECRET_KEY=${SECRET_KEY:-clawai-micro-secret-key-change-me}
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - clawai-microservices
+
+# 数据卷定义
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  tool_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# 网络定义
+networks:
+  clawai-microservices:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

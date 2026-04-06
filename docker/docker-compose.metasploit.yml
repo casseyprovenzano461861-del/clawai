@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  metasploit:
+    image: metasploitframework/metasploit-framework:latest
+    container_name: clawai-metasploit
+    restart: unless-stopped
+    ports:
+      - "4444:4444"      # 反向shell监听端口
+      - "8080:8080"      # Web服务端口
+      - "55553:55553"    # Metasploit RPC API端口
+    environment:
+      - MSF_DATABASE_CONFIG=/opt/metasploit-framework/config/database.yml
+      - DATABASE_URL=postgres://msf:msf@postgres:5432/msf
+    volumes:
+      - ./data/metasploit:/root/.msf4
+      - ./logs/metasploit:/var/log/metasploit
+    networks:
+      - clawai-network
+    command: >
+      bash -c "
+        echo '等待PostgreSQL启动...' &&
+        sleep 10 &&
+        echo '初始化Metasploit数据库...' &&
+        msfdb init &&
+        echo '启动Metasploit...' &&
+        msfconsole -q -x 'db_status; version; exit'
+      "
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: clawai-metasploit-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=msf
+      - POSTGRES_PASSWORD=msf
+      - POSTGRES_DB=msf
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - clawai-network
+
+  msfrpc:
+    image: metasploitframework/metasploit-framework:latest
+    container_name: clawai-msfrpc
+    restart: unless-stopped
+    depends_on:
+      - metasploit
+    command: >
+      bash -c "
+        sleep 20 &&
+        echo '启动MSF RPC服务...' &&
+        msfrpcd -U msf -P msf -S -a 0.0.0.0 -p 55553
+      "
+    ports:
+      - "55553:55553"
+    networks:
+      - clawai-network
+
+networks:
+  clawai-network:
+    driver: bridge
+
+volumes:
+  metasploit-data:
+  postgres-data:

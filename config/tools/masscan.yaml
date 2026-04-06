@@ -1,0 +1,148 @@
+# Masscan 高速端口扫描工具配置
+# 参考: https://github.com/robertdavidgraham/masscan
+name: masscan
+command: masscan
+category: reconnaissance
+description: "世界上最快的端口扫描器，可在几分钟内扫描整个互联网"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "host"  # Masscan需要原始网络访问
+  cap_add: ["NET_RAW"]
+  privileged: true
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  ports: "1-1000"
+  rate: "1000"
+
+command_template: "masscan {target} -p {ports} --rate {rate} {additional_args}"
+
+parameters:
+  - name: target
+    type: string
+    description: "目标IP地址或CIDR范围"
+    required: true
+    position: 0
+    validation:
+      pattern: "^[0-9\\.\\-/]+$"
+      error_message: "目标格式无效，应为IP地址或CIDR范围"
+
+  - name: ports
+    type: string
+    description: "端口范围（如 80,443 或 1-1000）"
+    required: false
+    default: "1-1000"
+    flag: "-p"
+    format: "flag"
+    validation:
+      pattern: "^[0-9,\\-\\s]+$"
+      error_message: "端口格式无效"
+
+  - name: rate
+    type: string
+    description: "数据包发送速率（包/秒）"
+    required: false
+    default: "1000"
+    flag: "--rate"
+    format: "flag"
+    validation:
+      pattern: "^[0-9]+$"
+      error_message: "速率必须为正整数"
+
+  - name: exclude
+    type: string
+    description: "排除的IP地址或范围"
+    required: false
+    flag: "--exclude"
+    format: "flag"
+
+  - name: output_format
+    type: string
+    description: "输出格式"
+    required: false
+    default: "binary"
+    flag: "-o"
+    format: "template"
+    template: "-o{value}"
+    options:
+      - "binary"
+      - "list"
+      - "json"
+      - "xml"
+      - "grepable"
+
+  - name: banner
+    type: boolean
+    description: "尝试获取横幅信息"
+    required: false
+    default: false
+    flag: "--banners"
+    format: "flag"
+
+  - name: source_port
+    type: integer
+    description: "源端口"
+    required: false
+    flag: "--source-port"
+    format: "flag"
+    validation:
+      min: 1
+      max: 65535
+
+  - name: additional_args
+    type: string
+    description: "额外的Masscan参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "masscan_json"  # 推荐使用JSON格式输出
+  extract_ports: true
+  extract_services: true
+  extract_banners: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "xml"
+    - "txt"
+
+limits:
+  max_runtime: 600  # 最长10分钟（Masscan非常快）
+  max_memory: "1g"
+  max_output_size: "100mb"
+  max_ports_per_scan: 65535
+
+metrics:
+  - name: "ports_found"
+    type: "counter"
+    description: "发现的开放端口数量"
+    extract_regex: "Discovered\\s+(\\d+)\\s+ports?"
+
+  - name: "packets_sent"
+    type: "gauge"
+    description: "发送的数据包数量"
+    extract_regex: "Sent\\s+(\\d+)\\s+packets"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scanning\\s+done\\s+in\\s+([0-9\\.]+)s"
+
+skill_integration:
+  skill_name: "fast_port_scanning"
+  required_level: 1
+  input_mapping:
+    target: "target_network"
+    ports: "target_ports"
+  output_mapping:
+    open_ports: "discovered_ports"
+    banners: "service_banners"
+  success_criteria:
+    - "exit_code == 0"
+    - "ports_found >= 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "nmap"

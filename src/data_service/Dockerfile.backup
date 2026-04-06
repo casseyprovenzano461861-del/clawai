@@ -1,0 +1,39 @@
+# ClawAI 数据服务Dockerfile
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装系统依赖（PostgreSQL客户端、构建工具和curl用于健康检查）
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制应用代码
+COPY . .
+
+# 创建日志目录
+RUN mkdir -p /var/log/clawai
+
+# 设置环境变量
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV TZ=UTC
+
+# 暴露端口
+EXPOSE 8083
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8083/health || exit 1
+
+# 启动命令
+CMD ["python", "main.py"]

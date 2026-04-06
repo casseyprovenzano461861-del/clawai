@@ -1,0 +1,152 @@
+# Dirsearch 目录和文件暴力破解工具配置
+# 参考: https://github.com/maurosoria/dirsearch
+name: dirsearch
+command: dirsearch
+category: reconnaissance
+description: "Web路径扫描器，通过字典暴力破解发现隐藏的目录和文件"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  extensions: "php,asp,aspx,jsp,html,txt"
+  threads: "20"
+  recursive: false
+
+command_template: "dirsearch -u {url} -e {extensions} -t {threads} {recursive} {wordlist} {additional_args}"
+
+parameters:
+  - name: url
+    type: string
+    description: "目标URL（支持HTTP/HTTPS）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9\\.\\-]+(?:\\:[0-9]+)?(?:/[^\\s]*)?$"
+      error_message: "URL格式无效，应以 http:// 或 https:// 开头"
+
+  - name: extensions
+    type: string
+    description: "要扫描的文件扩展名（逗号分隔）"
+    required: false
+    default: "php,asp,aspx,jsp,html,txt"
+    flag: "-e"
+    format: "flag"
+    validation:
+      pattern: "^[a-zA-Z0-9,\\-]+$"
+      error_message: "扩展名格式无效，应为逗号分隔的列表（如 php,html,txt）"
+
+  - name: threads
+    type: string
+    description: "线程数"
+    required: false
+    default: "20"
+    flag: "-t"
+    format: "flag"
+    validation:
+      pattern: "^[0-9]+$"
+      error_message: "线程数必须为正整数"
+
+  - name: recursive
+    type: boolean
+    description: "启用递归扫描"
+    required: false
+    default: false
+    flag: "-r"
+    format: "flag"
+
+  - name: wordlist
+    type: string
+    description: "自定义字典文件路径（容器内路径）"
+    required: false
+    flag: "-w"
+    format: "flag"
+
+  - name: status_codes
+    type: string
+    description: "要显示的状态码（逗号分隔）"
+    required: false
+    default: "200,204,301,302,307,401,403"
+    flag: "-s"
+    format: "flag"
+    validation:
+      pattern: "^[0-9,]+$"
+      error_message: "状态码格式无效，应为逗号分隔的数字（如 200,301,403）"
+
+  - name: timeout
+    type: integer
+    description: "请求超时时间（秒）"
+    required: false
+    default: 10
+    flag: "--timeout"
+    format: "flag"
+    validation:
+      min: 1
+      max: 60
+
+  - name: user_agent
+    type: string
+    description: "自定义User-Agent"
+    required: false
+    flag: "-H"
+    format: "template"
+    template: "-H 'User-Agent: {value}'"
+
+  - name: additional_args
+    type: string
+    description: "额外的Dirsearch参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "dirsearch_txt"  # 使用内置的Dirsearch TXT解析器
+  extract_paths: true
+  extract_status_codes: true
+  extract_content_length: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "txt"
+    - "csv"
+
+limits:
+  max_runtime: 1800
+  max_memory: "512m"
+  max_output_size: "5mb"
+  max_requests_per_minute: 300
+
+metrics:
+  - name: "paths_found"
+    type: "counter"
+    description: "发现的路径数量"
+    extract_regex: "Found\\s+(\\d+)\\s+paths"
+
+  - name: "requests_made"
+    type: "gauge"
+    description: "发送的请求数量"
+    extract_regex: "Requests\\s+made:\\s+(\\d+)"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scan\\s+completed\\s+in\\s+([0-9\\.]+)\\s+seconds"
+
+skill_integration:
+  skill_name: "directory_bruteforce"
+  required_level: 1
+  input_mapping:
+    url: "target_url"
+    extensions: "target_extensions"
+  output_mapping:
+    paths: "discovered_paths"
+    status_codes: "path_status_codes"
+  success_criteria:
+    - "exit_code == 0"
+    - "paths_found > 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "gobuster"

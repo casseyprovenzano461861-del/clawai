@@ -1,0 +1,171 @@
+# Nmap 网络扫描工具配置
+# 参考: https://nmap.org/book/man.html
+name: nmap
+command: nmap
+category: reconnaissance
+description: "网络发现和安全审计工具，用于端口扫描、服务检测和漏洞发现"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "host"
+  cap_add: ["NET_ADMIN", "NET_RAW"]
+  privileged: true
+  environment:
+    - "TERM=xterm-256color"
+
+# 默认参数值
+defaults:
+  scan_type: "-sS"
+  timing_template: "-T4"
+  verbosity: "-v"
+
+# 命令模板（可选，如果提供则使用，否则自动构建）
+command_template: "nmap {scan_type} {timing_template} {ports} {target} {additional_args}"
+
+# 参数定义
+parameters:
+  - name: target
+    type: string
+    description: "目标主机或网络（IP地址、主机名或CIDR范围）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^[a-zA-Z0-9\\.\\-:/]+$"
+      error_message: "目标格式无效，应为IP地址、主机名或CIDR"
+
+  - name: scan_type
+    type: string
+    description: "扫描类型"
+    required: false
+    default: "-sS"
+    flag: "-sS"
+    format: "flag"
+    options:
+      - "-sS"  # TCP SYN 扫描
+      - "-sT"  # TCP Connect 扫描
+      - "-sU"  # UDP 扫描
+      - "-sA"  # TCP ACK 扫描
+      - "-sW"  # TCP Window 扫描
+      - "-sM"  # TCP Maimon 扫描
+
+  - name: ports
+    type: string
+    description: "端口范围或列表，如 '80,443' 或 '1-1000'"
+    required: false
+    flag: "-p"
+    format: "flag"
+    validation:
+      pattern: "^[0-9,\\-\\s]+$"
+      error_message: "端口格式无效，应为数字、逗号分隔列表或范围（如 80,443 或 1-1000）"
+
+  - name: timing_template
+    type: string
+    description: "时序模板（扫描速度）"
+    required: false
+    default: "-T4"
+    flag: "-T"
+    format: "template"
+    template: "-T{value}"
+    options:
+      - "-T0"  # Paranoid - 非常慢
+      - "-T1"  # Sneaky - 慢
+      - "-T2"  # Polite - 中等
+      - "-T3"  # Normal - 默认
+      - "-T4"  # Aggressive - 快
+      - "-T5"  # Insane - 非常快
+
+  - name: service_version
+    type: boolean
+    description: "启用服务版本检测"
+    required: false
+    default: true
+    flag: "-sV"
+    format: "flag"
+
+  - name: default_scripts
+    type: boolean
+    description: "启用默认NSE脚本扫描"
+    required: false
+    default: true
+    flag: "-sC"
+    format: "flag"
+
+  - name: os_detection
+    type: boolean
+    description: "启用操作系统检测"
+    required: false
+    default: false
+    flag: "-O"
+    format: "flag"
+
+  - name: verbosity
+    type: string
+    description: "详细输出级别"
+    required: false
+    default: "-v"
+    flag: "-v"
+    format: "flag"
+    options:
+      - "-v"    # 详细
+      - "-vv"   # 非常详细
+      - "-vvv"  # 极度详细
+
+  - name: additional_args
+    type: string
+    description: "额外的Nmap参数"
+    required: false
+    format: "positional"
+
+# 输出处理配置
+output_handling:
+  parser: "nmap_xml"  # 使用内置的Nmap XML解析器
+  extract_ports: true
+  extract_services: true
+  extract_vulnerabilities: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "xml"
+    - "txt"
+
+# 资源限制
+limits:
+  max_runtime: 1800  # 最大运行时间（秒）
+  max_memory: "1g"   # 最大内存使用
+  max_output_size: "10mb"  # 最大输出大小
+  max_ports_per_scan: 65535  # 最大端口数
+
+# 指标定义（用于监控和报告）
+metrics:
+  - name: "ports_scanned"
+    type: "counter"
+    description: "扫描的端口数量"
+    extract_regex: "Scanned\\s+(\\d+)\\s+ports?"
+
+  - name: "open_ports"
+    type: "gauge"
+    description: "发现的开放端口数量"
+    extract_regex: "(\\d+)\\s+open"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Nmap\\s+done.*?in\\s+([0-9\\.]+)\\s+seconds"
+
+# 技能系统集成
+skill_integration:
+  skill_name: "port_scanning"
+  required_level: 1
+  input_mapping:
+    target: "target_host"
+    ports: "target_ports"
+  output_mapping:
+    open_ports: "discovered_ports"
+    services: "discovered_services"
+  success_criteria:
+    - "exit_code == 0"
+    - "open_ports > 0"
+  failure_handling:
+    retry_count: 2
+    fallback_tool: "masscan"

@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  dvwa:
+    image: vulnerables/web-dvwa
+    container_name: clawai-dvwa
+    ports:
+      - "8080:80"
+    environment:
+      - PHPIDS=off
+      - DVWA_SECURITY=low
+      - DVWA_DB_HOST=db
+      - DVWA_DB_USER=dvwa
+      - DVWA_DB_PASSWORD=p@ssw0rd
+      - DVWA_DB_NAME=dvwa
+    volumes:
+      - dvwa_data:/app
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - dvwa_network
+
+  db:
+    image: mariadb:10.5
+    container_name: clawai-dvwa-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=dvwa
+      - MYSQL_USER=dvwa
+      - MYSQL_PASSWORD=p@ssw0rd
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - dvwa_network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: clawai-dvwa-phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      - PMA_HOST=db
+      - PMA_PORT=3306
+      - UPLOAD_LIMIT=50M
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - dvwa_network
+
+networks:
+  dvwa_network:
+    driver: bridge
+
+volumes:
+  dvwa_data:
+  db_data:

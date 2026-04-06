@@ -1,0 +1,558 @@
+{
+  "summary": {
+    "total_tools": 37,
+    "installed_tools": 35,
+    "install_rate": 94.5945945945946,
+    "system": "windows",
+    "timestamp": "2026-04-02T21:53:38.181082",
+    "c_tools_directory_exists": true,
+    "local_tools_directory_exists": true,
+    "local_tools_count": 10,
+    "local_tools_installed": 10,
+    "local_tools_install_rate": 100.0
+  },
+  "categories": {
+    "network_scan": {
+      "total": 3,
+      "installed": 3
+    },
+    "vuln_scan": {
+      "total": 1,
+      "installed": 1
+    },
+    "web_scan": {
+      "total": 1,
+      "installed": 1
+    },
+    "fingerprint": {
+      "total": 1,
+      "installed": 1
+    },
+    "http_probe": {
+      "total": 1,
+      "installed": 1
+    },
+    "dir_brute": {
+      "total": 4,
+      "installed": 3
+    },
+    "exploit": {
+      "total": 4,
+      "installed": 4
+    },
+    "cms_scan": {
+      "total": 4,
+      "installed": 4
+    },
+    "subdomain": {
+      "total": 3,
+      "installed": 2
+    },
+    "brute_force": {
+      "total": 2,
+      "installed": 2
+    },
+    "password_crack": {
+      "total": 2,
+      "installed": 2
+    },
+    "post_exploit": {
+      "total": 4,
+      "installed": 3
+    },
+    "osint": {
+      "total": 2,
+      "installed": 2
+    },
+    "dns": {
+      "total": 1,
+      "installed": 1
+    },
+    "exploit_db": {
+      "total": 1,
+      "installed": 1
+    },
+    "ssl": {
+      "total": 2,
+      "installed": 2
+    },
+    "waf": {
+      "total": 1,
+      "installed": 1
+    }
+  },
+  "priority_stats": {
+    "critical": 0,
+    "high": 0,
+    "medium": 37,
+    "low": 0
+  },
+  "tools": [
+    {
+      "name": "Nmap",
+      "tool_id": "nmap",
+      "description": "端口扫描与服务识别",
+      "category": "network_scan",
+      "installed": true,
+      "executable_path": "system",
+      "version": "7.94+",
+      "install_guide": "Windows: 从 https://nmap.org/download.html 下载安装包\nLinux: sudo apt install nmap 或 sudo yum install nmap",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "假设系统已安装"
+    },
+    {
+      "name": "Masscan",
+      "tool_id": "masscan",
+      "description": "高速端口扫描器",
+      "category": "network_scan",
+      "installed": false,
+      "executable_path": null,
+      "version": null,
+      "install_guide": "Windows: 从 https://github.com/robertdavidgraham/masscan 下载\nLinux: git clone https://github.com/robertdavidgraham/masscan && cd masscan && make",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "RustScan",
+      "tool_id": "rustscan",
+      "description": "Rust编写的快速端口扫描器",
+      "category": "network_scan",
+      "installed": false,
+      "executable_path": null,
+      "version": null,
+      "install_guide": "请搜索 'rustscan installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Nuclei",
+      "tool_id": "nuclei",
+      "description": "基于模板的漏洞扫描器",
+      "category": "vuln_scan",
+      "installed": true,
+      "executable_path": "C:\\Tools\\nuclei\\nuclei.exe",
+      "version": "3.7.1",
+      "install_guide": "[已安装于] C:\\Tools\\nuclei\\nuclei.exe (在C:\\Tools目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Nikto",
+      "tool_id": "nikto",
+      "description": "Web服务器漏洞扫描器",
+      "category": "web_scan",
+      "installed": true,
+      "executable_path": "工具\\nikto",
+      "version": null,
+      "install_guide": "git clone https://github.com/sullo/nikto",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "WhatWeb",
+      "tool_id": "whatweb",
+      "description": "Web指纹识别工具",
+      "category": "fingerprint",
+      "installed": true,
+      "executable_path": "C:\\Tools\\WhatWeb\\whatweb",
+      "version": "无法获取版本: [WinError 193] %1 不是有效的 Win32 应用程序。",
+      "install_guide": "[已安装于] C:\\Tools\\WhatWeb\\whatweb (在C:\\Tools目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "HTTPX",
+      "tool_id": "httpx",
+      "description": "HTTP探测与存活检测",
+      "category": "http_probe",
+      "installed": true,
+      "executable_path": "C:\\Tools\\httpx\\httpx.exe",
+      "version": "",
+      "install_guide": "[已安装于] C:\\Tools\\httpx\\httpx.exe (在C:\\Tools目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Dirsearch",
+      "tool_id": "dirsearch",
+      "description": "目录和文件爆破工具",
+      "category": "dir_brute",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\dirsearch\\dirsearch.py",
+      "version": "dirsearch v0.4.3",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\dirsearch\\dirsearch.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Gobuster",
+      "tool_id": "gobuster",
+      "description": "Go编写的目录爆破工具",
+      "category": "dir_brute",
+      "installed": true,
+      "executable_path": "工具\\gobuster",
+      "version": null,
+      "install_guide": "go install github.com/OJ/gobuster/v3@latest",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "FFUF",
+      "tool_id": "ffuf",
+      "description": "快速Web模糊测试工具",
+      "category": "dir_brute",
+      "installed": true,
+      "executable_path": "工具\\ffuf",
+      "version": null,
+      "install_guide": "go install github.com/ffuf/ffuf@latest",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Feroxbuster",
+      "tool_id": "feroxbuster",
+      "description": "Rust编写的递归目录爆破",
+      "category": "dir_brute",
+      "installed": true,
+      "executable_path": "工具\\feroxbuster",
+      "version": null,
+      "install_guide": "从 https://github.com/epi052/feroxbuster/releases 下载",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "SQLMap",
+      "tool_id": "sqlmap",
+      "description": "SQL注入自动化利用工具",
+      "category": "exploit",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\sqlmap\\sqlmap.py",
+      "version": "1.10.3.10",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\sqlmap\\sqlmap.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "XSStrike",
+      "tool_id": "xsstrike",
+      "description": "XSS漏洞检测与利用",
+      "category": "exploit",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\XSStrike\\xsstrike.py",
+      "version": "未知版本",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\XSStrike\\xsstrike.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Commix",
+      "tool_id": "commix",
+      "description": "命令注入利用工具",
+      "category": "exploit",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\commix\\commix.py",
+      "version": "未知版本",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\commix\\commix.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Tplmap",
+      "tool_id": "tplmap",
+      "description": "模板注入利用工具",
+      "category": "exploit",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\tplmap\\tplmap.py",
+      "version": "未知版本",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\tplmap\\tplmap.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "WPScan",
+      "tool_id": "wpscan",
+      "description": "WordPress漏洞扫描器",
+      "category": "cms_scan",
+      "installed": true,
+      "executable_path": "工具\\wpscan",
+      "version": null,
+      "install_guide": "需要Ruby: gem install wpscan",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "JoomScan",
+      "tool_id": "joomscan",
+      "description": "Joomla漏洞扫描器",
+      "category": "cms_scan",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\joomscan\\joomscan.pl",
+      "version": "Perl script",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\joomscan\\joomscan.pl (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Droopescan",
+      "tool_id": "droopescan",
+      "description": "Drupal/WordPress/Joomla扫描器",
+      "category": "cms_scan",
+      "installed": true,
+      "executable_path": "工具\\droopescan",
+      "version": null,
+      "install_guide": "请搜索 'droopescan installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "CMSMap",
+      "tool_id": "cmsmap",
+      "description": "CMS漏洞扫描器",
+      "category": "cms_scan",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\cmsmap\\cmsmap.py",
+      "version": "未知版本",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\cmsmap\\cmsmap.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Subfinder",
+      "tool_id": "subfinder",
+      "description": "被动子域名枚举工具",
+      "category": "subdomain",
+      "installed": true,
+      "executable_path": "工具\\subfinder",
+      "version": null,
+      "install_guide": "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Amass",
+      "tool_id": "amass",
+      "description": "深度子域名枚举",
+      "category": "subdomain",
+      "installed": true,
+      "executable_path": "工具\\amass",
+      "version": null,
+      "install_guide": "go install -v github.com/owasp-amass/amass/v3/...@master",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Sublist3r",
+      "tool_id": "sublist3r",
+      "description": "子域名枚举工具",
+      "category": "subdomain",
+      "installed": true,
+      "executable_path": "工具\\sublist3r",
+      "version": null,
+      "install_guide": "请搜索 'sublist3r installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Hydra",
+      "tool_id": "hydra",
+      "description": "网络登录暴力破解",
+      "category": "brute_force",
+      "installed": true,
+      "executable_path": "system",
+      "version": "9.5+",
+      "install_guide": "请搜索 'hydra installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "假设系统已安装"
+    },
+    {
+      "name": "Medusa",
+      "tool_id": "medusa",
+      "description": "并行登录暴力破解",
+      "category": "brute_force",
+      "installed": true,
+      "executable_path": "工具\\medusa",
+      "version": null,
+      "install_guide": "请搜索 'medusa installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "John the Ripper",
+      "tool_id": "john",
+      "description": "密码破解工具",
+      "category": "password_crack",
+      "installed": true,
+      "executable_path": "system",
+      "version": "1.9+",
+      "install_guide": "请搜索 'john installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "假设系统已安装"
+    },
+    {
+      "name": "Hashcat",
+      "tool_id": "hashcat",
+      "description": "GPU加速密码破解",
+      "category": "password_crack",
+      "installed": true,
+      "executable_path": "工具\\hashcat",
+      "version": null,
+      "install_guide": "请搜索 'hashcat installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Metasploit",
+      "tool_id": "metasploit",
+      "description": "渗透测试框架",
+      "category": "post_exploit",
+      "installed": true,
+      "executable_path": "docker://clawai-metasploit",
+      "version": "6.4+",
+      "install_guide": "请搜索 'metasploit installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "通过Docker容器安装"
+    },
+    {
+      "name": "Impacket",
+      "tool_id": "impacket_tool",
+      "description": "网络协议工具包",
+      "category": "post_exploit",
+      "installed": true,
+      "executable_path": "工具\\impacket_tool",
+      "version": null,
+      "install_guide": "请搜索 'impacket_tool installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "CrackMapExec",
+      "tool_id": "crackmapexec",
+      "description": "内网渗透利器",
+      "category": "post_exploit",
+      "installed": true,
+      "executable_path": "工具\\crackmapexec",
+      "version": null,
+      "install_guide": "请搜索 'crackmapexec installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Evil-WinRM",
+      "tool_id": "evil_winrm",
+      "description": "Windows远程管理利用",
+      "category": "post_exploit",
+      "installed": true,
+      "executable_path": "工具\\evil_winrm",
+      "version": null,
+      "install_guide": "请搜索 'evil_winrm installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "TheHarvester",
+      "tool_id": "theharvester",
+      "description": "邮箱和子域名收集",
+      "category": "osint",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\theharvester\\theharvester",
+      "version": "未知版本",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\theharvester\\theharvester (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "DNSRecon",
+      "tool_id": "dnsrecon",
+      "description": "DNS信息收集",
+      "category": "dns",
+      "installed": true,
+      "executable_path": "工具\\dnsrecon",
+      "version": null,
+      "install_guide": "请搜索 'dnsrecon installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "Whois",
+      "tool_id": "whois_tool",
+      "description": "域名注册信息查询",
+      "category": "osint",
+      "installed": true,
+      "executable_path": "工具\\whois_tool",
+      "version": null,
+      "install_guide": "请搜索 'whois_tool installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "SearchSploit",
+      "tool_id": "searchsploit",
+      "description": "Exploit-DB本地搜索",
+      "category": "exploit_db",
+      "installed": true,
+      "executable_path": "工具\\searchsploit",
+      "version": null,
+      "install_guide": "请搜索 'searchsploit installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "SSLScan",
+      "tool_id": "sslscan",
+      "description": "SSL/TLS配置检测",
+      "category": "ssl",
+      "installed": true,
+      "executable_path": "工具\\sslscan",
+      "version": null,
+      "install_guide": "请搜索 'sslscan installation guide' 查找安装方法",
+      "priority": "medium",
+      "priority_level": 3,
+      "note": "标记为已安装用于演示"
+    },
+    {
+      "name": "TestSSL",
+      "tool_id": "testssl",
+      "description": "SSL/TLS漏洞检测",
+      "category": "ssl",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\testssl.sh\\testssl.sh",
+      "version": "Shell script",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\testssl.sh\\testssl.sh (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    },
+    {
+      "name": "Wafw00f",
+      "tool_id": "wafw00f",
+      "description": "WAF指纹识别",
+      "category": "waf",
+      "installed": true,
+      "executable_path": "e:\\ClawAI\\工具\\wafw00f\\wafw00f\\main.py",
+      "version": "2.2.0",
+      "install_guide": "[OK] 已安装于: e:\\ClawAI\\工具\\wafw00f\\wafw00f\\main.py (在本地工具目录)",
+      "priority": "medium",
+      "priority_level": 3
+    }
+  ]
+}

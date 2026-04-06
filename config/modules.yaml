@@ -1,0 +1,48 @@
+# 模块配置
+# 控制哪些模块被启用以及如何配置
+
+modules:
+  # AI引擎模块配置
+  ai_engine:
+    enabled: true
+    config:
+      llm_provider: "openai"
+      default_model: "gpt-4"
+      max_tokens: 4096
+      temperature: 0.7
+    dependencies: []
+
+  # 数据服务模块配置
+  data_service:
+    enabled: true
+    config:
+      database_url: "sqlite:///./data/databases/clawai.db"
+      create_tables: true
+      pool_size: 5
+    dependencies: []
+
+  # 工具执行模块配置
+  tool_executor:
+    enabled: true
+    config:
+      tools_dir: "./tools/penetration"
+      container_timeout: 300
+      max_concurrent_tasks: 5
+    dependencies: []
+
+# 模块路由前缀
+routing:
+  # 每个模块的路由前缀
+  prefixes:
+    ai_engine: "/api/v1/ai"
+    data_service: "/api/v1/data"
+    tool_executor: "/api/v1/tools"
+
+  # 全局路由前缀（可选）
+  global_prefix: ""
+
+  # 是否启用模块健康检查端点
+  enable_health_endpoints: true
+
+  # 是否启用模块信息端点
+  enable_info_endpoints: true

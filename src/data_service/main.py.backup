@@ -1,0 +1,560 @@
+"""
+ClawAI 数据服务
+用户管理、项目管理、结果存储和实验数据管理
+"""
+
+import os
+import sys
+import logging
+import time
+from typing import Dict, Any, List, Optional
+from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime, Boolean, JSON, text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from datetime import datetime
+import json
+
+# 配置日志
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 导入认证模块
+try:
+    # 简单的密码哈希函数
+    def get_password_hash(password: str) -> str:
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    # 创建简单的认证路由
+    from fastapi import APIRouter
+    auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+    AUTH_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"认证模块导入失败: {e}")
+    AUTH_AVAILABLE = False
+
+# 数据库配置
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./clawai.db")
+Base = declarative_base()
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# 数据模型
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True)
+    hashed_password = Column(String(200), nullable=False)
+    role = Column(String(20), default="user")  # admin, user, guest
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    owner_id = Column(Integer, nullable=False)
+    target = Column(String(200), nullable=False)
+    status = Column(String(20), default="pending")  # pending, running, completed, failed
+    config = Column(JSON, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    results = Column(JSON, nullable=True)
+
+
+class ScanResult(Base):
+    __tablename__ = "scan_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, nullable=False)
+    scan_type = Column(String(50), nullable=False)  # nmap, whatweb, sqlmap, etc.
+    target = Column(String(200), nullable=False)
+    status = Column(String(20), default="pending")  # pending, running, completed, failed
+    results = Column(JSON, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    duration = Column(Float, nullable=True)  # seconds
+    scan_metadata = Column(JSON, default={})
+
+
+class Vulnerability(Base):
+    __tablename__ = "vulnerabilities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, nullable=False)
+    scan_id = Column(Integer, nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text)
+    severity = Column(String(20), nullable=False)  # critical, high, medium, low, info
+    category = Column(String(50))  # sql_injection, xss, rce, etc.
+    cvss_score = Column(Float, nullable=True)
+    proof = Column(Text)
+    remediation = Column(Text)
+    discovered_at = Column(DateTime, default=datetime.utcnow)
+    confirmed = Column(Boolean, default=False)
+
+
+class Experiment(Base):
+    __tablename__ = "experiments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    config = Column(JSON, nullable=False)
+    llm_model = Column(String(50))
+    llm_parameters = Column(JSON)
+    benchmark_type = Column(String(50))  # picoctf, overthewire, custom
+    status = Column(String(20), default="pending")  # pending, running, completed, failed
+    results = Column(JSON, nullable=True)
+    metrics = Column(JSON, nullable=True)  # Neptune.ai集成数据
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("启动 ClawAI 数据服务...")
+
+    try:
+        # 创建数据库表
+        Base.metadata.create_all(bind=engine)
+        logger.info("数据库表创建/检查完成")
+
+        # 初始化数据库连接池
+        app.state.db_engine = engine
+        app.state.SessionLocal = SessionLocal
+        app.state.initialized = True
+
+        # 创建默认管理员用户（如果不存在）
+        await create_default_admin()
+
+        logger.info("数据服务初始化完成")
+
+        yield
+
+    except Exception as e:
+        logger.error(f"数据服务启动失败: {e}")
+        raise
+
+    finally:
+        # 关闭时
+        logger.info("关闭 ClawAI 数据服务...")
+        app.state.initialized = False
+
+
+async def create_default_admin():
+    """创建默认管理员用户"""
+    db = SessionLocal()
+    try:
+        admin_user = db.query(User).filter(User.username == "admin").first()
+        if not admin_user:
+            # 注意：生产环境应该从环境变量读取密码
+            admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
+            # 这里应该使用密码哈希，简化处理
+            admin_user = User(
+                username="admin",
+                email="admin@clawai.com",
+                hashed_password=f"hashed_{admin_password}",  # 简化处理
+                role="admin",
+                is_active=True
+            )
+            db.add(admin_user)
+            db.commit()
+            logger.info("默认管理员用户创建完成")
+        else:
+            logger.info("管理员用户已存在")
+    except Exception as e:
+        logger.error(f"创建管理员用户失败: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+# 数据库依赖
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# 创建FastAPI应用
+app = FastAPI(
+    title="ClawAI Data Service",
+    description="数据服务，用户管理、项目管理和结果存储",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+async def health_check():
+    """数据服务健康检查"""
+    if not hasattr(app.state, "initialized") or not app.state.initialized:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="数据服务未初始化"
+        )
+
+    # 检查数据库连接
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+
+    return {
+        "service": "data-service",
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "version": "1.0.0",
+        "timestamp": time.time(),
+        "database": db_status
+    }
+
+
+@app.post("/api/v1/users/register")
+async def register_user(user_data: Dict[str, Any], db: Session = Depends(get_db)):
+    """注册用户"""
+    try:
+        username = user_data.get("username")
+        email = user_data.get("email")
+        password = user_data.get("password")
+
+        if not username or not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供用户名和密码"
+            )
+
+        # 检查用户是否已存在
+        existing_user = db.query(User).filter(
+            (User.username == username) | (User.email == email)
+        ).first()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="用户名或邮箱已存在"
+            )
+
+        # 创建用户
+        new_user = User(
+            username=username,
+            email=email,
+            hashed_password=f"hashed_{password}",  # 简化处理，生产环境使用密码哈希
+            role="user",
+            is_active=True
+        )
+
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        logger.info(f"用户注册成功: {username}")
+
+        return {
+            "user_id": new_user.id,
+            "username": new_user.username,
+            "email": new_user.email,
+            "role": new_user.role,
+            "created_at": new_user.created_at.isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"用户注册失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"用户注册失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/users/login")
+async def login_user(credentials: Dict[str, Any], db: Session = Depends(get_db)):
+    """用户登录"""
+    try:
+        username = credentials.get("username")
+        password = credentials.get("password")
+
+        if not username or not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供用户名和密码"
+            )
+
+        # 查找用户
+        user = db.query(User).filter(User.username == username).first()
+
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+
+        # 验证密码（简化处理）
+        if user.hashed_password != f"hashed_{password}":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+
+        # 更新最后登录时间
+        user.last_login = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"用户登录成功: {username}")
+
+        # TODO: 生成JWT令牌
+        token = f"jwt_token_for_{user.id}"
+
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "token": token
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"用户登录失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"用户登录失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/projects")
+async def create_project(project_data: Dict[str, Any], db: Session = Depends(get_db)):
+    """创建扫描项目"""
+    try:
+        name = project_data.get("name")
+        target = project_data.get("target")
+        owner_id = project_data.get("owner_id")
+
+        if not name or not target or not owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供项目名称、目标地址和所有者ID"
+            )
+
+        # 创建项目
+        new_project = Project(
+            name=name,
+            description=project_data.get("description", ""),
+            owner_id=owner_id,
+            target=target,
+            status="pending",
+            config=project_data.get("config", {})
+        )
+
+        db.add(new_project)
+        db.commit()
+        db.refresh(new_project)
+
+        logger.info(f"项目创建成功: {name} (ID: {new_project.id})")
+
+        return {
+            "project_id": new_project.id,
+            "name": new_project.name,
+            "target": new_project.target,
+            "status": new_project.status,
+            "created_at": new_project.created_at.isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"项目创建失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"项目创建失败: {str(e)}"
+        )
+
+
+@app.get("/api/v1/projects/{project_id}")
+async def get_project(project_id: int, db: Session = Depends(get_db)):
+    """获取项目信息"""
+    try:
+        project = db.query(Project).filter(Project.id == project_id).first()
+
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"项目 {project_id} 未找到"
+            )
+
+        return {
+            "project_id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "owner_id": project.owner_id,
+            "target": project.target,
+            "status": project.status,
+            "config": project.config,
+            "results": project.results,
+            "created_at": project.created_at.isoformat() if project.created_at else None,
+            "started_at": project.started_at.isoformat() if project.started_at else None,
+            "completed_at": project.completed_at.isoformat() if project.completed_at else None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取项目信息失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取项目信息失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/results")
+async def save_scan_result(result_data: Dict[str, Any], db: Session = Depends(get_db)):
+    """保存扫描结果"""
+    try:
+        project_id = result_data.get("project_id")
+        scan_type = result_data.get("scan_type")
+        target = result_data.get("target")
+        results = result_data.get("results")
+
+        if not project_id or not scan_type or not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供项目ID、扫描类型和目标地址"
+            )
+
+        # 保存扫描结果
+        scan_result = ScanResult(
+            project_id=project_id,
+            scan_type=scan_type,
+            target=target,
+            status="completed",
+            results=results,
+            started_at=datetime.fromisoformat(result_data.get("started_at")) if result_data.get("started_at") else datetime.utcnow(),
+            completed_at=datetime.utcnow(),
+            duration=result_data.get("duration"),
+            metadata=result_data.get("metadata", {})
+        )
+
+        db.add(scan_result)
+        db.commit()
+        db.refresh(scan_result)
+
+        logger.info(f"扫描结果保存成功: {scan_type} -> {target} (项目: {project_id})")
+
+        return {
+            "result_id": scan_result.id,
+            "project_id": scan_result.project_id,
+            "scan_type": scan_result.scan_type,
+            "status": scan_result.status,
+            "completed_at": scan_result.completed_at.isoformat() if scan_result.completed_at else None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"保存扫描结果失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"保存扫描结果失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/experiments")
+async def create_experiment(experiment_data: Dict[str, Any], db: Session = Depends(get_db)):
+    """创建实验记录"""
+    try:
+        name = experiment_data.get("name")
+        config = experiment_data.get("config", {})
+
+        if not name or not config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供实验名称和配置"
+            )
+
+        # 创建实验
+        experiment = Experiment(
+            name=name,
+            description=experiment_data.get("description", ""),
+            config=config,
+            llm_model=experiment_data.get("llm_model"),
+            llm_parameters=experiment_data.get("llm_parameters", {}),
+            benchmark_type=experiment_data.get("benchmark_type"),
+            status="pending"
+        )
+
+        db.add(experiment)
+        db.commit()
+        db.refresh(experiment)
+
+        logger.info(f"实验创建成功: {name} (ID: {experiment.id})")
+
+        return {
+            "experiment_id": experiment.id,
+            "name": experiment.name,
+            "status": experiment.status,
+            "created_at": experiment.created_at.isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"创建实验失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建实验失败: {str(e)}"
+        )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8083"))
+
+    logger.info(f"启动数据服务: http://{host}:{port}")
+    logger.info(f"API文档: http://{host}:{port}/docs")
+
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=os.getenv("ENVIRONMENT", "development") == "development"
+    )

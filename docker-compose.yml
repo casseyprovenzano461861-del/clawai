@@ -1,0 +1,144 @@
+# ClawAI 简化Docker Compose配置
+# 用于模块化单体应用部署
+# 生成时间: 2026-04-06
+# 版本: 2.0.0 (架构简化版)
+
+services:
+  # ClawAI 模块化单体应用
+  clawai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clawai-app
+    ports:
+      - "8000:8000"
+    environment:
+      # 基础配置
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+
+      # 服务器配置
+      - SERVER_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+
+      # 安全配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-jwt-secret-key-change-in-production}
+
+      # 数据库配置
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/databases/clawai.db}
+
+      # 工具配置
+      - TOOLS_DIR=${TOOLS_DIR:-/app/tools/penetration}
+
+      # 审计配置
+      - AUDIT_STORAGE_DIR=${AUDIT_STORAGE_DIR:-/app/data/audit}
+
+      # 模块配置
+      - MODULES_CONFIG_PATH=${MODULES_CONFIG_PATH:-/app/config/modules.yaml}
+      - RBAC_CONFIG_PATH=${RBAC_CONFIG_PATH:-/app/config/rbac.json}
+
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-/app/logs/clawai.log}
+
+      # AI配置 (可选)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # 功能开关
+      - ENABLE_AI_ANALYSIS=${ENABLE_AI_ANALYSIS:-true}
+      - ENABLE_TOOL_EXECUTION=${ENABLE_TOOL_EXECUTION:-true}
+      - ENABLE_AUDIT_LOGGING=${ENABLE_AUDIT_LOGGING:-true}
+    volumes:
+      # 持久化数据
+      - clawai_data:/app/data/databases
+      - clawai_audit:/app/data/audit
+      - clawai_logs:/app/logs
+
+      # 挂载配置文件 (可选)
+      # - ./config:/app/config:ro
+
+      # 挂载工具目录 (可选，使用主机上的工具)
+      # - /usr/share/nmap:/usr/share/nmap:ro
+      # - /usr/bin:/usr/bin:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - clawai-network
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  # Neo4j图数据库 (知识图谱存储)
+  neo4j:
+    image: neo4j:5.26.2
+    container_name: clawai-neo4j
+    restart: unless-stopped
+    hostname: neo4j
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 3s
+    ports:
+      - "127.0.0.1:7474:7474"  # HTTP (浏览器访问)
+      - "127.0.0.1:7687:7687"  # Bolt (应用程序连接)
+    logging:
+      options:
+        max-size: 50m
+        max-file: "7"
+    volumes:
+      - neo4j_data:/data
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH:-neo4j/password}  # 默认用户名/密码，生产环境必须修改
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]  # 安装APOC和GDS插件
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_dbms_memory_pagecache_size=1G
+      - NEO4J_dbms_memory_heap_initial__size=2G
+      - NEO4J_dbms_memory_heap_max__size=4G
+    networks:
+      - clawai-network
+    shm_size: 4g
+
+# 可选: PostgreSQL数据库 (如果需要)
+#  postgres:
+#    image: postgres:15-alpine
+#    container_name: clawai-postgres
+#    environment:
+#      - POSTGRES_USER=${POSTGRES_USER:-clawai}
+#      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-clawaitest123}
+#      - POSTGRES_DB=${POSTGRES_DB:-clawai}
+#    volumes:
+#      - postgres_data:/var/lib/postgresql/data
+#    ports:
+#      - "5432:5432"
+#    networks:
+#      - clawai-network
+#    restart: unless-stopped
+
+# 可选: Redis缓存 (如果需要)
+#  redis:
+#    image: redis:7-alpine
+#    container_name: clawai-redis
+#    ports:
+#      - "6379:6379"
+#    networks:
+#      - clawai-network
+#    restart: unless-stopped
+
+networks:
+  clawai-network:
+    driver: bridge
+
+volumes:
+  clawai_data:
+  clawai_audit:
+  clawai_logs:
+  neo4j_data:
+  # postgres_data:  # 启用PostgreSQL时取消注释

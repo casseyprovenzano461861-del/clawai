@@ -1,0 +1,178 @@
+# SQLMap SQL注入检测工具配置
+# 参考: https://github.com/sqlmapproject/sqlmap
+name: sqlmap
+command: sqlmap
+category: exploitation
+description: "自动化SQL注入检测和数据库接管工具，支持多种数据库和注入技术"
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  batch: true
+  level: "1"
+  risk: "1"
+
+command_template: "sqlmap -u {url} {batch} {level} {risk} {technique} {dbms} {additional_args}"
+
+parameters:
+  - name: url
+    type: string
+    description: "目标URL（包含参数的URL）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9\\.\\-]+(?:\\:[0-9]+)?(?:/[^\\s]*\\?[^\\s]+)$"
+      error_message: "URL格式无效，应包含查询参数（如 http://example.com/page?id=1）"
+
+  - name: batch
+    type: boolean
+    description: "非交互模式，自动使用默认选项"
+    required: false
+    default: true
+    flag: "--batch"
+    format: "flag"
+
+  - name: level
+    type: string
+    description: "测试级别（1-5），级别越高测试越详细"
+    required: false
+    default: "1"
+    flag: "--level"
+    format: "template"
+    template: "--level {value}"
+    validation:
+      min: 1
+      max: 5
+    options:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+
+  - name: risk
+    type: string
+    description: "风险级别（1-3），风险越高测试越危险"
+    required: false
+    default: "1"
+    flag: "--risk"
+    format: "template"
+    template: "--risk {value}"
+    validation:
+      min: 1
+      max: 3
+    options:
+      - "1"
+      - "2"
+      - "3"
+
+  - name: technique
+    type: string
+    description: "注入技术"
+    required: false
+    flag: "--technique"
+    format: "flag"
+    options:
+      - "B"   # Boolean-based blind
+      - "E"   # Error-based
+      - "U"   # Union query-based
+      - "S"   # Stacked queries
+      - "T"   # Time-based blind
+      - "Q"   # Inline queries
+
+  - name: dbms
+    type: string
+    description: "目标数据库管理系统"
+    required: false
+    flag: "--dbms"
+    format: "flag"
+    options:
+      - "MySQL"
+      - "PostgreSQL"
+      - "Microsoft SQL Server"
+      - "Oracle"
+      - "SQLite"
+
+  - name: os_shell
+    type: boolean
+    description: "尝试获取操作系统shell"
+    required: false
+    default: false
+    flag: "--os-shell"
+    format: "flag"
+
+  - name: sql_shell
+    type: boolean
+    description: "尝试获取SQL交互式shell"
+    required: false
+    default: false
+    flag: "--sql-shell"
+    format: "flag"
+
+  - name: dump
+    type: boolean
+    description: "转储数据库表内容"
+    required: false
+    default: false
+    flag: "--dump"
+    format: "flag"
+
+  - name: additional_args
+    type: string
+    description: "额外的SQLMap参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "sqlmap_json"  # 使用内置的SQLMap JSON解析器
+  extract_vulnerabilities: true
+  extract_databases: true
+  extract_tables: true
+  extract_columns: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "txt"
+
+limits:
+  max_runtime: 3600  # 最长运行时间（秒）
+  max_memory: "2g"
+  max_output_size: "20mb"
+  max_requests_per_second: 10
+
+metrics:
+  - name: "vulnerabilities_found"
+    type: "counter"
+    description: "发现的漏洞数量"
+    extract_regex: "identified\\s+(\\d+)\\s+vulnerabilit"
+
+  - name: "databases_dumped"
+    type: "gauge"
+    description: "成功转储的数据库数量"
+    extract_regex: "dumped\\s+(\\d+)\\s+database"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "scan\\s+completed\\s+in\\s+([0-9\\.]+)\\s+seconds"
+
+skill_integration:
+  skill_name: "sql_injection"
+  required_level: 2
+  input_mapping:
+    url: "target_url"
+  output_mapping:
+    vulnerable: "is_vulnerable"
+    databases: "databases_found"
+    tables: "tables_found"
+  success_criteria:
+    - "exit_code == 0"
+    - "vulnerabilities_found > 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "nosqli"

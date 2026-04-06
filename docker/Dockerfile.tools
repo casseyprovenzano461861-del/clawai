@@ -1,0 +1,78 @@
+# ClawAI 渗透测试工具镜像
+# 基于 Kali Linux，包含所有必要的渗透测试工具
+
+FROM kalilinux/kali-rolling:latest
+
+LABEL maintainer="ClawAI Team"
+LABEL version="1.0"
+LABEL description="ClawAI 渗透测试工具镜像，包含常用安全工具"
+
+# 避免交互式提示
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 更新并安装基础工具
+RUN apt update && apt upgrade -y && \
+    apt install -y \
+    # 基础工具
+    curl wget git gnupg ca-certificates lsb-release \
+    # 网络和扫描工具
+    nmap masscan net-tools iputils-ping dnsutils \
+    # Web 安全工具
+    whatweb nikto dirbuster gobuster sqlmap hydra \
+    # 密码破解
+    john hashcat \
+    # 漏洞扫描
+    wapiti skipfish \
+    # SSL/TLS 工具
+    sslscan testssl.sh \
+    # WAF 检测
+    wafw00f \
+    # 其他工具
+    python3 python3-pip python3-venv ruby perl \
+    # 清理缓存
+    && apt clean && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 工具
+RUN pip3 install --no-cache-dir \
+    sqlmap \
+    xsstrike \
+    commix \
+    # 其他 Python 安全工具
+    && rm -rf /root/.cache/pip
+
+# 安装 Nuclei（Go 编写的漏洞扫描器）
+RUN curl -sSL https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_3.3.5_linux_amd64.tar.gz -o nuclei.tar.gz && \
+    tar -xzf nuclei.tar.gz && \
+    mv nuclei /usr/local/bin/ && \
+    rm nuclei.tar.gz && \
+    nuclei -version
+
+# 安装 Dirsearch（Web 路径扫描器）
+RUN git clone https://github.com/maurosoria/dirsearch.git /opt/dirsearch && \
+    ln -s /opt/dirsearch/dirsearch.py /usr/local/bin/dirsearch && \
+    chmod +x /opt/dirsearch/dirsearch.py
+
+# 安装 WPscan（WordPress 扫描器）
+RUN git clone https://github.com/wpscanteam/wpscan.git /opt/wpscan && \
+    cd /opt/wpscan && \
+    bundle install && \
+    ln -s /opt/wpscan/bin/wpscan /usr/local/bin/wpscan
+
+# 创建工具目录
+RUN mkdir -p /tools && chmod 777 /tools
+
+# 设置工作目录
+WORKDIR /tools
+
+# 验证工具安装
+RUN echo "=== 验证工具安装 ===" && \
+    nmap --version 2>&1 | head -1 && \
+    sqlmap --version 2>&1 | head -1 && \
+    whatweb --version 2>&1 | head -1 && \
+    nikto -Version 2>&1 | head -1 && \
+    hydra -h 2>&1 | head -1 && \
+    nuclei -version 2>&1 | head -1 && \
+    echo "=== 工具验证完成 ==="
+
+# 设置默认命令
+CMD ["/bin/bash"]

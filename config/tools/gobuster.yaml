@@ -1,0 +1,132 @@
+# GoBuster 目录和文件暴力破解工具配置
+# 参考: https://github.com/OJ/gobuster
+name: gobuster
+command: gobuster
+category: reconnaissance
+description: "Go语言编写的目录/文件暴力破解工具，支持DNS子域名枚举"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "GOPATH=/go"
+
+defaults:
+  wordlist: "/usr/share/wordlists/dirb/common.txt"
+  threads: "10"
+
+command_template: "gobuster {mode} -u {url} -w {wordlist} -t {threads} {extensions} {additional_args}"
+
+parameters:
+  - name: mode
+    type: string
+    description: "扫描模式（dir 或 dns）"
+    required: true
+    flag: ""
+    format: "positional"
+    position: 0
+    options:
+      - "dir"
+      - "dns"
+
+  - name: url
+    type: string
+    description: "目标URL（dir模式）或域名（dns模式）"
+    required: true
+    position: 1
+    validation:
+      pattern: "^[a-zA-Z0-9\\.\\-:/]+$"
+      error_message: "URL或域名格式无效"
+
+  - name: wordlist
+    type: string
+    description: "字典文件路径（容器内路径）"
+    required: false
+    default: "/usr/share/wordlists/dirb/common.txt"
+    flag: "-w"
+    format: "flag"
+
+  - name: threads
+    type: string
+    description: "线程数"
+    required: false
+    default: "10"
+    flag: "-t"
+    format: "flag"
+    validation:
+      pattern: "^[0-9]+$"
+      error_message: "线程数必须为正整数"
+
+  - name: extensions
+    type: string
+    description: "文件扩展名（逗号分隔，dir模式）"
+    required: false
+    flag: "-x"
+    format: "flag"
+    validation:
+      pattern: "^[a-zA-Z0-9,\\-]+$"
+      error_message: "扩展名格式无效，应为逗号分隔的列表"
+
+  - name: status_codes
+    type: string
+    description: "要显示的状态码（逗号分隔）"
+    required: false
+    flag: "-s"
+    format: "flag"
+    validation:
+      pattern: "^[0-9,]+$"
+      error_message: "状态码格式无效"
+
+  - name: additional_args
+    type: string
+    description: "额外的GoBuster参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "gobuster_txt"
+  extract_paths: true
+  extract_status_codes: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "txt"
+
+limits:
+  max_runtime: 1800
+  max_memory: "512m"
+  max_output_size: "5mb"
+  max_requests_per_second: 50
+
+metrics:
+  - name: "paths_found"
+    type: "counter"
+    description: "发现的路径数量"
+    extract_regex: "Found:\\s+(\\d+)"
+
+  - name: "requests_made"
+    type: "gauge"
+    description: "发送的请求数量"
+    extract_regex: "Requests:\\s+(\\d+)"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Time\\s+taken:\\s+([0-9\\.]+)s"
+
+skill_integration:
+  skill_name: "directory_bruteforce"
+  required_level: 1
+  input_mapping:
+    url: "target_url"
+    mode: "scan_mode"
+  output_mapping:
+    paths: "discovered_paths"
+    status_codes: "path_status_codes"
+  success_criteria:
+    - "exit_code == 0"
+    - "paths_found > 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "dirsearch"

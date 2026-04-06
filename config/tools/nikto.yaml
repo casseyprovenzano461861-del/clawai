@@ -1,0 +1,152 @@
+# Nikto Web服务器扫描工具配置
+# 参考: https://github.com/sullo/nikto
+name: nikto
+command: nikto
+category: vulnerability_assessment
+description: "Web服务器漏洞扫描器，检测Web服务器配置问题、过时软件和潜在漏洞"
+enabled: true
+requires_container: true
+container_image: "clawai-tools:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  host: ""
+  ssl: false
+  format: "txt"
+
+command_template: "nikto -h {host} {ssl} {port} {format} {output} {additional_args}"
+
+parameters:
+  - name: host
+    type: string
+    description: "目标主机名或IP地址"
+    required: true
+    position: 0
+    validation:
+      pattern: "^[a-zA-Z0-9\\.\\-]+$"
+      error_message: "主机名或IP地址格式无效"
+
+  - name: ssl
+    type: boolean
+    description: "使用SSL（HTTPS）"
+    required: false
+    default: false
+    flag: "-ssl"
+    format: "flag"
+
+  - name: port
+    type: integer
+    description: "端口号"
+    required: false
+    default: 80
+    flag: "-p"
+    format: "flag"
+    validation:
+      min: 1
+      max: 65535
+
+  - name: format
+    type: string
+    description: "输出格式"
+    required: false
+    default: "txt"
+    flag: "-Format"
+    format: "template"
+    template: "-Format {value}"
+    options:
+      - "txt"
+      - "csv"
+      - "htm"
+      - "xml"
+
+  - name: output
+    type: string
+    description: "输出文件名"
+    required: false
+    flag: "-o"
+    format: "flag"
+
+  - name: timeout
+    type: integer
+    description: "超时时间（秒）"
+    required: false
+    default: 10
+    flag: "-timeout"
+    format: "flag"
+    validation:
+      min: 1
+      max: 300
+
+  - name: evasion
+    type: string
+    description: "IDS规避技术"
+    required: false
+    flag: "-evasion"
+    format: "flag"
+    options:
+      - "1"  # 随机URL编码
+      - "2"  # 自选目录
+      - "3"  # 提前结束URL
+      - "4"  # 参数前置
+      - "5"  # 虚假参数
+      - "6"  # TAB作为请求分隔符
+      - "7"  # 大小写变化
+      - "8"  # Windows目录分隔符
+
+  - name: additional_args
+    type: string
+    description: "额外的Nikto参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "nikto_txt"  # 使用内置的Nikto TXT解析器
+  extract_vulnerabilities: true
+  extract_server_info: true
+  extract_risk_levels: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "txt"
+    - "html"
+
+limits:
+  max_runtime: 1200
+  max_memory: "1g"
+  max_output_size: "10mb"
+  max_targets: 5
+
+metrics:
+  - name: "vulnerabilities_found"
+    type: "counter"
+    description: "发现的漏洞数量"
+    extract_regex: "\\+\\s+(\\d+)\\s+Vulnerabilities found"
+
+  - name: "server_info_items"
+    type: "gauge"
+    description: "识别的服务器信息项数量"
+    extract_regex: "Server:\\s+.+"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scan\\s+completed\\s+in\\s+([0-9\\.]+)\\s+seconds"
+
+skill_integration:
+  skill_name: "web_vulnerability_scanning"
+  required_level: 1
+  input_mapping:
+    host: "target_host"
+    port: "target_port"
+  output_mapping:
+    vulnerabilities: "web_vulnerabilities"
+    server_info: "server_information"
+  success_criteria:
+    - "exit_code == 0"
+    - "vulnerabilities_found >= 0"
+  failure_handling:
+    retry_count: 2
+    fallback_tool: "skipfish"

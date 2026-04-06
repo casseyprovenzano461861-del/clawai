@@ -1,0 +1,171 @@
+# ClawAI Nikto 工具配置
+# Web 服务器安全扫描工具
+
+name: "nikto"
+command: "nikto"
+category: "scanning"
+description: |
+  Web 服务器扫描工具，检测已知漏洞、配置错误和潜在安全问题。
+
+  **主要功能**：
+  - 检测 Web 服务器版本和配置问题
+  - 识别已知的 Web 漏洞和 CVE
+  - 检测危险文件和目录
+  - 检查服务器配置错误
+  - 识别过时的软件版本
+
+  **特点**：
+  - 支持 HTTP 和 HTTPS
+  - 可自定义扫描插件
+  - 输出格式灵活（文本、CSV、XML、JSON）
+  - 支持代理和身份验证
+
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "host"
+
+# Nikto 在找到漏洞时返回退出码 1，这是正常的
+allowed_exit_codes: [0, 1]
+
+# 命令构建模板
+command_template: "{command} -h {target} {port} {ssl} {format} {mutate} {additional_args}"
+
+# 默认参数值
+defaults:
+  format: "-Format txt"
+  ssl: ""
+
+# 参数定义
+parameters:
+  - name: "target"
+    type: "string"
+    description: "目标 URL 或 IP 地址"
+    required: true
+    flag: "-h"
+    format: "flag"
+    validation:
+      pattern: "^(https?://)?[a-zA-Z0-9.-]+(\\.[a-zA-Z]{2,})(:[0-9]+)?(/.*)?$"
+      error_message: "请输入有效的 URL 或 IP 地址"
+
+  - name: "port"
+    type: "integer"
+    description: "目标端口号"
+    required: false
+    flag: "-p"
+    format: "flag"
+    default: ""
+    validation:
+      min: 1
+      max: 65535
+      error_message: "端口号必须在 1-65535 范围内"
+
+  - name: "ssl"
+    type: "boolean"
+    description: "强制使用 SSL/TLS"
+    required: false
+    flag: "-ssl"
+    format: "flag"
+    default: false
+
+  - name: "format"
+    type: "string"
+    description: "输出格式: txt, csv, xml, json"
+    required: false
+    flag: "-Format"
+    format: "combined"
+    default: "txt"
+    options: ["txt", "csv", "xml", "json"]
+    validation:
+      pattern: "^(txt|csv|xml|json)$"
+      error_message: "输出格式必须是 txt、csv、xml 或 json"
+
+  - name: "mutate"
+    type: "integer"
+    description: "变异测试级别 1-9（1=基本，9=全面）"
+    required: false
+    flag: "-mutate"
+    format: "combined"
+    default: ""
+    validation:
+      min: 1
+      max: 9
+      error_message: "变异级别必须在 1-9 范围内"
+
+  - name: "timeout"
+    type: "integer"
+    description: "超时时间（秒）"
+    required: false
+    flag: "-timeout"
+    format: "combined"
+    default: 10
+    validation:
+      min: 1
+      max: 300
+      error_message: "超时时间必须在 1-300 秒范围内"
+
+  - name: "user_agent"
+    type: "string"
+    description: "自定义 User-Agent"
+    required: false
+    flag: "-useragent"
+    format: "flag"
+    default: ""
+
+  - name: "additional_args"
+    type: "string"
+    description: "额外参数，如: -v (详细输出), -Cgidirs (CGI 目录扫描)"
+    required: false
+    format: "positional"
+    default: ""
+
+# 输出处理配置
+output_handling:
+  parser: "nikto_text"
+  extract_fields:
+    - name: "server_info"
+      pattern: "Server: (.*?)\\n"
+    - name: "vulnerabilities"
+      pattern: "\\+ (.*?)\\n"
+    - name: "osvdb_entries"
+      pattern: "OSVDB-(\\d+):"
+    - name: "scan_summary"
+      pattern: "Scan ended at:.*?\\n(.*?)\\n\\n"
+
+  success_conditions:
+    - exit_code: 0
+    - exit_code: 1  # Nikto 在找到漏洞时返回 1
+
+  error_patterns:
+    - pattern: "ERROR:"
+      message: "Nikto 执行错误"
+    - pattern: "No web server found"
+      message: "未找到 Web 服务器"
+
+# 性能和安全限制
+limits:
+  max_runtime: 900  # 15分钟
+  max_output_size: 10485760  # 10MB
+  max_concurrent_scans: 3  # Nikto 可能消耗较多资源
+  allowed_scan_types: ["standard", "aggressive"]  # 允许的扫描类型
+
+# 监控指标
+metrics:
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间"
+  - name: "vulnerabilities_found"
+    type: "gauge"
+    description: "发现的漏洞数量"
+  - name: "osvdb_entries"
+    type: "counter"
+    description: "OSVDB 条目数量"
+
+# 技能系统集成
+skill_integration:
+  skill_name: "web_server_scanning"
+  skill_class: "NiktoScanSkill"
+  required_capabilities: ["web_scanning", "vulnerability_detection"]
+  provides_context: ["server_info", "vulnerabilities", "configuration_issues"]
+  risk_level: "medium"

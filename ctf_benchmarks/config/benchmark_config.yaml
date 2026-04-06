@@ -1,0 +1,314 @@
+# CTF 基准测试框架主配置
+# 全局配置和默认设置
+
+name: "clawai-ctf-benchmark-framework"
+version: "1.0.0"
+description: "基于 HackSynth 的 CTF 基准测试框架，用于评估 AI 代理的渗透测试能力"
+
+# 支持的平台
+platforms:
+  picoctf:
+    enabled: true
+    description: "PicoCTF - 教育导向的 CTF 平台"
+    challenge_dir: "picoctf/challenges/"
+    config_dir: "picoctf/configs/"
+    default_difficulty: "beginner"
+
+  overthewire:
+    enabled: true
+    description: "OverTheWire - 渐进式战争游戏"
+    challenge_dir: "overthewire/challenges/"
+    config_dir: "overthewire/configs/"
+    default_difficulty: "beginner"
+
+  custom:
+    enabled: false
+    description: "自定义挑战平台"
+    challenge_dir: "custom/challenges/"
+    config_dir: "custom/configs/"
+
+# 挑战类别
+categories:
+  - name: "web"
+    description: "Web 应用安全"
+    subcategories: ["xss", "sqli", "csrf", "idor", "auth"]
+    icon: "🌐"
+
+  - name: "linux"
+    description: "Linux 系统安全"
+    subcategories: ["privilege-escalation", "file-system", "process", "network"]
+    icon: "🐧"
+
+  - name: "binary"
+    description: "二进制逆向工程"
+    subcategories: ["reverse-engineering", "pwn", "exploit-dev"]
+    icon: "⚙️"
+
+  - name: "crypto"
+    description: "密码学"
+    subcategories: ["classic", "modern", "implementation"]
+    icon: "🔐"
+
+  - name: "forensics"
+    description: "数字取证"
+    subcategories: ["memory", "disk", "network", "steganography"]
+    icon: "🔍"
+
+  - name: "misc"
+    description: "杂项挑战"
+    subcategories: ["osint", "recon", "miscellaneous"]
+    icon: "🎯"
+
+# 难度级别
+difficulties:
+  very_easy:
+    points_range: [10, 50]
+    description: "非常容易 - 适合初学者"
+    color: "#4CAF50"  # 绿色
+
+  easy:
+    points_range: [50, 100]
+    description: "容易 - 基本概念"
+    color: "#8BC34A"  # 浅绿
+
+  medium:
+    points_range: [100, 200]
+    description: "中等 - 需要一些经验"
+    color: "#FFC107"  # 黄色
+
+  hard:
+    points_range: [200, 300]
+    description: "困难 - 需要专业知识"
+    color: "#FF9800"  # 橙色
+
+  expert:
+    points_range: [300, 500]
+    description: "专家级 - 需要深入知识"
+    color: "#F44336"  # 红色
+
+# 评估指标
+metrics:
+  primary:
+    - name: "success_rate"
+      description: "挑战成功率"
+      weight: 0.4
+      calculation: "completed / total"
+      better_higher: true
+
+    - name: "average_steps"
+      description: "平均步骤数"
+      weight: 0.2
+      calculation: "total_steps / completed"
+      better_higher: false
+
+    - name: "average_time"
+      description: "平均完成时间"
+      weight: 0.2
+      calculation: "total_time / completed"
+      better_higher: false
+
+    - name: "token_efficiency"
+      description: "Token 效率"
+      weight: 0.2
+      calculation: "total_tokens / completed"
+      better_higher: false
+
+  secondary:
+    - name: "learning_curve"
+      description: "学习曲线"
+
+    - name: "command_diversity"
+      description: "命令多样性"
+
+    - name: "error_rate"
+      description: "错误率"
+
+    - name: "adaptability"
+      description: "适应性"
+
+# AI 代理配置
+agent_defaults:
+  llm_providers:
+    - name: "deepseek"
+      models: ["deepseek-chat", "deepseek-coder"]
+      api_base: "https://api.deepseek.com"
+
+    - name: "openai"
+      models: ["gpt-4", "gpt-3.5-turbo"]
+      api_base: "https://api.openai.com"
+
+    - name: "anthropic"
+      models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+      api_base: "https://api.anthropic.com"
+
+    - name: "local"
+      models: ["llama-2-7b-chat", "llama-2-13b-chat", "llama-2-70b-chat"]
+      api_base: "http://localhost:8080"
+
+  default_parameters:
+    temperature: 0.7
+    max_tokens: 1024
+    top_p: 0.9
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+
+# 环境配置
+environment_defaults:
+  container_engine: "docker"
+  default_image: "kalilinux/kali-rolling:latest"
+  resource_limits:
+    cpu: "1.0"
+    memory: "1g"
+    timeout: 600
+
+  network:
+    mode: "bridge"
+    subnet: "172.20.0.0/16"
+    dns: ["8.8.8.8", "8.8.4.4"]
+
+# 结果存储
+results_config:
+  default_output_dir: "results/"
+  formats: ["json", "yaml", "csv"]
+  compression: true
+  retention_days: 30
+
+  directories:
+    raw: "raw/"
+    processed: "processed/"
+    metrics: "metrics/"
+    reports: "reports/"
+
+# 报告生成
+reporting:
+  formats: ["html", "markdown", "json"]
+  charts:
+    - type: "pie"
+      title: "成功率分布"
+
+    - type: "bar"
+      title: "挑战完成时间"
+
+    - type: "line"
+      title: "学习曲线"
+
+    - type: "radar"
+      title: "技能雷达图"
+
+  include_in_report:
+    - "executive_summary"
+    - "detailed_analysis"
+    - "comparison_charts"
+    - "recommendations"
+
+# 实验跟踪
+experiment_tracking:
+  enabled: true
+  providers:
+    - name: "neptune"
+      project: "clawai/ctf-benchmarks"
+
+    - name: "wandb"
+      project: "clawai-ctf-benchmarks"
+
+    - name: "mlflow"
+      tracking_uri: "http://localhost:5000"
+
+  track_metrics:
+    - "success_rate"
+    - "average_time"
+    - "token_usage"
+    - "step_count"
+
+# 验证规则
+validation_rules:
+  challenge_files:
+    - "required_fields"
+    - "format_validation"
+    - "reference_integrity"
+
+  benchmark_configs:
+    - "challenge_references"
+    - "parameter_ranges"
+    - "resource_limits"
+
+  environment:
+    - "container_health"
+    - "network_connectivity"
+    - "resource_availability"
+
+# 路径配置
+paths:
+  challenges: "challenges/"
+  configs: "configs/"
+  scripts: "scripts/"
+  results: "results/"
+  reports: "reports/"
+  logs: "logs/"
+
+  docker:
+    images: "docker/"
+    compose_files: "docker-compose/"
+    volumes: "volumes/"
+
+# 性能调优
+performance:
+  max_concurrent_challenges: 3
+  challenge_start_delay: 5  # 挑战启动延迟（秒）
+  health_check_interval: 10  # 健康检查间隔（秒）
+  cleanup_timeout: 30  # 清理超时（秒）
+
+  caching:
+    enabled: true
+    ttl: 3600  # 缓存存活时间（秒）
+    max_size: 1000  # 最大缓存条目数
+
+# 安全配置
+security:
+  container_isolation: true
+  resource_limits_enforced: true
+  network_isolation: true
+  read_only_filesystem: false
+
+  blacklisted_commands:
+    - "rm -rf /"
+    - "dd if=/dev/zero"
+    - ":(){ :|:& };:"  # fork 炸弹
+    - "mkfs"
+    - "fdisk"
+
+# 元数据
+metadata:
+  framework_name: "ClawAI CTF Benchmark Framework"
+  version: "1.0.0"
+  based_on: "HackSynth: Evaluating LLM Agents for Autonomous Penetration Testing"
+  reference_paper: "https://arxiv.org/abs/2412.01778"
+
+  authors:
+    - "ClawAI Development Team"
+    - "HackSynth Contributors"
+
+  license: "MIT"
+  repository: "https://github.com/clawai/ctf-benchmarks"
+
+  contact:
+    email: "benchmarks@clawai.example.com"
+    issues: "https://github.com/clawai/ctf-benchmarks/issues"
+
+  tags:
+    - "ctf"
+    - "benchmark"
+    - "ai"
+    - "security"
+    - "pentesting"
+    - "llm"
+
+# 更新日志
+changelog:
+  - version: "1.0.0"
+    date: "2026-04-05"
+    changes:
+      - "初始版本发布"
+      - "支持 PicoCTF 和 OverTheWire 平台"
+      - "集成 HackSynth 架构"
+      - "添加基准测试运行器和分析器"

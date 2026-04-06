@@ -1,0 +1,138 @@
+{
+  "nmap": {
+    "tool_name": "nmap",
+    "installed": true,
+    "path": "e:\\ClawAI\\external_tools\\mock_tools\\nmap_mock.py",
+    "version": null,
+    "check_method": "config_path"
+  },
+  "sqlmap": {
+    "tool_name": "sqlmap",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "nuclei": {
+    "tool_name": "nuclei",
+    "installed": true,
+    "path": "e:\\ClawAI\\external_tools\\mock_tools\\nuclei_mock.py",
+    "version": null,
+    "check_method": "config_path"
+  },
+  "whatweb": {
+    "tool_name": "whatweb",
+    "installed": true,
+    "path": "e:\\ClawAI\\external_tools\\mock_tools\\whatweb_mock.py",
+    "version": null,
+    "check_method": "config_path"
+  },
+  "nikto": {
+    "tool_name": "nikto",
+    "installed": true,
+    "path": "C:\\WINDOWS\\system32\\nikto.BAT",
+    "version": null,
+    "check_method": "system_path"
+  },
+  "dirsearch": {
+    "tool_name": "dirsearch",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "gobuster": {
+    "tool_name": "gobuster",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "hydra": {
+    "tool_name": "hydra",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "john": {
+    "tool_name": "john",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "hashcat": {
+    "tool_name": "hashcat",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "wapiti": {
+    "tool_name": "wapiti",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "skipfish": {
+    "tool_name": "skipfish",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "wafw00f": {
+    "tool_name": "wafw00f",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "xsstrike": {
+    "tool_name": "xsstrike",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "masscan": {
+    "tool_name": "masscan",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "sslscan": {
+    "tool_name": "sslscan",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "testssl": {
+    "tool_name": "testssl",
+    "installed": false,
+    "path": null,
+    "version": null,
+    "check_method": "unknown"
+  },
+  "docker": {
+    "tool_name": "docker",
+    "installed": true,
+    "path": "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.EXE",
+    "version": "Docker version 29.2.1, build a5c7197",
+    "check_method": "system_path"
+  },
+  "python_deps": {
+    "tool_name": "python_deps",
+    "installed": false,
+    "missing_deps": [
+      "beautifulsoup4",
+      "lxml",
+      "markdown"
+    ],
+    "check_method": "pip"
+  }
+}

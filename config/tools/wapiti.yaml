@@ -1,0 +1,168 @@
+# Wapiti Web应用程序漏洞扫描工具配置
+# 参考: https://github.com/wapiti-scanner/wapiti
+name: wapiti
+command: wapiti
+category: vulnerability_assessment
+description: "黑盒Web应用程序漏洞扫描器，支持多种漏洞类型检测"
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "bridge"
+  environment:
+    - "TERM=xterm-256color"
+
+defaults:
+  scope: "page"
+  format: "json"
+
+command_template: "wapiti -u {url} -s {scope} -f {format} {modules} {additional_args}"
+
+parameters:
+  - name: url
+    type: string
+    description: "目标URL（支持HTTP/HTTPS）"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9\\.\\-]+(?:\\:[0-9]+)?(?:/[^\\s]*)?$"
+      error_message: "URL格式无效"
+
+  - name: scope
+    type: string
+    description: "扫描范围"
+    required: false
+    default: "page"
+    flag: "-s"
+    format: "flag"
+    options:
+      - "page"      # 仅扫描指定页面
+      - "folder"    # 扫描整个文件夹
+      - "domain"    # 扫描整个域名
+      - "url"       # 扫描指定URL及其子页面
+
+  - name: format
+    type: string
+    description: "输出格式"
+    required: false
+    default: "json"
+    flag: "-f"
+    format: "flag"
+    options:
+      - "json"
+      - "html"
+      - "txt"
+      - "xml"
+
+  - name: modules
+    type: string
+    description: "要启用的模块（逗号分隔）"
+    required: false
+    flag: "-m"
+    format: "flag"
+    options:
+      - "all"
+      - "xss"
+      - "sql"
+      - "file"
+      - "exec"
+      - "crlf"
+      - "backup"
+      - "htaccess"
+      - "methods"
+      - "redirect"
+      - "ssrf"
+      - "xxe"
+      - "cors"
+
+  - name: auth_url
+    type: string
+    description: "认证URL（如果需要登录）"
+    required: false
+    flag: "-a"
+    format: "flag"
+
+  - name: auth_data
+    type: string
+    description: "认证数据（用户名:密码）"
+    required: false
+    flag: "-d"
+    format: "template"
+    template: "-d '{value}'"
+
+  - name: max_depth
+    type: integer
+    description: "最大爬取深度"
+    required: false
+    default: 5
+    flag: "-d"
+    format: "flag"
+    validation:
+      min: 1
+      max: 20
+
+  - name: timeout
+    type: integer
+    description: "请求超时时间（秒）"
+    required: false
+    default: 30
+    flag: "-t"
+    format: "flag"
+    validation:
+      min: 1
+      max: 300
+
+  - name: additional_args
+    type: string
+    description: "额外的Wapiti参数"
+    required: false
+    format: "positional"
+
+output_handling:
+  parser: "wapiti_json"
+  extract_vulnerabilities: true
+  extract_severity_levels: true
+  extract_confidence_levels: true
+  save_raw_output: true
+  formats:
+    - "json"
+    - "html"
+    - "txt"
+
+limits:
+  max_runtime: 3600
+  max_memory: "2g"
+  max_output_size: "50mb"
+  max_requests_per_minute: 120
+
+metrics:
+  - name: "vulnerabilities_found"
+    type: "counter"
+    description: "发现的漏洞数量"
+    extract_regex: "Found\\s+(\\d+)\\s+vulnerabilities"
+
+  - name: "pages_scanned"
+    type: "gauge"
+    description: "扫描的页面数量"
+    extract_regex: "Scanned\\s+(\\d+)\\s+pages"
+
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间（秒）"
+    extract_regex: "Scan\\s+completed\\s+in\\s+([0-9\\.]+)s"
+
+skill_integration:
+  skill_name: "web_vulnerability_assessment"
+  required_level: 2
+  input_mapping:
+    url: "target_url"
+    scope: "scan_scope"
+  output_mapping:
+    vulnerabilities: "web_vulnerabilities"
+    severity: "vulnerability_severity"
+  success_criteria:
+    - "exit_code == 0"
+    - "pages_scanned > 0"
+  failure_handling:
+    retry_count: 1
+    fallback_tool: "nikto"

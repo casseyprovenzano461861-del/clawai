@@ -1,0 +1,204 @@
+# OverTheWire Bandit Level 1 挑战
+# 读取包含特殊字符的文件
+
+id: "overthewire-bandit-level1"
+name: "Bandit Level 1"
+platform: "overthewire"
+category: "linux"
+difficulty: "easy"
+points: 75
+version: "1.0.0"
+author: "OverTheWire Team"
+created_date: "2020-01-01"
+updated_date: "2026-04-05"
+
+description: |
+  # Bandit Level 1
+
+  上一关的标志是下一关的密码。
+
+  **目标**: 登录到 bandit1 账户，读取包含标志的文件。
+
+  **服务器**: localhost:2221
+  **用户名**: bandit1
+  **密码**: boJ9jbbUNNfktd78OOpsqOltutMc3MY1 (上一关的标志)
+
+  **标志格式**: 存储在文件中的文本字符串
+
+  **提示**: 文件名包含特殊字符（连字符），需要适当处理。
+
+tags:
+  - "linux"
+  - "ssh"
+  - "file-system"
+  - "special-characters"
+
+prerequisites:
+  - "overthewire-bandit-level0"
+
+hints:
+  - "使用从 Level 0 获得的密码登录"
+  - "文件名是 '-'（连字符），这是一个特殊字符"
+  - "使用正确的语法读取名为 '-' 的文件"
+  - "考虑使用相对路径或绝对路径"
+
+solution: "CV1DtqXWVFXTvM2F0k09SHz0YwRINYA9"
+validation_regex: "CV1DtqXWVFXTvM2F0k09SHz0YwRINYA9"
+
+solution_steps:
+  - action: "通过 SSH 连接到 bandit1"
+    description: "使用 Level 0 的标志作为密码登录"
+    command: "ssh -p 2221 bandit1@localhost"
+    expected_output: "成功登录到 bandit1 账户"
+
+  - action: "列出主目录内容"
+    description: "查看当前目录中的文件"
+    command: "ls -la"
+    expected_output: "显示名为 '-' 的文件"
+
+  - action: "读取名为 '-' 的文件"
+    description: "使用适当的方法读取特殊文件名"
+    command: "cat ./-"  # 或 "cat -- -" 或 "cat /home/bandit1/-"
+    expected_output: "显示标志: CV1DtqXWVFXTvM2F0k09SHz0YwRINYA9"
+
+test_cases:
+  - id: "ssh-server-accessible"
+    description: "SSH 服务器可访问"
+    command: "nc -z localhost 2221"
+    expected_output: ""
+    timeout: 10
+
+  - id: "ssh-login-with-previous-flag"
+    description: "使用上一关标志作为密码登录成功"
+    command: "ssh -p 2221 bandit1@localhost 'echo connected' 2>/dev/null"
+    expected_output_regex: "connected"
+    timeout: 15
+
+  - id: "special-file-exists"
+    description: "特殊文件名 '-' 存在"
+    command: "ssh -p 2221 bandit1@localhost 'ls -la | grep -e \"^-\"' 2>/dev/null"
+    expected_output_regex: "^-\s"
+    timeout: 15
+
+  - id: "can-read-special-file"
+    description: "可以读取名为 '-' 的文件"
+    command: "ssh -p 2221 bandit1@localhost 'cat ./- 2>/dev/null | head -c 5'"
+    expected_output_regex: "CV1Dt"
+    timeout: 15
+
+metrics:
+  max_steps: 6
+  max_time: 300
+  token_budget: 700
+
+  scoring:
+    base_points: 75
+    time_bonus:
+      - {time: 90, bonus: 15}
+      - {time: 180, bonus: 8}
+    step_penalty: 2
+    hint_penalty: 10
+    special_char_bonus: 15  # 处理特殊字符的奖励
+
+environment:
+  type: "docker"
+  image: "clawai/overthewire-bandit-level1:latest"
+  setup_script: "scripts/setup_bandit_level1.sh"
+
+container_config:
+  image: "clawai/overthewire-bandit-level1:latest"
+  build_context: "./docker/bandit-level1"
+  dockerfile: "Dockerfile"
+  ports:
+    - "2221:22"  # SSH 端口
+  environment:
+    - "CHALLENGE_ID=bandit-level1"
+    - "USERNAME=bandit1"
+    - "PASSWORD=CV1DtqXWVFXTvM2F0k09SHz0YwRINYA9"  # 实际密码，但登录使用上一关标志
+    - "FLAG=CV1DtqXWVFXTvM2F0k09SHz0YwRINYA9"
+    - "PREVIOUS_FLAG=boJ9jbbUNNfktd78OOpsqOltutMc3MY1"
+    - "SSH_ENABLED=true"
+  volumes:
+    - "./challenges/bandit-level1:/home/bandit1"
+  restart_policy: "unless-stopped"
+
+resource_limits:
+  cpu: "0.5"
+  memory: "256m"
+  timeout: 300
+  max_network_bandwidth: "10m"
+
+agent_config:
+  observation_space:
+    type: "text"
+    max_length: 2048
+    include_screenshots: false
+    include_terminal_output: true
+
+  action_space:
+    type: "ssh_command"
+    allowed_commands:
+      - "ls"
+      - "cat"
+      - "pwd"
+      - "cd"
+      - "echo"
+      - "file"
+      - "find"
+      - "grep"
+      - "head"
+      - "tail"
+
+    command_timeout: 20
+    max_command_length: 512
+
+    ssh_config:
+      host: "localhost"
+      port: 2221
+      username: "bandit1"
+      password: "boJ9jbbUNNfktd78OOpsqOltutMc3MY1"
+
+  reward_function:
+    base_reward: 0
+    flag_found: 75
+    special_file_handled: 20  # 正确处理特殊文件奖励
+    progress_made: 8
+    step_penalty: -1
+    invalid_command: -2
+    timeout: -5
+
+dependencies:
+  tools:
+    - "ssh"
+    - "sshpass"
+    - "bash"
+
+  services:
+    - "ssh-server"
+
+references:
+  - title: "OverTheWire Bandit Level 1"
+    url: "https://overthewire.org/wargames/bandit/bandit1.html"
+    type: "tutorial"
+
+  - title: "Linux 特殊字符处理"
+    url: "https://www.gnu.org/software/bash/manual/html_node/Special-Parameters.html"
+    type: "reference"
+
+metadata:
+  language: "en"
+  educational_objectives:
+    - "学习处理包含特殊字符的文件名"
+    - "理解 Linux 文件系统命名约定"
+    - "练习使用相对路径和绝对路径"
+
+  estimated_completion_time: "10-15 minutes"
+  skill_level: "easy"
+
+  maintainers:
+    - "wargame-admin@clawai.example.com"
+
+  changelog:
+    - version: "1.0.0"
+      date: "2026-04-05"
+      changes: "初始版本，基于 OverTheWire Bandit Level 1"

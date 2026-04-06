@@ -1,0 +1,186 @@
+{
+  "name": "hacksynth_enhanced",
+  "description": "增强版HackSynth集成配置 - 包含改进的提示工程和多场景支持",
+  "version": "2.0.0",
+  "author": "ClawAI Team",
+  "created_at": "2026-04-04",
+
+  "llm": {
+    "model_id": "deepseek-chat",
+    "model_local": false,
+    "provider": "deepseek",
+    "base_url": "https://api.deepseek.com",
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "do_sample": true,
+    "max_new_tokens": 1024,
+    "prompt_chaining": true,
+    "frequency_penalty": 0.1,
+    "presence_penalty": 0.1,
+    "stop_sequences": ["</CMD>", "```", "总结:"]
+  },
+
+  "agent": {
+    "new_observation_length_limit": 2500,
+    "timeout_duration": 30,
+    "max_iterations": 15,
+    "use_skills": true,
+    "skill_selection_strategy": "context_aware",
+    "adaptive_learning": true,
+    "max_retry_attempts": 2,
+    "confidence_threshold": 0.7,
+    "exploration_rate": 0.2
+  },
+
+  "target_context": "你正在对目标系统进行全面的安全评估。目标地址: {target}。遵循系统化渗透测试方法论，包括侦察、扫描、漏洞评估、利用和后渗透阶段。",
+
+  "planner": {
+    "system_prompt": "你是一个高级渗透测试命令生成器，集成在ClawAI智能安全评估系统中，采用HackSynth Planner/Summarizer架构。\n\n你的角色:\n1. 安全专家 - 生成有效且安全的测试命令\n2. 策略师 - 根据当前上下文选择最佳行动路径\n3. 分析师 - 解读之前的结果并调整策略\n\n重要规则:\n1. 每条命令必须用<CMD></CMD>标签包裹\n2. 命令应为单行，可在Linux终端执行\n3. 避免重复或无效的命令\n4. 优先使用ClawAI技能系统中的工具\n5. 考虑目标类型和之前发现的结果\n6. 如果之前命令失败，提供替代方案\n7. 逐步推进评估，从侦察到利用\n\n可用技能: {available_skills}\n\n技能描述:\n{skill_descriptions}\n\n输出格式:\n<CMD>command_to_execute</CMD>\n[可选: 简短解释或预期结果]",
+
+    "user_prompt": "渗透测试评估会话 - 第{iteration}次迭代\n\n目标系统: {target}\n目标类型: {target_type}\n\n当前状态总结:\n{summarized_history}\n\n最新扫描结果:\n{scan_results}\n\n已执行命令历史:\n{command_history}\n\n基于当前状态和渗透测试最佳实践，生成下一个最有效的命令来推进安全评估。考虑:\n1. 当前阶段的优先级（侦察、扫描、利用等）\n2. 之前命令的成功/失败\n3. 已发现的信息和潜在攻击面\n4. 可用工具的有效性\n\n生成命令:"
+  },
+
+  "summarizer": {
+    "system_prompt": "你是一个自主代理，负责总结渗透测试历史。你的总结应简洁、结构化，并突出关键发现和后续步骤。\n\n总结结构:\n1. 关键发现 (开放端口、服务、漏洞、凭证等)\n2. 已执行的行动和结果\n3. 当前攻击面分析\n4. 推荐的后续行动优先级\n5. 风险评估和置信度\n\n保持专业、客观，仅基于观察到的事实。",
+
+    "user_prompt": "基于历史总结和最新观察，生成更新后的渗透测试总结报告。\n\n当前总结:\n{summarized_history}\n\n新增观察:\n{new_observation}\n\n生成更新后的总结报告（遵循上述结构）:"
+  },
+
+  "skill_mapping": {
+    "nmap": {
+      "description": "网络映射和端口扫描工具",
+      "category": "reconnaissance",
+      "phases": ["reconnaissance", "scanning"],
+      "complexity": "low",
+      "success_rate": 0.95,
+      "typical_output": "开放端口、服务版本、操作系统检测"
+    },
+    "whatweb": {
+      "description": "Web技术栈指纹识别",
+      "category": "reconnaissance",
+      "phases": ["reconnaissance", "web_assessment"],
+      "complexity": "low",
+      "success_rate": 0.90,
+      "typical_output": "Web服务器、框架、CMS、技术栈信息"
+    },
+    "nuclei": {
+      "description": "快速漏洞扫描器",
+      "category": "vulnerability_assessment",
+      "phases": ["scanning", "vulnerability_assessment"],
+      "complexity": "medium",
+      "success_rate": 0.85,
+      "typical_output": "CVE漏洞、安全配置问题、暴露端点"
+    },
+    "sqlmap": {
+      "description": "SQL注入检测和利用工具",
+      "category": "exploitation",
+      "phases": ["vulnerability_assessment", "exploitation"],
+      "complexity": "medium",
+      "success_rate": 0.70,
+      "typical_output": "SQL注入漏洞、数据库信息、数据提取"
+    },
+    "dirsearch": {
+      "description": "Web路径和目录暴力破解",
+      "category": "reconnaissance",
+      "phases": ["reconnaissance", "web_assessment"],
+      "complexity": "low",
+      "success_rate": 0.80,
+      "typical_output": "隐藏目录、文件、管理面板"
+    },
+    "nikto": {
+      "description": "Web服务器漏洞扫描器",
+      "category": "vulnerability_assessment",
+      "phases": ["scanning", "vulnerability_assessment"],
+      "complexity": "medium",
+      "success_rate": 0.75,
+      "typical_output": "Web服务器配置问题、已知漏洞"
+    },
+    "hydra": {
+      "description": "网络登录暴力破解工具",
+      "category": "exploitation",
+      "phases": ["exploitation", "post_exploitation"],
+      "complexity": "high",
+      "success_rate": 0.60,
+      "typical_output": "破解的凭证、登录访问"
+    },
+    "metasploit": {
+      "description": "渗透测试框架",
+      "category": "exploitation",
+      "phases": ["exploitation", "post_exploitation"],
+      "complexity": "high",
+      "success_rate": 0.65,
+      "typical_output": "漏洞利用、shell访问、后渗透模块"
+    }
+  },
+
+  "phases": {
+    "reconnaissance": {
+      "description": "信息收集阶段",
+      "priority": 1,
+      "tools": ["nmap", "whatweb", "dirsearch"],
+      "objectives": ["识别目标范围", "收集基本信息", "发现攻击面"]
+    },
+    "scanning": {
+      "description": "漏洞扫描阶段",
+      "priority": 2,
+      "tools": ["nmap", "nuclei", "nikto"],
+      "objectives": ["识别开放端口和服务", "检测已知漏洞", "评估安全配置"]
+    },
+    "vulnerability_assessment": {
+      "description": "漏洞验证阶段",
+      "priority": 3,
+      "tools": ["sqlmap", "nuclei", "nikto"],
+      "objectives": ["验证漏洞存在", "评估漏洞影响", "确定可利用性"]
+    },
+    "exploitation": {
+      "description": "漏洞利用阶段",
+      "priority": 4,
+      "tools": ["sqlmap", "hydra", "metasploit"],
+      "objectives": ["获取系统访问", "提升权限", "达成测试目标"]
+    },
+    "post_exploitation": {
+      "description": "后渗透阶段",
+      "priority": 5,
+      "tools": ["metasploit"],
+      "objectives": ["维持访问", "横向移动", "数据收集"]
+    }
+  },
+
+  "target_types": {
+    "web_application": {
+      "description": "Web应用程序",
+      "primary_tools": ["whatweb", "nuclei", "sqlmap", "dirsearch"],
+      "focus_areas": ["Web端点", "输入验证", "认证机制", "数据库交互"]
+    },
+    "network_infrastructure": {
+      "description": "网络基础设施",
+      "primary_tools": ["nmap", "nuclei"],
+      "focus_areas": ["开放端口", "服务版本", "网络服务", "防火墙规则"]
+    },
+    "api_endpoint": {
+      "description": "API端点",
+      "primary_tools": ["nuclei", "nikto"],
+      "focus_areas": ["API端点", "认证令牌", "输入验证", "速率限制"]
+    },
+    "ctf_challenge": {
+      "description": "CTF挑战",
+      "primary_tools": ["nmap", "dirsearch", "hydra"],
+      "focus_areas": ["隐藏信息", "漏洞利用", "权限提升", "flag获取"]
+    }
+  },
+
+  "evaluation_metrics": {
+    "success_criteria": ["flag_found", "shell_obtained", "critical_vulnerability", "admin_access"],
+    "performance_metrics": ["commands_per_iteration", "success_rate", "time_to_flag", "vulnerabilities_found"],
+    "learning_metrics": ["adaptation_rate", "error_reduction", "strategy_improvement"]
+  },
+
+  "adaptive_settings": {
+    "learning_enabled": true,
+    "strategy_adjustment_interval": 3,
+    "success_reward": 1.0,
+    "failure_penalty": -0.5,
+    "exploration_decay": 0.95,
+    "minimum_exploration": 0.05
+  }
+}

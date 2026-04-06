@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m flake8 --version)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
+    ]
+  }
+}

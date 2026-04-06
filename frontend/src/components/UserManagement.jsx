@@ -1,0 +1,945 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Users, UserPlus, UserCheck, UserX, Shield, Key, Mail, Calendar,
+  Edit, Trash2, Filter, Search, RefreshCw, MoreVertical, Eye,
+  Lock, Unlock, CheckCircle, XCircle, AlertCircle, ChevronRight,
+  Download, Upload, Settings, Bell, Globe, Database, Server,
+  BarChart3, PieChart, TrendingUp, Activity, Cpu, Network
+} from 'lucide-react';
+
+// 导入设计系统组件
+import Card from './design-system/Card';
+import Button from './design-system/Button';
+import Badge from './design-system/Badge';
+import Alert from './design-system/Alert';
+
+// 导入API服务
+import userService from '../services/userService';
+
+const UserManagement = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    admins: 0,
+    online: 0
+  });
+
+  // 模拟用户数据
+  const mockUsers = [
+    {
+      id: 1,
+      username: 'admin',
+      email: 'admin@example.com',
+      fullName: '系统管理员',
+      role: 'admin',
+      status: 'active',
+      isOnline: true,
+      lastLogin: '2026-04-06 11:45:23',
+      createdAt: '2026-01-15',
+      projects: 12,
+      scans: 245,
+      permissions: ['user:read', 'user:write', 'user:delete', 'scan:all', 'report:all']
+    },
+    {
+      id: 2,
+      username: 'security_analyst',
+      email: 'analyst@example.com',
+      fullName: '安全分析师',
+      role: 'analyst',
+      status: 'active',
+      isOnline: true,
+      lastLogin: '2026-04-06 11:30:15',
+      createdAt: '2026-02-20',
+      projects: 8,
+      scans: 128,
+      permissions: ['user:read', 'scan:execute', 'report:generate']
+    },
+    {
+      id: 3,
+      username: 'pentester',
+      email: 'pentester@example.com',
+      fullName: '渗透测试员',
+      role: 'pentester',
+      status: 'active',
+      isOnline: false,
+      lastLogin: '2026-04-05 16:20:45',
+      createdAt: '2026-03-10',
+      projects: 5,
+      scans: 89,
+      permissions: ['scan:execute', 'report:view']
+    },
+    {
+      id: 4,
+      username: 'viewer',
+      email: 'viewer@example.com',
+      fullName: '只读用户',
+      role: 'viewer',
+      status: 'active',
+      isOnline: true,
+      lastLogin: '2026-04-06 10:15:30',
+      createdAt: '2026-03-25',
+      projects: 3,
+      scans: 42,
+      permissions: ['report:view']
+    },
+    {
+      id: 5,
+      username: 'auditor',
+      email: 'auditor@example.com',
+      fullName: '审计员',
+      role: 'auditor',
+      status: 'inactive',
+      isOnline: false,
+      lastLogin: '2026-04-01 09:45:12',
+      createdAt: '2026-04-01',
+      projects: 0,
+      scans: 0,
+      permissions: ['report:view', 'audit:read']
+    },
+    {
+      id: 6,
+      username: 'developer',
+      email: 'dev@example.com',
+      fullName: '开发人员',
+      role: 'developer',
+      status: 'active',
+      isOnline: true,
+      lastLogin: '2026-04-06 11:55:10',
+      createdAt: '2026-03-15',
+      projects: 6,
+      scans: 67,
+      permissions: ['scan:execute', 'report:generate', 'api:access']
+    }
+  ];
+
+  // 角色选项
+  const roleOptions = [
+    { id: 'admin', name: '管理员', color: 'red', description: '完全系统访问权限' },
+    { id: 'analyst', name: '安全分析师', color: 'blue', description: '安全分析和报告权限' },
+    { id: 'pentester', name: '渗透测试员', color: 'purple', description: '扫描和执行权限' },
+    { id: 'viewer', name: '只读用户', color: 'green', description: '仅查看权限' },
+    { id: 'auditor', name: '审计员', color: 'orange', description: '审计和合规权限' },
+    { id: 'developer', name: '开发人员', color: 'indigo', description: 'API和开发权限' }
+  ];
+
+  // 权限选项
+  const permissionOptions = [
+    { id: 'user:read', name: '查看用户', category: '用户管理' },
+    { id: 'user:write', name: '编辑用户', category: '用户管理' },
+    { id: 'user:delete', name: '删除用户', category: '用户管理' },
+    { id: 'scan:execute', name: '执行扫描', category: '扫描操作' },
+    { id: 'scan:all', name: '所有扫描权限', category: '扫描操作' },
+    { id: 'report:generate', name: '生成报告', category: '报告管理' },
+    { id: 'report:view', name: '查看报告', category: '报告管理' },
+    { id: 'report:all', name: '所有报告权限', category: '报告管理' },
+    { id: 'audit:read', name: '查看审计日志', category: '审计管理' },
+    { id: 'api:access', name: 'API访问', category: '系统访问' },
+    { id: 'system:config', name: '系统配置', category: '系统访问' }
+  ];
+
+  const [error, setError] = useState(null);
+
+  // 获取用户数据
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await userService.getUsers({
+        page: 1,
+        pageSize: 50
+      });
+
+      const userList = response.users || response;
+
+      // 转换API数据格式为组件格式
+      const formattedUsers = Array.isArray(userList) ? userList.map(user => ({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.full_name || user.fullName,
+        role: user.roles?.[0] || user.role,
+        status: user.status,
+        isOnline: user.last_login && (new Date() - new Date(user.last_login)) < 3600000, // 1小时内登录视为在线
+        lastLogin: user.last_login,
+        createdAt: user.created_at,
+        projects: user.projects || 0,
+        scans: user.scans || 0,
+        permissions: user.permissions || []
+      })) : [];
+
+      setUsers(formattedUsers.length > 0 ? formattedUsers : mockUsers);
+
+      // 计算统计
+      const usersToCount = formattedUsers.length > 0 ? formattedUsers : mockUsers;
+      const total = usersToCount.length;
+      const active = usersToCount.filter(u => u.status === 'active').length;
+      const inactive = usersToCount.filter(u => u.status === 'inactive').length;
+      const admins = usersToCount.filter(u => u.role === 'admin').length;
+      const online = usersToCount.filter(u => u.isOnline).length;
+
+      setStats({ total, active, inactive, admins, online });
+
+    } catch (err) {
+      console.error('获取用户数据失败:', err);
+      setError(err.message);
+      // 使用模拟数据作为后备
+      setUsers(mockUsers);
+      const total = mockUsers.length;
+      const active = mockUsers.filter(u => u.status === 'active').length;
+      const inactive = mockUsers.filter(u => u.status === 'inactive').length;
+      const admins = mockUsers.filter(u => u.role === 'admin').length;
+      const online = mockUsers.filter(u => u.isOnline).length;
+      setStats({ total, active, inactive, admins, online });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const filteredUsers = users.filter(user => {
+    // 搜索过滤
+    const matchesSearch = searchTerm === '' || 
+      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.fullName?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 角色过滤
+    const matchesRole = filterRole === 'all' || user.role === filterRole;
+    
+    // 状态过滤
+    const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
+    
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  const getRoleColor = (role) => {
+    const roleMap = {
+      admin: 'red',
+      analyst: 'blue',
+      pentester: 'purple',
+      viewer: 'green',
+      auditor: 'orange',
+      developer: 'indigo'
+    };
+    return roleMap[role] || 'gray';
+  };
+
+  const getRoleName = (role) => {
+    const roleObj = roleOptions.find(r => r.id === role);
+    return roleObj ? roleObj.name : role;
+  };
+
+  const handleCreateUser = () => {
+    setShowCreateModal(true);
+  };
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setShowUserModal(true);
+  };
+
+  const handleDeleteUser = (userId) => {
+    if (window.confirm('确定要删除这个用户吗？此操作不可撤销。')) {
+      setUsers(prev => prev.filter(user => user.id !== userId));
+      alert('用户已删除');
+    }
+  };
+
+  const handleToggleStatus = (userId) => {
+    setUsers(prev => prev.map(user => {
+      if (user.id === userId) {
+        const newStatus = user.status === 'active' ? 'inactive' : 'active';
+        return { ...user, status: newStatus };
+      }
+      return user;
+    }));
+  };
+
+  const StatCard = ({ icon: Icon, title, value, color = 'blue', change }) => {
+    const colorClasses = {
+      blue: 'text-blue-500',
+      green: 'text-green-500',
+      red: 'text-red-500',
+      purple: 'text-purple-500',
+      orange: 'text-orange-500',
+      indigo: 'text-indigo-500'
+    };
+
+    return (
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className={`p-2 rounded-lg ${colorClasses[color]}/10`}>
+            <Icon className={`w-5 h-5 ${colorClasses[color]}`} />
+          </div>
+          {change && (
+            <Badge variant={change > 0 ? 'success' : 'danger'} size="sm">
+              {change > 0 ? '+' : ''}{change}
+            </Badge>
+          )}
+        </div>
+        <div className="text-2xl font-bold mb-1">{value}</div>
+        <div className="text-sm opacity-70">{title}</div>
+      </Card>
+    );
+  };
+
+  const UserRow = ({ user }) => {
+    const roleColor = getRoleColor(user.role);
+    
+    return (
+      <tr className="border-b border-gray-700/50 hover:bg-gray-800/30">
+        <td className="py-4 px-4">
+          <div className="flex items-center">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                <Users className="w-5 h-5 text-white" />
+              </div>
+              <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-gray-900 ${
+                user.isOnline ? 'bg-green-500' : 'bg-gray-500'
+              }`}></div>
+            </div>
+            <div className="ml-3">
+              <div className="font-medium">{user.fullName || user.username}</div>
+              <div className="text-sm opacity-70">@{user.username}</div>
+            </div>
+          </div>
+        </td>
+        
+        <td className="py-4 px-4">
+          <div className="flex flex-col">
+            <div className="font-medium">{user.email}</div>
+            <div className="text-xs opacity-70">ID: {user.id}</div>
+          </div>
+        </td>
+        
+        <td className="py-4 px-4">
+          <Badge variant={roleColor} size="sm">
+            {getRoleName(user.role)}
+          </Badge>
+        </td>
+        
+        <td className="py-4 px-4">
+          <div className="flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${
+              user.status === 'active' ? 'bg-green-500' : 'bg-red-500'
+            }`}></div>
+            <span>{user.status === 'active' ? '活跃' : '禁用'}</span>
+          </div>
+        </td>
+        
+        <td className="py-4 px-4">
+          <div className="text-sm">
+            <div>最后登录: {user.lastLogin}</div>
+            <div className="opacity-70">创建于: {user.createdAt}</div>
+          </div>
+        </td>
+        
+        <td className="py-4 px-4">
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" size="sm">{user.projects} 项目</Badge>
+            <Badge variant="outline" size="sm">{user.scans} 扫描</Badge>
+          </div>
+        </td>
+        
+        <td className="py-4 px-4">
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleEditUser(user)}
+              className="flex items-center"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleToggleStatus(user.id)}
+              className="flex items-center"
+            >
+              {user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDeleteUser(user.id)}
+              className="flex items-center text-red-500 hover:text-red-400"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex items-center"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-400">加载用户数据...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* 用户管理头部 */}
+      <div className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-50">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">用户管理系统</h1>
+              <p className="text-gray-400 mt-1">管理用户账户、权限和团队</p>
+            </div>
+            
+            <div className="flex items-center space-x-3 mt-4 md:mt-0">
+              <Button
+                variant="outline"
+                className="flex items-center"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                导出用户
+              </Button>
+              
+              <Button
+                variant="primary"
+                onClick={handleCreateUser}
+                className="flex items-center"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                创建用户
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-6 py-8">
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <StatCard 
+            icon={Users}
+            title="总用户数"
+            value={stats.total}
+            change={12}
+            color="blue"
+          />
+          <StatCard 
+            icon={UserCheck}
+            title="活跃用户"
+            value={stats.active}
+            change={5}
+            color="green"
+          />
+          <StatCard 
+            icon={UserX}
+            title="禁用用户"
+            value={stats.inactive}
+            change={-2}
+            color="red"
+          />
+          <StatCard 
+            icon={Shield}
+            title="管理员"
+            value={stats.admins}
+            change={1}
+            color="purple"
+          />
+          <StatCard 
+            icon={Activity}
+            title="在线用户"
+            value={stats.online}
+            change={3}
+            color="orange"
+          />
+        </div>
+
+        {/* 控制面板 */}
+        <Card className="mb-8">
+          <div className="flex flex-col md:flex-row items-center justify-between p-4">
+            <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mb-4 md:mb-0">
+              {/* 搜索框 */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 opacity-50" />
+                <input
+                  type="text"
+                  placeholder="搜索用户..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                />
+              </div>
+
+              {/* 角色过滤 */}
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">所有角色</option>
+                {roleOptions.map(role => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+
+              {/* 状态过滤 */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">所有状态</option>
+                <option value="active">活跃</option>
+                <option value="inactive">禁用</option>
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex items-center"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                刷新
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex items-center"
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                高级过滤
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* 用户表格 */}
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold">用户信息</th>
+                  <th className="text-left py-3 px-4 font-semibold">联系信息</th>
+                  <th className="text-left py-3 px-4 font-semibold">角色</th>
+                  <th className="text-left py-3 px-4 font-semibold">状态</th>
+                  <th className="text-left py-3 px-4 font-semibold">活动时间</th>
+                  <th className="text-left py-3 px-4 font-semibold">统计</th>
+                  <th className="text-left py-3 px-4 font-semibold">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.map(user => (
+                  <UserRow key={user.id} user={user} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 分页和统计 */}
+          <div className="flex flex-col md:flex-row items-center justify-between p-4 border-t border-gray-700">
+            <div className="text-sm opacity-70 mb-2 md:mb-0">
+              显示 {filteredUsers.length} 个用户中的 {Math.min(filteredUsers.length, 10)} 个
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Button variant="ghost" size="sm" disabled>
+                上一页
+              </Button>
+              
+              <div className="flex items-center space-x-1">
+                <Button variant="primary" size="sm">1</Button>
+                <Button variant="ghost" size="sm">2</Button>
+                <Button variant="ghost" size="sm">3</Button>
+                <span className="px-2">...</span>
+                <Button variant="ghost" size="sm">10</Button>
+              </div>
+              
+              <Button variant="ghost" size="sm">
+                下一页
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* 角色和权限概览 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          {/* 角色概览 */}
+          <Card>
+            <div className="flex items-center mb-6">
+              <Shield className="w-6 h-6 text-blue-400 mr-2" />
+              <h2 className="text-xl font-semibold">角色概览</h2>
+            </div>
+
+            <div className="space-y-4">
+              {roleOptions.map(role => {
+                const userCount = users.filter(u => u.role === role.id).length;
+                const activeCount = users.filter(u => u.role === role.id && u.status === 'active').length;
+                
+                return (
+                  <div key={role.id} className="p-4 rounded-lg bg-gray-800/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <Badge variant={role.color} size="sm" className="mr-3">
+                          {role.name}
+                        </Badge>
+                        <span className="text-sm opacity-70">{userCount} 个用户</span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-green-500">{activeCount} 活跃</span>
+                        <span className="mx-2">/</span>
+                        <span className="opacity-70">{userCount - activeCount} 禁用</span>
+                      </div>
+                    </div>
+                    <p className="text-sm opacity-70">{role.description}</p>
+                    
+                    <div className="mt-3">
+                      <div className="text-xs opacity-70 mb-1">典型权限:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {permissionOptions
+                          .filter(p => 
+                            (role.id === 'admin' && p.category === '用户管理') ||
+                            (role.id === 'analyst' && p.category === '报告管理') ||
+                            (role.id === 'pentester' && p.category === '扫描操作') ||
+                            (role.id === 'viewer' && p.id === 'report:view') ||
+                            (role.id === 'auditor' && p.category === '审计管理') ||
+                            (role.id === 'developer' && p.id === 'api:access')
+                          )
+                          .slice(0, 3)
+                          .map(perm => (
+                            <Badge key={perm.id} variant="outline" size="xs">
+                              {perm.name}
+                            </Badge>
+                          ))}
+                        {permissionOptions.filter(p => 
+                          (role.id === 'admin' && p.category === '用户管理') ||
+                          (role.id === 'analyst' && p.category === '报告管理') ||
+                          (role.id === 'pentester' && p.category === '扫描操作') ||
+                          (role.id === 'viewer' && p.id === 'report:view') ||
+                          (role.id === 'auditor' && p.category === '审计管理') ||
+                          (role.id === 'developer' && p.id === 'api:access')
+                        ).length > 3 && (
+                          <Badge variant="outline" size="xs">
+                            +{permissionOptions.filter(p => 
+                              (role.id === 'admin' && p.category === '用户管理') ||
+                              (role.id === 'analyst' && p.category === '报告管理') ||
+                              (role.id === 'pentester' && p.category === '扫描操作') ||
+                              (role.id === 'viewer' && p.id === 'report:view') ||
+                              (role.id === 'auditor' && p.category === '审计管理') ||
+                              (role.id === 'developer' && p.id === 'api:access')
+                            ).length - 3} 更多
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* 系统统计 */}
+          <Card>
+            <div className="flex items-center mb-6">
+              <BarChart3 className="w-6 h-6 text-green-400 mr-2" />
+              <h2 className="text-xl font-semibold">系统统计</h2>
+            </div>
+
+            <div className="space-y-6">
+              {/* 用户活动时间分布 */}
+              <div>
+                <h3 className="font-medium mb-3">用户活动时间分布</h3>
+                <div className="space-y-2">
+                  {[
+                    { label: '过去1小时', count: 3, percent: 50 },
+                    { label: '过去24小时', count: 5, percent: 83 },
+                    { label: '过去7天', count: 6, percent: 100 }
+                  ].map((item, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm">{item.label}</span>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-green-500"
+                            style={{ width: `${item.percent}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium">{item.count} 人</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 角色分布 */}
+              <div>
+                <h3 className="font-medium mb-3">角色分布</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {roleOptions.map(role => {
+                    const count = users.filter(u => u.role === role.id).length;
+                    const percent = (count / users.length) * 100;
+                    
+                    return (
+                      <div key={role.id} className="p-3 rounded-lg bg-gray-800/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">{role.name}</span>
+                          <span className="text-sm">{count} 人</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full bg-${role.color}-500`}
+                            style={{ width: `${percent}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 快速操作 */}
+              <div>
+                <h3 className="font-medium mb-3">快速操作</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" size="sm" fullWidth className="flex items-center justify-center">
+                    <Mail className="w-4 h-4 mr-2" />
+                    发送通知
+                  </Button>
+                  <Button variant="outline" size="sm" fullWidth className="flex items-center justify-center">
+                    <Download className="w-4 h-4 mr-2" />
+                    导出报告
+                  </Button>
+                  <Button variant="outline" size="sm" fullWidth className="flex items-center justify-center">
+                    <Settings className="w-4 h-4 mr-2" />
+                    权限设置
+                  </Button>
+                  <Button variant="outline" size="sm" fullWidth className="flex items-center justify-center">
+                    <Bell className="w-4 h-4 mr-2" />
+                    告警设置
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* 底部信息栏 */}
+      <div className="mt-12 py-6 border-t border-gray-800">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="mb-4 md:mb-0">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-5 h-5 text-blue-500" />
+                <span className="font-medium">ClawAI 用户管理系统</span>
+              </div>
+              <div className="text-sm text-gray-400 mt-1">
+                版本 2.0 | 基于角色的访问控制 (RBAC)
+              </div>
+            </div>
+            <div className="flex items-center space-x-4 text-sm">
+              <span className="text-gray-400">状态: <span className="text-green-500">● 用户系统正常</span></span>
+              <span className="text-gray-400">在线用户: <span className="font-medium">{stats.online}/{stats.total}</span></span>
+              <button className="text-blue-400 hover:text-blue-300">
+                帮助文档
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 创建用户模态框（简化版） */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold">创建新用户</h3>
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">用户名</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="输入用户名"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">邮箱</label>
+                <input
+                  type="email"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="输入邮箱地址"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">角色</label>
+                <select className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {roleOptions.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    alert('用户创建功能（模拟）');
+                    setShowCreateModal(false);
+                  }}
+                >
+                  创建用户
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 用户详情模态框（简化版） */}
+      {showUserModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold">用户详情 - {selectedUser.fullName}</h3>
+              <button 
+                onClick={() => setShowUserModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">用户名</label>
+                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedUser.username}</div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">邮箱</label>
+                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedUser.email}</div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">角色</label>
+                  <div className="px-4 py-2 bg-gray-700 rounded-lg">
+                    <Badge variant={getRoleColor(selectedUser.role)} size="sm">
+                      {getRoleName(selectedUser.role)}
+                    </Badge>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">状态</label>
+                  <div className="px-4 py-2 bg-gray-700 rounded-lg">
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full mr-2 ${
+                        selectedUser.status === 'active' ? 'bg-green-500' : 'bg-red-500'
+                      }`}></div>
+                      <span>{selectedUser.status === 'active' ? '活跃' : '禁用'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-medium mb-3">权限列表</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedUser.permissions.map(permId => {
+                    const perm = permissionOptions.find(p => p.id === permId);
+                    return perm ? (
+                      <Badge key={perm.id} variant="info" size="sm">
+                        {perm.name}
+                      </Badge>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-medium mb-3">用户统计</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-gray-700/50">
+                    <div className="text-sm opacity-70 mb-1">项目数量</div>
+                    <div className="text-xl font-semibold">{selectedUser.projects}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gray-700/50">
+                    <div className="text-sm opacity-70 mb-1">扫描次数</div>
+                    <div className="text-xl font-semibold">{selectedUser.scans}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowUserModal(false)}
+                >
+                  关闭
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    alert('用户编辑功能（模拟）');
+                    setShowUserModal(false);
+                  }}
+                >
+                  保存更改
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UserManagement;
+

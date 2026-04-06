@@ -1,0 +1,48 @@
+# ClawAI 工具执行服务Dockerfile - 中国镜像优化版
+# 需要访问主机Docker守护进程
+
+FROM python:3.11-alpine
+
+WORKDIR /app
+
+# 安装系统依赖（Docker客户端和工具）
+RUN apk update && apk add --no-cache \
+    curl \
+    gnupg \
+    gcc \
+    musl-dev \
+    python3-dev \
+    libffi-dev \
+    openssl-dev \
+    linux-headers \
+    docker-cli
+
+# 复制依赖文件
+COPY services/tool-executor/requirements.txt .
+
+# 安装Python依赖 - 使用国内镜像源
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.trusted-host mirrors.aliyun.com && \
+    pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+# 复制应用代码
+COPY services/tool-executor /app
+
+# 创建日志目录
+RUN mkdir -p /var/log/clawai
+
+# 设置环境变量
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV TZ=UTC
+ENV DOCKER_HOST=unix:///var/run/docker.sock
+
+# 暴露端口
+EXPOSE 8082
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8082/health || exit 1
+
+# 启动命令
+CMD ["python", "main.py"]

@@ -1,0 +1,600 @@
+"""
+ClawAI API 网关服务
+统一API入口，负责请求路由、认证、限流等
+"""
+
+import os
+import logging
+import time
+from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional, List
+from jose import JWTError, jwt
+from fastapi import FastAPI, Request, HTTPException, Depends, Security, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import httpx
+# 尝试导入Prometheus客户端，如果不可用则使用虚拟版本
+try:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # 定义虚拟版本
+    class Counter:
+        def __init__(self, *args, **kwargs):
+            pass
+    class Histogram:
+        def __init__(self, *args, **kwargs):
+            pass
+    class Gauge:
+        def __init__(self, *args, **kwargs):
+            pass
+    def generate_latest():
+        return b''
+    CONTENT_TYPE_LATEST = 'text/plain'
+import sys
+sys.path.append('../../shared/backend')
+from monitoring.metrics import get_metrics_manager, counter, gauge, histogram
+
+# 配置日志
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 服务配置
+SERVICE_CONFIG = {
+    "ai-engine": {
+        "url": os.getenv("AI_ENGINE_URL", "http://ai-engine:8081"),
+        "timeout": int(os.getenv("AI_ENGINE_TIMEOUT", "30"))
+    },
+    "tool-executor": {
+        "url": os.getenv("TOOL_EXECUTOR_URL", "http://tool-executor:8082"),
+        "timeout": int(os.getenv("TOOL_EXECUTOR_TIMEOUT", "60"))
+    },
+    "data-service": {
+        "url": os.getenv("DATA_SERVICE_URL", "http://data-service:8083"),
+        "timeout": int(os.getenv("DATA_SERVICE_TIMEOUT", "10"))
+    }
+}
+
+# Prometheus指标定义 - 使用统一的指标管理器
+REQUEST_COUNT = counter(
+    'api_gateway_requests_total',
+    'API网关请求总次数',
+    labelnames=['method', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = histogram(
+    'api_gateway_request_duration_seconds',
+    'API网关请求处理时间',
+    labelnames=['method', 'endpoint']
+)
+
+ACTIVE_REQUESTS = gauge(
+    'api_gateway_active_requests',
+    'API网关活跃请求数'
+)
+
+DOWNSTREAM_HEALTH = gauge(
+    'api_gateway_downstream_health',
+    '下游服务健康状态',
+    labelnames=['service']
+)
+
+logger.info("API网关指标初始化完成")
+
+# 认证配置
+JWT_SECRET = os.getenv("JWT_SECRET", "clawai-jwt-secret-change-in-production")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+API_KEYS = os.getenv("API_KEYS", "").split(",")  # 逗号分隔的API密钥列表
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "false").lower() == "true"
+
+# 安全组件
+security = HTTPBearer(auto_error=False)
+
+# 权限配置（角色 -> 允许访问的路径前缀）
+ROLE_PERMISSIONS = {
+    "admin": ["/api/v1/", "/admin/"],  # 管理员可以访问所有API
+    "user": ["/api/v1/"],  # 普通用户可以访问API
+    "api": ["/api/v1/"],  # API客户端可以访问API
+    "public": ["/health", "/metrics", "/docs", "/redoc", "/openapi.json"]  # 公开路径
+}
+
+# API路由映射
+ROUTE_MAPPING = {
+    # AI引擎相关
+    "/api/v1/ai/": "ai-engine",
+    "/api/v1/skills": "ai-engine",
+    "/api/v1/skills/": "ai-engine",
+    "/api/v1/decision/": "ai-engine",
+    "/api/v1/agent/": "ai-engine",
+    "/api/v1/llm/": "ai-engine",
+
+    # 工具执行相关
+    "/api/v1/tools/": "tool-executor",
+    "/api/v1/tasks/": "tool-executor",
+    "/api/v1/execute/": "tool-executor",
+
+    # 数据服务相关
+    "/api/v1/auth/": "data-service",
+    "/api/v1/users/": "data-service",
+    "/api/v1/projects/": "data-service",
+    "/api/v1/results/": "data-service",
+    "/api/v1/experiments/": "data-service",
+
+    # 管理接口
+    "/api/v1/health": "gateway",  # 网关自身健康检查
+    "/api/v1/metrics": "gateway",  # 网关指标
+}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("启动 ClawAI API 网关服务...")
+
+    # 初始化HTTP客户端
+    app.state.http_client = httpx.AsyncClient(timeout=10.0)
+
+    # 服务健康检查
+    await check_services_health()
+
+    yield
+
+    # 关闭时
+    logger.info("关闭 ClawAI API 网关服务...")
+    await app.state.http_client.aclose()
+
+
+# 创建FastAPI应用
+app = FastAPI(
+    title="ClawAI API Gateway",
+    description="统一API入口网关服务",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+async def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
+    """验证JWT令牌
+
+    Args:
+        token: JWT令牌字符串
+
+    Returns:
+        解码后的令牌载荷或None
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
+        # 检查令牌是否过期
+        exp = payload.get("exp")
+        if exp and exp < time.time():
+            logger.warning("JWT令牌已过期")
+            return None
+
+        # 验证令牌类型
+        token_type = payload.get("token_type", "access")
+        if token_type != "access":
+            logger.warning(f"不支持的令牌类型: {token_type}")
+            return None
+
+        return payload
+
+    except JWTError as e:
+        logger.error(f"JWT验证失败: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"令牌验证异常: {e}")
+        return None
+
+
+async def verify_api_key(api_key: str) -> bool:
+    """验证API密钥
+
+    Args:
+        api_key: API密钥字符串
+
+    Returns:
+        是否有效
+    """
+    if not API_KEYS or not api_key:
+        return False
+
+    # 检查API密钥是否在允许的列表中
+    return api_key in API_KEYS
+
+
+async def authenticate_request(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Dict[str, Any]:
+    """认证请求
+
+    支持多种认证方式:
+    1. JWT Bearer令牌
+    2. API密钥 (Bearer格式)
+    3. 开发环境免认证
+
+    Args:
+        request: FastAPI请求对象
+        credentials: HTTP认证凭证
+
+    Returns:
+        认证信息字典
+    """
+    # 如果不需要认证或开发环境允许匿名访问
+    if not REQUIRE_AUTH and ENVIRONMENT == "development":
+        return {
+            "user_id": "anonymous",
+            "username": "anonymous",
+            "role": "user",
+            "authenticated": False
+        }
+
+    # 检查认证头
+    if not credentials:
+        if ENVIRONMENT == "development":
+            # 开发环境警告但允许继续
+            logger.warning("开发环境: 未提供认证信息，使用匿名访问")
+            return {
+                "user_id": "anonymous",
+                "username": "anonymous",
+                "role": "user",
+                "authenticated": False
+            }
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未提供认证信息",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    scheme = credentials.scheme.lower()
+    token = credentials.credentials
+
+    if scheme != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="不支持的认证方案，请使用Bearer令牌",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # 首先尝试作为JWT令牌验证
+    jwt_payload = await verify_jwt_token(token)
+    if jwt_payload:
+        logger.info(f"JWT认证成功: 用户 {jwt_payload.get('username', 'unknown')}")
+        return {
+            "user_id": jwt_payload.get("user_id", 0),
+            "username": jwt_payload.get("username", "unknown"),
+            "role": jwt_payload.get("role", "user"),
+            "authenticated": True,
+            "token_type": "jwt",
+            "token_payload": jwt_payload
+        }
+
+    # 尝试作为API密钥验证
+    if await verify_api_key(token):
+        logger.info("API密钥认证成功")
+        return {
+            "user_id": "api-client",
+            "username": "api-client",
+            "role": "api",
+            "authenticated": True,
+            "token_type": "api_key"
+        }
+
+    # 认证失败
+    logger.warning(f"认证失败: 无效的令牌或API密钥")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无效的认证令牌或API密钥",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+async def check_permissions(request_path: str, auth_info: Dict[str, Any]) -> bool:
+    """检查用户是否有权限访问指定路径
+
+    Args:
+        request_path: 请求路径
+        auth_info: 认证信息
+
+    Returns:
+        是否有权限
+    """
+    user_role = auth_info.get("role", "public")
+    authenticated = auth_info.get("authenticated", False)
+
+    # 公开路径不需要认证
+    public_paths = ROLE_PERMISSIONS.get("public", [])
+    for public_path in public_paths:
+        if request_path.startswith(public_path):
+            return True
+
+    # 如果用户未认证但路径需要认证
+    if not authenticated and REQUIRE_AUTH:
+        # 检查路径是否需要认证（非公开路径）
+        is_api_path = request_path.startswith("/api/v1/")
+        if is_api_path:
+            return False
+
+    # 获取用户角色对应的权限
+    allowed_paths = ROLE_PERMISSIONS.get(user_role, [])
+    if not allowed_paths:
+        logger.warning(f"角色 {user_role} 没有配置权限，拒绝访问")
+        return False
+
+    # 检查路径是否允许访问
+    for allowed_path in allowed_paths:
+        if request_path.startswith(allowed_path):
+            return True
+
+    logger.warning(f"角色 {user_role} 没有权限访问路径: {request_path}")
+    return False
+
+
+async def get_target_service(request_path: str) -> Optional[str]:
+    """根据请求路径获取目标服务"""
+    for route_prefix, service_name in ROUTE_MAPPING.items():
+        if request_path.startswith(route_prefix):
+            return service_name
+    return None
+
+
+async def forward_request(
+    request: Request,
+    service_name: str,
+    auth_info: Dict[str, Any]
+) -> JSONResponse:
+    """转发请求到目标服务"""
+    service_config = SERVICE_CONFIG.get(service_name)
+    if not service_config:
+        raise HTTPException(status_code=502, detail=f"服务 {service_name} 未配置")
+
+    # 构建目标URL
+    target_url = f"{service_config['url']}{request.url.path}"
+
+    # 准备请求头
+    headers = dict(request.headers)
+    # 移除Host头，避免代理问题
+    headers.pop("host", None)
+    # 添加认证信息
+    headers["X-User-ID"] = auth_info.get("user_id", "anonymous")
+    headers["X-User-Role"] = auth_info.get("role", "user")
+
+    # 准备请求体
+    request_body = None
+    if request.method in ["POST", "PUT", "PATCH"]:
+        try:
+            request_body = await request.body()
+        except Exception as e:
+            logger.error(f"读取请求体失败: {e}")
+
+    # 转发请求
+    try:
+        async with httpx.AsyncClient(timeout=service_config["timeout"]) as client:
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=request_body,
+                params=dict(request.query_params)
+            )
+
+            # 返回响应
+            return JSONResponse(
+                content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+
+    except httpx.TimeoutException:
+        logger.error(f"请求 {service_name} 超时: {target_url}")
+        raise HTTPException(status_code=504, detail=f"服务 {service_name} 响应超时")
+    except httpx.RequestError as e:
+        logger.error(f"请求 {service_name} 失败: {e}")
+        raise HTTPException(status_code=502, detail=f"服务 {service_name} 不可用")
+    except Exception as e:
+        logger.error(f"转发请求异常: {e}")
+        raise HTTPException(status_code=500, detail="内部服务器错误")
+
+
+async def check_services_health():
+    """检查下游服务健康状态"""
+    logger.info("检查下游服务健康状态...")
+
+    for service_name, config in SERVICE_CONFIG.items():
+        if service_name == "gateway":
+            continue
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{config['url']}/health")
+                if response.status_code == 200:
+                    logger.info(f"服务 {service_name} 健康状态: 正常")
+                else:
+                    logger.warning(f"服务 {service_name} 健康状态: 异常 ({response.status_code})")
+        except Exception as e:
+            logger.warning(f"服务 {service_name} 健康检查失败: {e}")
+
+
+@app.get("/health")
+async def health_check():
+    """网关健康检查"""
+    services_health = {}
+
+    # 检查下游服务
+    for service_name, config in SERVICE_CONFIG.items():
+        if service_name == "gateway":
+            continue
+
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{config['url']}/health")
+                services_health[service_name] = {
+                    "status": "healthy" if response.status_code == 200 else "unhealthy",
+                    "status_code": response.status_code
+                }
+        except Exception as e:
+            services_health[service_name] = {
+                "status": "unreachable",
+                "error": str(e)
+            }
+
+    # 总体状态
+    overall_status = "healthy"
+    for service_health in services_health.values():
+        if service_health.get("status") != "healthy":
+            overall_status = "degraded"
+
+    return {
+        "service": "api-gateway",
+        "status": overall_status,
+        "version": "1.0.0",
+        "timestamp": time.time(),
+        "services": services_health
+    }
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus指标端点"""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.responses import Response
+
+    # 更新下游服务健康指标
+    for service_name, config in SERVICE_CONFIG.items():
+        if service_name == "gateway":
+            continue
+
+        health_value = 0
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{config['url']}/health")
+                if response.status_code == 200:
+                    health_value = 1
+        except Exception:
+            health_value = 0
+
+        # 更新健康指标
+        DOWNSTREAM_HEALTH.labels(service=service_name).set(health_value)
+
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+# 公开路径（不需要认证）
+PUBLIC_PATHS = [
+    "/",
+    "/health",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/favicon.ico"
+]
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_request(
+    request: Request,
+    path: str,
+    auth_info: Dict[str, Any] = Depends(authenticate_request)
+):
+    """代理所有API请求"""
+    # 构建完整路径
+    request_path = f"/{path}" if path else "/"
+
+    # 检查是否为公开路径
+    is_public_path = request_path in PUBLIC_PATHS or request_path.startswith(("/docs/", "/redoc/", "/static/"))
+
+    # 对于公开路径，使用匿名认证信息（即使认证失败也允许访问）
+    if is_public_path:
+        auth_info = {
+            "user_id": "anonymous",
+            "username": "anonymous",
+            "role": "public",
+            "authenticated": False
+        }
+        logger.debug(f"公开路径访问: {request_path}")
+
+    # 检查权限
+    has_permission = await check_permissions(request_path, auth_info)
+    if not has_permission:
+        if not auth_info.get("authenticated", False):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="需要认证才能访问此路径",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="权限不足，无法访问此路径"
+            )
+
+    # 获取目标服务
+    target_service = await get_target_service(request_path)
+
+    if not target_service:
+        # 如果没有找到目标服务，检查是否为公开路径
+        if is_public_path:
+            # 公开路径但没有目标服务，返回404
+            raise HTTPException(status_code=404, detail=f"未找到路由: {request_path}")
+
+        # 非公开路径需要认证
+        if not auth_info.get("authenticated", False) and REQUIRE_AUTH:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="需要认证才能访问此路径",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+        raise HTTPException(status_code=404, detail=f"未找到路由: {request_path}")
+
+    # 如果是网关自身接口，直接处理
+    if target_service == "gateway":
+        # 这里应该调用网关自身的处理函数
+        # 目前只有/health和/metrics是网关自身接口
+        raise HTTPException(status_code=404, detail="网关自身接口未实现路由")
+
+    # 记录请求日志
+    log_level = logging.DEBUG if is_public_path else logging.INFO
+    logger.log(log_level, f"转发请求: {request.method} {request_path} -> {target_service} (用户: {auth_info.get('user_id')}, 认证: {auth_info.get('authenticated')}, 角色: {auth_info.get('role')})")
+
+    # 转发请求
+    return await forward_request(request, target_service, auth_info)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8080"))
+
+    logger.info(f"启动API网关服务: http://{host}:{port}")
+    logger.info(f"API文档: http://{host}:{port}/docs")
+
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=os.getenv("ENVIRONMENT", "development") == "development"
+    )

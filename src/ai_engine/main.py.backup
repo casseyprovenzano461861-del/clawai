@@ -1,0 +1,814 @@
+"""
+ClawAI AI引擎服务 - 更新版本
+集成决策引擎、Agent控制器、LLM代理和技能系统
+包含HackSynth Planner/Summarizer架构集成
+"""
+
+import os
+import sys
+import logging
+from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from typing import Dict, Any, List
+import time
+# 尝试导入Prometheus客户端，如果不可用则使用虚拟版本
+try:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # 定义虚拟版本
+    class Counter:
+        def __init__(self, *args, **kwargs):
+            pass
+    class Histogram:
+        def __init__(self, *args, **kwargs):
+            pass
+    class Gauge:
+        def __init__(self, *args, **kwargs):
+            pass
+    def generate_latest():
+        return b''
+    CONTENT_TYPE_LATEST = 'text/plain'
+import sys
+sys.path.append('../../shared/backend')
+from monitoring.metrics import get_metrics_manager, counter, gauge, histogram
+
+# 添加模块路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 配置日志
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 导入现有ClawAI模块
+try:
+    from backend.decision_engine import DecisionEngine
+    from backend.agent_controller import AgentController, AttackGoal, AgentStyle
+    from backend.reasoning_engine import PseudoReasoningEngine
+    from backend.skills.skill_registry import SkillRegistry
+
+    # 导入新的LLM代理模块
+    from llm_agent.integrations import get_integrator, LLMAgentIntegrator
+    from llm_agent.config_manager import LLMConfigManager
+
+    MODULES_AVAILABLE = True
+except ImportError as e:
+    logger.error(f"模块导入失败: {e}")
+    MODULES_AVAILABLE = False
+    # 创建虚拟类以避免类型注解错误
+    class LLMAgentIntegrator:
+        def __init__(self, *args, **kwargs):
+            pass
+        def list_available_configs(self):
+            return []
+        async def analyze_target(self, *args, **kwargs):
+            raise ImportError("LLM agent modules not available")
+        async def plan_attack(self, *args, **kwargs):
+            raise ImportError("LLM agent modules not available")
+        async def summarize_results(self, *args, **kwargs):
+            raise ImportError("LLM agent modules not available")
+        def cleanup(self):
+            pass
+
+    def get_integrator():
+        return LLMAgentIntegrator()
+
+    class LLMConfigManager:
+        def __init__(self, *args, **kwargs):
+            pass
+        def load_config(self, *args, **kwargs):
+            return {}
+        def save_config(self, *args, **kwargs):
+            pass
+        def list_configs(self, *args, **kwargs):
+            return []
+        def delete_config(self, *args, **kwargs):
+            pass
+        def ensure_default_configs(self, *args, **kwargs):
+            pass
+
+# 服务状态
+service_state = {
+    "initialized": False,
+    "modules": {
+        "decision_engine": False,
+        "agent_controller": False,
+        "llm_agent": False,
+        "skill_registry": False,
+        "llm_integrator": False,
+        "config_manager": False
+    }
+}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("启动 ClawAI AI引擎服务 (集成HackSynth版本)...")
+
+    try:
+        # 检查模块可用性
+        if not MODULES_AVAILABLE:
+            logger.error("必要模块导入失败，服务无法启动")
+            raise ImportError("无法导入必要模块")
+
+        # 初始化AI引擎模块
+        await initialize_ai_engine()
+        service_state["initialized"] = True
+        logger.info("AI引擎服务初始化完成")
+
+        yield
+
+    except Exception as e:
+        logger.error(f"AI引擎服务启动失败: {e}")
+        raise
+
+    finally:
+        # 关闭时
+        logger.info("关闭 ClawAI AI引擎服务...")
+        if "llm_integrator" in app.state.__dict__:
+            app.state.llm_integrator.cleanup()
+        service_state["initialized"] = False
+
+
+async def initialize_ai_engine():
+    """初始化AI引擎模块"""
+    try:
+        # 初始化决策引擎
+        logger.info("初始化决策引擎...")
+        decision_engine = DecisionEngine()
+        app.state.decision_engine = decision_engine
+        service_state["modules"]["decision_engine"] = True
+
+        # 初始化技能注册表
+        logger.info("初始化技能注册表...")
+        skill_registry = SkillRegistry()
+        app.state.skill_registry = skill_registry
+        service_state["modules"]["skill_registry"] = True
+
+        # 初始化推理引擎
+        logger.info("初始化推理引擎...")
+        reasoning_engine = PseudoReasoningEngine()
+        app.state.reasoning_engine = reasoning_engine
+
+        # 初始化Agent控制器池
+        logger.info("初始化Agent控制器池...")
+        app.state.agent_pool = {}
+        service_state["modules"]["agent_controller"] = True
+
+        # 初始化配置管理器
+        logger.info("初始化LLM配置管理器...")
+        config_manager = LLMConfigManager()
+        app.state.config_manager = config_manager
+        service_state["modules"]["config_manager"] = True
+
+        # 初始化LLM代理集成器
+        logger.info("初始化LLM代理集成器...")
+        tool_executor_url = os.getenv("TOOL_EXECUTOR_URL", "http://tool-executor:8082")
+        llm_integrator = LLMAgentIntegrator(
+            config_manager=config_manager,
+            tool_executor_url=tool_executor_url,
+            skill_registry=skill_registry
+        )
+        app.state.llm_integrator = llm_integrator
+        service_state["modules"]["llm_integrator"] = True
+        service_state["modules"]["llm_agent"] = True
+
+        # 创建默认配置（如果不存在）
+        await ensure_default_configs(config_manager)
+
+        logger.info("所有AI引擎模块初始化完成")
+
+    except ImportError as e:
+        logger.error(f"模块导入失败: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"AI引擎初始化失败: {e}")
+        raise
+
+
+async def ensure_default_configs(config_manager: 'LLMConfigManager'):
+    """确保默认配置文件存在"""
+    try:
+        configs = config_manager.list_configs()
+
+        if "clawai_pentest_agent" not in configs:
+            logger.info("创建默认渗透测试代理配置...")
+
+            # 从文件加载或创建默认配置
+            config_path = os.path.join(os.path.dirname(__file__), "configs", "clawai_pentest_agent.json")
+            if os.path.exists(config_path):
+                import json
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    default_config = json.load(f)
+            else:
+                # 创建默认配置
+                default_config = config_manager.create_config_from_template(
+                    "clawai_pentest_agent",
+                    "pentest"
+                )
+
+            config_manager.save_config("clawai_pentest_agent", default_config)
+            logger.info("默认配置创建完成")
+        else:
+            logger.info("默认配置已存在")
+
+    except Exception as e:
+        logger.error(f"确保默认配置失败: {e}")
+
+
+# Prometheus指标定义 - 使用统一的指标管理器
+REQUEST_COUNT = counter(
+    'ai_engine_requests_total',
+    'AI引擎请求总次数',
+    labelnames=['endpoint', 'status']
+)
+
+REQUEST_LATENCY = histogram(
+    'ai_engine_request_duration_seconds',
+    'AI引擎请求处理时间',
+    labelnames=['endpoint']
+)
+
+LLM_CALLS = counter(
+    'ai_engine_llm_calls_total',
+    'AI引擎LLM调用总次数',
+    labelnames=['provider', 'model', 'status']
+)
+
+LLM_TOKENS = counter(
+    'ai_engine_llm_tokens_total',
+    'AI引擎LLM令牌总使用量',
+    labelnames=['provider', 'model', 'token_type']
+)
+
+SKILL_EXECUTIONS = counter(
+    'ai_engine_skill_executions_total',
+    'AI引擎技能执行总次数',
+    labelnames=['skill_name', 'status']
+)
+
+MODULE_HEALTH = gauge(
+    'ai_engine_module_health',
+    'AI引擎模块健康状态',
+    labelnames=['module']
+)
+
+logger.info("AI引擎指标初始化完成")
+
+# 创建FastAPI应用
+app = FastAPI(
+    title="ClawAI AI Engine (HackSynth集成版)",
+    description="AI引擎服务，集成决策引擎、Agent控制器和HackSynth LLM代理",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ========== 依赖函数 ==========
+
+def get_llm_integrator():
+    """获取LLM集成器依赖"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+    return app.state.llm_integrator
+
+
+def get_skill_registry():
+    """获取技能注册表依赖"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+    return app.state.skill_registry
+
+
+def get_decision_engine():
+    """获取决策引擎依赖"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+    return app.state.decision_engine
+
+
+# ========== 健康检查 ==========
+
+@app.get("/health")
+async def health_check():
+    """AI引擎服务健康检查"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    modules_status = {}
+    for module_name, initialized in service_state["modules"].items():
+        modules_status[module_name] = "healthy" if initialized else "unhealthy"
+
+    # 总体状态
+    overall_status = "healthy"
+    for initialized in service_state["modules"].values():
+        if not initialized:
+            overall_status = "degraded"
+
+    # 检查LLM配置
+    config_status = "unknown"
+    if service_state["modules"]["config_manager"]:
+        try:
+            configs = app.state.config_manager.list_configs()
+            config_status = f"available ({len(configs)} configs)"
+        except Exception as e:
+            config_status = f"error: {str(e)}"
+
+    return {
+        "service": "ai-engine-hacksynth",
+        "status": overall_status,
+        "version": "2.0.0",
+        "timestamp": time.time(),
+        "modules": modules_status,
+        "llm_configs": config_status,
+        "integrations": {
+            "hacksynth": True,
+            "planner_summarizer": True,
+            "skill_integration": service_state["modules"]["skill_registry"]
+        }
+    }
+
+
+# ========== LLM代理API ==========
+
+@app.get("/api/v1/llm/configs")
+async def list_llm_configs(llm_integrator: LLMAgentIntegrator = Depends(get_llm_integrator)):
+    """列出可用的LLM代理配置"""
+    try:
+        configs = llm_integrator.list_available_configs()
+        return {
+            "configs": configs,
+            "count": len(configs),
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"列出LLM配置失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"列出LLM配置失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/llm/analyze")
+async def llm_analyze_target(
+    request_data: Dict[str, Any],
+    llm_integrator: LLMAgentIntegrator = Depends(get_llm_integrator)
+):
+    """使用LLM代理分析目标"""
+    try:
+        target = request_data.get("target", "")
+        config_name = request_data.get("config_name", "clawai_pentest_agent")
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供目标地址"
+            )
+
+        analysis_result = await llm_integrator.analyze_target(target, config_name)
+
+        logger.info(f"LLM目标分析完成: {target}")
+        return analysis_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LLM目标分析失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LLM目标分析失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/llm/generate-plan")
+async def llm_generate_attack_plan(
+    request_data: Dict[str, Any],
+    llm_integrator: LLMAgentIntegrator = Depends(get_llm_integrator)
+):
+    """使用LLM代理生成攻击计划"""
+    try:
+        target = request_data.get("target", "")
+        scan_results = request_data.get("scan_results", {})
+        config_name = request_data.get("config_name", "clawai_pentest_agent")
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供目标地址"
+            )
+
+        attack_plan = await llm_integrator.generate_attack_plan(
+            target=target,
+            scan_results=scan_results,
+            config_name=config_name
+        )
+
+        logger.info(f"LLM攻击计划生成完成: {target}")
+        return attack_plan
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LLM攻击计划生成失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LLM攻击计划生成失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/llm/plan-and-execute")
+async def llm_plan_and_execute(
+    request_data: Dict[str, Any],
+    llm_integrator: LLMAgentIntegrator = Depends(get_llm_integrator)
+):
+    """完整的LLM计划-执行工作流"""
+    try:
+        target = request_data.get("target", "")
+        config_name = request_data.get("config_name", "clawai_pentest_agent")
+        initial_scan_results = request_data.get("scan_results", {})
+        available_skills = request_data.get("available_skills")
+        max_iterations = request_data.get("max_iterations")
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供目标地址"
+            )
+
+        workflow_result = await llm_integrator.run_pentest_workflow(
+            target=target,
+            config_name=config_name,
+            initial_scan_results=initial_scan_results,
+            available_skills=available_skills,
+            max_iterations=max_iterations
+        )
+
+        logger.info(f"LLM计划-执行工作流完成: {target}, {len(workflow_result.get('iterations', []))} 次迭代")
+        return workflow_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LLM计划-执行工作流失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LLM计划-执行工作流失败: {str(e)}"
+        )
+
+
+# ========== 现有API端点（保持兼容） ==========
+
+@app.post("/api/v1/ai/analyze")
+async def analyze_target(request_data: Dict[str, Any]):
+    """分析目标，生成初始评估（兼容旧版）"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        target = request_data.get("target", "")
+        scan_results = request_data.get("scan_results", {})
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供目标地址"
+            )
+
+        # 使用LLM代理进行分析
+        llm_integrator = app.state.llm_integrator
+        analysis_result = await llm_integrator.analyze_target(target)
+
+        logger.info(f"目标分析完成: {target}")
+        return analysis_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"目标分析失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"目标分析失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/ai/generate-plan")
+async def generate_attack_plan(request_data: Dict[str, Any]):
+    """生成攻击计划（兼容旧版）"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        target = request_data.get("target", "")
+        scan_results = request_data.get("scan_results", {})
+        goal = request_data.get("goal", "get_shell")
+        style = request_data.get("style", "balanced")
+
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供目标地址"
+            )
+
+        # 使用决策引擎生成攻击路径（旧版逻辑）
+        decision_engine = app.state.decision_engine
+
+        # 模拟攻击路径数据
+        attack_paths = [
+            {
+                "path_id": 1,
+                "name": "全面Web应用攻击",
+                "strategy": "Web应用渗透测试",
+                "steps": [
+                    {"step": 1, "tool": "nmap", "description": "端口扫描"},
+                    {"step": 2, "tool": "whatweb", "description": "技术栈识别"},
+                    {"step": 3, "tool": "nuclei", "description": "漏洞扫描"},
+                    {"step": 4, "tool": "sqlmap", "description": "SQL注入检测"}
+                ],
+                "target_focus": "Web服务",
+                "difficulty": "medium",
+                "estimated_time": "12分钟",
+                "success_rate": 0.75
+            },
+            {
+                "path_id": 2,
+                "name": "快速Web安全评估",
+                "strategy": "快速安全扫描",
+                "steps": [
+                    {"step": 1, "tool": "nmap", "description": "快速端口扫描"},
+                    {"step": 2, "tool": "whatweb", "description": "基础技术栈识别"}
+                ],
+                "target_focus": "Web服务",
+                "difficulty": "easy",
+                "estimated_time": "6分钟",
+                "success_rate": 0.85
+            }
+        ]
+
+        # 使用决策引擎评分和选择
+        result = decision_engine.process_paths(attack_paths, scan_results)
+
+        plan = {
+            "target": target,
+            "goal": goal,
+            "style": style,
+            "generated_at": time.time(),
+            "selected_plan": result.get("best_path"),
+            "all_options": result.get("all_scores", []),
+            "confidence": result.get("confidence", 0.0),
+            "reason": result.get("reason", "")
+        }
+
+        logger.info(f"攻击计划生成完成: {target} -> {plan['selected_plan']['path_info']['name'] if plan['selected_plan'] else '无'}")
+        return plan
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"攻击计划生成失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"攻击计划生成失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/ai/execute-skill")
+async def execute_skill(request_data: Dict[str, Any]):
+    """执行特定技能（兼容旧版）"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        skill_name = request_data.get("skill_name", "")
+        target = request_data.get("target", "")
+        context = request_data.get("context", {})
+
+        if not skill_name or not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供技能名称和目标地址"
+            )
+
+        # 获取技能注册表
+        skill_registry = app.state.skill_registry
+        skill = skill_registry.get_skill(skill_name)
+
+        if not skill:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"技能 {skill_name} 未找到"
+            )
+
+        # 执行技能
+        result = skill.execute(context)
+
+        logger.info(f"技能执行完成: {skill_name} -> {target}")
+        return {
+            "skill": skill_name,
+            "target": target,
+            "executed_at": time.time(),
+            "result": result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"技能执行失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"技能执行失败: {str(e)}"
+        )
+
+
+@app.get("/api/v1/skills")
+async def get_available_skills():
+    """获取可用技能列表（兼容旧版）"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        skill_registry = app.state.skill_registry
+        skills = skill_registry.get_all_skills()
+
+        skill_list = []
+        for skill in skills:
+            skill_list.append({
+                "name": skill.name,
+                "description": skill.description,
+                "category": skill.category,
+                "difficulty": skill.difficulty,
+                "success_rate": skill.success_rate,
+                "estimated_time": skill.estimated_time
+            })
+
+        return {
+            "skills": skill_list,
+            "count": len(skill_list),
+            "timestamp": time.time()
+        }
+
+    except Exception as e:
+        logger.error(f"获取技能列表失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取技能列表失败: {str(e)}"
+        )
+
+
+# ========== 配置管理API ==========
+
+@app.get("/api/v1/configs/{config_name}")
+async def get_config(config_name: str):
+    """获取特定配置"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        config_manager = app.state.config_manager
+        config = config_manager.load_config(config_name)
+
+        # 移除敏感信息（如API密钥）
+        if "llm" in config:
+            llm_config = config["llm"].copy()
+            if "api_key" in llm_config:
+                llm_config["api_key"] = "***HIDDEN***"
+            config["llm"] = llm_config
+
+        return {
+            "config_name": config_name,
+            "config": config,
+            "timestamp": time.time()
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"配置 {config_name} 未找到: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取配置失败: {str(e)}"
+        )
+
+
+@app.post("/api/v1/configs/{config_name}")
+async def update_config(config_name: str, config_data: Dict[str, Any]):
+    """更新或创建配置"""
+    if not service_state["initialized"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI引擎服务未初始化"
+        )
+
+    try:
+        config_manager = app.state.config_manager
+
+        # 验证配置
+        errors = config_manager.validate_config(config_data)
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"配置验证失败: {errors}"
+            )
+
+        # 保存配置
+        config_path = config_manager.save_config(config_name, config_data)
+
+        return {
+            "config_name": config_name,
+            "status": "saved",
+            "path": config_path,
+            "timestamp": time.time()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新配置失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"更新配置失败: {str(e)}"
+        )
+
+
+# ========== Prometheus指标端点 ==========
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus指标端点"""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.responses import Response
+
+    # 更新模块健康指标
+    for module_name, initialized in service_state["modules"].items():
+        health_value = 1 if initialized else 0
+        MODULE_HEALTH.labels(module=module_name).set(health_value)
+
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8081"))
+
+    logger.info(f"启动AI引擎服务 (HackSynth集成版): http://{host}:{port}")
+    logger.info(f"API文档: http://{host}:{port}/docs")
+    logger.info(f"LLM代理端点: /api/v1/llm/*")
+    logger.info(f"指标端点: http://{host}:{port}/metrics")
+
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=os.getenv("ENVIRONMENT", "development") == "development"
+    )

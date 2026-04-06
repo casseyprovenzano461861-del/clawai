@@ -1,0 +1,178 @@
+# ClawAI Dirsearch 工具配置
+# 高级目录和文件发现工具
+
+name: "dirsearch"
+command: "dirsearch"
+category: "scanning"
+description: |
+  高级 Web 内容扫描器，用于快速发现目录和文件。
+
+  **主要功能**：
+  - 快速目录和文件发现
+  - 多线程支持（高性能）
+  - 递归扫描
+  - 扩展名过滤
+  - 自定义字典支持
+
+  **特点**：
+  - 支持 HTTP 和 HTTPS
+  - 可配置超时和重试
+  - 多种输出格式
+  - 智能过滤和去重
+
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "host"
+
+# 命令构建模板
+command_template: "{command} -u {url} -e {extensions} -w {wordlist} -t {threads} {recursive} {timeout} {additional_args}"
+
+# 默认参数值
+defaults:
+  extensions: "php,html,js,txt,xml,json"
+  threads: 20
+  recursive: false
+
+# 参数定义
+parameters:
+  - name: "url"
+    type: "string"
+    description: "目标 URL"
+    required: true
+    flag: "-u"
+    format: "flag"
+    validation:
+      pattern: "^https?://[a-zA-Z0-9.-]+(\\.[a-zA-Z]{2,})(:[0-9]+)?(/.*)?$"
+      error_message: "请输入有效的 URL，包含 http:// 或 https:// 前缀"
+
+  - name: "extensions"
+    type: "string"
+    description: "文件扩展名（逗号分隔），如: php,html,js"
+    required: false
+    flag: "-e"
+    format: "flag"
+    default: "php,html,js,txt,xml,json"
+
+  - name: "wordlist"
+    type: "string"
+    description: "字典文件路径（容器内路径）"
+    required: false
+    flag: "-w"
+    format: "flag"
+    default: "/usr/share/wordlists/dirb/common.txt"
+    options:
+      - "/usr/share/wordlists/dirb/common.txt"
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
+      - "/usr/share/wordlists/dirb/big.txt"
+
+  - name: "threads"
+    type: "integer"
+    description: "线程数（1-50）"
+    required: false
+    flag: "-t"
+    format: "flag"
+    default: 20
+    validation:
+      min: 1
+      max: 50
+      error_message: "线程数必须在 1-50 范围内"
+
+  - name: "recursive"
+    type: "boolean"
+    description: "启用递归扫描"
+    required: false
+    flag: "-r"
+    format: "flag"
+    default: false
+
+  - name: "recursive_depth"
+    type: "integer"
+    description: "递归深度（1-5）"
+    required: false
+    flag: "--recursive-depth"
+    format: "combined"
+    default: 2
+    validation:
+      min: 1
+      max: 5
+      error_message: "递归深度必须在 1-5 范围内"
+
+  - name: "timeout"
+    type: "integer"
+    description: "超时时间（秒）"
+    required: false
+    flag: "--timeout"
+    format: "combined"
+    default: 30
+    validation:
+      min: 1
+      max: 300
+      error_message: "超时时间必须在 1-300 秒范围内"
+
+  - name: "output_format"
+    type: "string"
+    description: "输出格式: plain, json, csv"
+    required: false
+    flag: "--format"
+    format: "combined"
+    default: "plain"
+    options: ["plain", "json", "csv"]
+
+  - name: "additional_args"
+    type: "string"
+    description: "额外参数，如: --quiet, --no-color, --exclude-status 404"
+    required: false
+    format: "positional"
+    default: ""
+
+# 输出处理配置
+output_handling:
+  parser: "dirsearch_text"
+  extract_fields:
+    - name: "found_paths"
+      pattern: "\\[\\d{2}:\\d{2}:\\d{2}\\].*? (\\d{3}) .*? (.*?)\\n"
+    - name: "status_codes"
+      pattern: "Status codes: (.*?)\\n"
+    - name: "scan_summary"
+      pattern: "Scan ended at:.*?\\n(.*?)\\n\\n"
+
+  success_conditions:
+    - exit_code: 0
+
+  error_patterns:
+    - pattern: "ConnectionError"
+      message: "连接错误"
+    - pattern: "Invalid URL"
+      message: "无效的 URL"
+
+# 性能和安全限制
+limits:
+  max_runtime: 1200  # 20分钟（目录扫描可能耗时）
+  max_output_size: 5242880  # 5MB
+  max_threads: 30  # 最大线程数限制
+  max_paths_per_scan: 10000  # 最大扫描路径数
+
+# 监控指标
+metrics:
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间"
+  - name: "paths_found"
+    type: "gauge"
+    description: "发现的路径数量"
+  - name: "status_2xx"
+    type: "counter"
+    description: "2xx 状态码数量"
+  - name: "status_4xx"
+    type: "counter"
+    description: "4xx 状态码数量"
+
+# 技能系统集成
+skill_integration:
+  skill_name: "directory_bruteforce"
+  skill_class: "DirsearchSkill"
+  required_capabilities: ["directory_enumeration", "web_content_discovery"]
+  provides_context: ["hidden_paths", "sensitive_files", "directory_structure"]
+  risk_level: "low"

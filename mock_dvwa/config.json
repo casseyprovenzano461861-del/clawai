@@ -1,0 +1,50 @@
+{
+  "name": "模拟DVWA测试靶场",
+  "version": "1.0.0",
+  "description": "用于量化指标测试的模拟DVWA环境",
+  "base_url": "http://localhost:8080",
+  "vulnerabilities": {
+    "sql_injection": {
+      "count": 5,
+      "severity": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "SQL注入漏洞"
+    },
+    "xss": {
+      "count": 4,
+      "severity": [
+        "medium",
+        "low"
+      ],
+      "description": "跨站脚本漏洞"
+    },
+    "command_injection": {
+      "count": 3,
+      "severity": [
+        "critical",
+        "high"
+      ],
+      "description": "命令注入漏洞"
+    },
+    "file_upload": {
+      "count": 2,
+      "severity": [
+        "high",
+        "medium"
+      ],
+      "description": "文件上传漏洞"
+    },
+    "csrf": {
+      "count": 3,
+      "severity": [
+        "medium"
+      ],
+      "description": "CSRF漏洞"
+    }
+  },
+  "total_vulnerabilities": 17,
+  "setup_time": "2026-04-03 10:00:00"
+}

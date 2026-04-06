@@ -1,0 +1,119 @@
+# ClawAI WhatWeb 工具配置
+# Web 指纹识别工具
+
+name: "whatweb"
+command: "whatweb"
+category: "reconnaissance"
+description: |
+  Web 指纹识别工具，识别网站使用的技术栈。
+  可以检测 CMS、Web 框架、服务器软件、JavaScript 库等。
+
+enabled: true
+requires_container: true
+container_image: "kalilinux/kali-rolling:latest"
+container_options:
+  network_mode: "host"
+
+# 命令构建模板
+command_template: "{command} {verbosity} {aggression} {custom_plugins} {proxy} {additional_args} {target}"
+
+# 默认参数值
+defaults:
+  verbosity: "-v"
+  aggression: "3"
+
+# 参数定义
+parameters:
+  - name: "target"
+    type: "string"
+    description: "目标 URL 或域名"
+    required: true
+    position: "last"
+    validation:
+      pattern: "^(https?://)?[a-zA-Z0-9.-]+(\\.[a-zA-Z]{2,})(:[0-9]+)?(/.*)?$"
+      error_message: "请输入有效的 URL 或域名"
+
+  - name: "verbosity"
+    type: "string"
+    description: "输出详细程度: -v (详细), -a (全部)"
+    required: false
+    flag: ""
+    format: "template"
+    default: "-v"
+    options: ["-v", "-a", ""]
+
+  - name: "aggression"
+    type: "string"
+    description: "攻击级别 1-4 (1=被动, 4=主动)"
+    required: false
+    format: "template"
+    template: "--aggression {value}"
+    default: "3"
+    validation:
+      pattern: "^[1-4]$"
+      error_message: "攻击级别必须是 1-4 的数字"
+
+  - name: "custom_plugins"
+    type: "string"
+    description: "自定义插件路径"
+    required: false
+    flag: "--custom-plugin"
+    format: "flag"
+    default: ""
+
+  - name: "proxy"
+    type: "string"
+    description: "代理服务器地址"
+    required: false
+    flag: "--proxy"
+    format: "flag"
+    default: ""
+
+  - name: "additional_args"
+    type: "string"
+    description: "额外参数，如: --color=never, --log-json"
+    required: false
+    format: "positional"
+    default: ""
+
+# 输出处理配置
+output_handling:
+  parser: "whatweb_text"
+  extract_fields:
+    - name: "technologies"
+      pattern: "\\[(.*?)\\]"
+    - name: "http_headers"
+      pattern: "HTTP Headers:(.*?)\\n"
+    - name: "title"
+      pattern: "Title:(.*?)\\n"
+
+  success_conditions:
+    - exit_code: 0
+
+  error_patterns:
+    - pattern: "Connection refused"
+      message: "连接被拒绝"
+    - pattern: "Name or service not known"
+      message: "域名无法解析"
+
+# 性能限制
+limits:
+  max_runtime: 300
+  max_output_size: 5242880  # 5MB
+  concurrent_scans: 5
+
+# 监控指标
+metrics:
+  - name: "scan_duration"
+    type: "histogram"
+    description: "扫描持续时间"
+  - name: "technologies_detected"
+    type: "gauge"
+    description: "检测到的技术数量"
+
+# 技能系统集成
+skill_integration:
+  skill_name: "web_fingerprinting"
+  skill_class: "WhatWebSkill"
+  required_capabilities: ["web_analysis", "fingerprinting"]
+  provides_context: ["web_technologies", "server_info", "security_headers"]
