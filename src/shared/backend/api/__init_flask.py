@@ -11,6 +11,7 @@ from backend.api.v1.auth import auth_bp
 from backend.api.v1.health import health_bp
 from backend.api.v1.workflow import workflow_bp
 from backend.api.v1.cache import cache_bp
+from backend.api.v1.tools_flask import tools_bp
 
 
 def register_blueprints(app: Flask):
@@ -26,6 +27,7 @@ def register_blueprints(app: Flask):
     app.register_blueprint(health_bp, url_prefix='/api/v1')
     app.register_blueprint(workflow_bp, url_prefix='/api/v1')
     app.register_blueprint(cache_bp, url_prefix='/api/v1')
+    app.register_blueprint(tools_bp, url_prefix='/api/v1')
     
     # 注册根路径重定向
     @app.route('/')
@@ -75,7 +77,15 @@ def register_blueprints(app: Flask):
                 "POST /api/v1/cache/clear": "清除缓存",
                 "GET /api/v1/cache/health": "缓存健康检查",
                 "POST /api/v1/cache/cleanup": "清理过期缓存条目",
-                "GET /api/v1/cache/config": "获取缓存配置信息"
+                "GET /api/v1/cache/config": "获取缓存配置信息",
+                "GET /api/v1/tools": "获取所有工具列表",
+                "GET /api/v1/tools/categories": "获取工具类别",
+                "GET /api/v1/tools/versions": "获取工具版本信息",
+                "GET /api/v1/tools/updates": "检查工具更新",
+                "GET /api/v1/tools/scenarios": "获取支持的扫描场景",
+                "POST /api/v1/tools/execute-scenario": "执行扫描场景",
+                "POST /api/v1/tools/execute-parallel": "并行执行多个工具",
+                "GET /api/v1/tools/status/<tool_name>": "获取工具状态"
             },
             "authentication": {
                 "enabled": True,

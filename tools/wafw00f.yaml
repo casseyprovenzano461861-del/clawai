@@ -1,0 +1,79 @@
+name: "wafw00f"
+description: "wafw00f是一个Web应用防火墙(WAF)检测工具，能够识别目标网站使用的WAF类型。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/wafw00f/wafw00f_wrapper.py"]
+  # 超时设置（秒）
+  timeout: 120
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标URL"
+    position: "positional"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "-q"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (json, text)"
+    flag: "-o"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "-p"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # WAF检测模式
+  waf_pattern: "WAF detected:"
+  # 成功标志
+  success_pattern: "---"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+
+# 工具元数据
+metadata:
+  author: "Sandro Gauci"
+  homepage: "https://github.com/EnableSecurity/wafw00f"
+  license: "BSD-3-Clause"
+  description: "wafw00f是一个Web应用防火墙(WAF)检测工具，能够识别目标网站使用的WAF类型。"
+  tags:
+    - "waf"
+    - "scanning"
+    - "web-security"
+    - "detection"
+    - "penetration-testing"

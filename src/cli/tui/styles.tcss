@@ -1,0 +1,117 @@
+/* ClawAI TUI 默认样式 */
+
+Screen {
+    background: $surface;
+}
+
+#main_container {
+    layout: vertical;
+    height: 1fr;
+}
+
+Header {
+    background: $primary;
+    color: $text;
+    padding: 0 1;
+}
+
+Footer {
+    background: $primary-darken-1;
+    color: $text;
+}
+
+MessageList {
+    height: 1fr;
+    background: $surface;
+    padding: 1;
+}
+
+MessageItem {
+    margin: 0 1;
+    padding: 0 1;
+    width: 1fr;
+}
+
+MessageItem.user {
+    background: $surface-darken-1;
+}
+
+MessageItem.assistant {
+    background: $surface;
+}
+
+MessageItem.system {
+    background: $primary-darken-2;
+    color: $text-muted;
+}
+
+MessageItem.tool {
+    background: $warning-darken-2;
+}
+
+ChatInput {
+    dock: bottom;
+    height: 3;
+    background: $surface-darken-1;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+ChatInput:focus {
+    border: double $accent;
+}
+
+StatusBar {
+    dock: bottom;
+    height: 1;
+    background: $primary;
+    color: $text;
+    padding: 0 2;
+}
+
+ToolOutputPanel {
+    height: auto;
+    max-height: 10;
+    background: $surface-darken-1;
+    border: solid $warning;
+}
+
+ToolOutput {
+    margin: 0 1;
+    padding: 0 1;
+    background: $surface-darken-2;
+    border: solid $warning;
+    width: 1fr;
+}
+
+ToolOutput.running {
+    border: solid $primary;
+}
+
+ToolOutput.completed {
+    border: solid $success;
+}
+
+ToolOutput.failed {
+    border: solid $error;
+}
+
+/* 帮助屏幕样式 */
+HelpScreen {
+    align: center middle;
+}
+
+HelpScreen > Container {
+    width: 60;
+    height: 25;
+    background: $surface;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+#title {
+    text-align: center;
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}

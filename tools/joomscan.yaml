@@ -1,0 +1,93 @@
+name: "joomscan"
+description: "JoomScan是一个专门用于Joomla安全扫描的工具，能够检测Joomla网站的漏洞和安全问题。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "perl"
+  # 基础参数
+  base_args: ["tools/penetration/joomscan/joomscan.pl"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标Joomla网站的URL"
+    flag: "--url"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "--verbose"
+  # 无颜色输出
+  no-color:
+    type: "boolean"
+    required: false
+    description: "禁用颜色输出"
+    flag: "--no-color"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 端口设置
+  port:
+    type: "integer"
+    required: false
+    description: "目标端口"
+    flag: "--port"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "--output"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[WARNING]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "perl"
+  - "LWP::UserAgent"
+  - "URI"
+  - "HTTP::Request"
+
+# 工具元数据
+metadata:
+  author: "OWASP"
+  homepage: "https://github.com/OWASP/joomscan"
+  license: "GPL-3.0"
+  description: "JoomScan是一个专门用于Joomla安全扫描的工具，能够检测Joomla网站的漏洞和安全问题。"
+  tags:
+    - "joomla"
+    - "scanning"
+    - "web-security"
+    - "vulnerability"
+    - "penetration-testing"

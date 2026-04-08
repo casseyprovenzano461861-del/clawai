@@ -1,0 +1,105 @@
+name: "sublist3r"
+description: "Sublist3r是一个Python编写的子域名枚举工具，用于发现目标域名的子域名。"
+category: "information-gathering"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/Sublist3r/sublist3r.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标域名
+  domain:
+    type: "string"
+    required: true
+    description: "目标域名"
+    flag: "-d"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "-o"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "-t"
+  # 引擎
+  engines:
+    type: "string"
+    required: false
+    description: "要使用的搜索引擎，用逗号分隔"
+    flag: "-e"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 端口扫描
+  port-scan:
+    type: "boolean"
+    required: false
+    description: "对发现的子域名进行端口扫描"
+    flag: "-p"
+  # 端口范围
+  ports:
+    type: "string"
+    required: false
+    description: "要扫描的端口范围"
+    flag: "--ports"
+  # 启用BRUTE模式
+  brute:
+    type: "boolean"
+    required: false
+    description: "启用暴力破解模式"
+    flag: "-b"
+  # 字典文件
+  wordlist:
+    type: "string"
+    required: false
+    description: "暴力破解使用的字典文件"
+    flag: "-w"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 子域名模式
+  subdomain_pattern: '[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+  # 成功标志
+  success_pattern: "Total Unique Subdomains Found:"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+  - "dnspython"
+  - "argparse"
+
+# 工具元数据
+metadata:
+  author: "Ahmed Aboul-Ela"
+  homepage: "https://github.com/aboul3la/Sublist3r"
+  license: "GPL-2.0"
+  description: "Sublist3r是一个Python编写的子域名枚举工具，用于发现目标域名的子域名。"
+  tags:
+    - "subdomain"
+    - "enumeration"
+    - "information-gathering"
+    - "security"
+    - "bug-bounty"

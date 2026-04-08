@@ -1,0 +1,105 @@
+name: "cmsmap"
+description: "CMSmap是一个专门用于扫描CMS系统漏洞的安全工具，支持WordPress、Joomla和Drupal等主流CMS系统。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/CMSmap/cmsmap.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  target:
+    type: "string"
+    required: true
+    description: "目标CMS网站的URL"
+    position: "positional"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 暴力破解模式
+  brute:
+    type: "boolean"
+    required: false
+    description: "启用暴力破解模式"
+    flag: "--brute"
+  # 用户名列表
+  usernames:
+    type: "string"
+    required: false
+    description: "用户名字典文件路径"
+    flag: "--usernames"
+  # 密码列表
+  passwords:
+    type: "string"
+    required: false
+    description: "密码字典文件路径"
+    flag: "--passwords"
+  # CMS类型
+  cms:
+    type: "string"
+    required: false
+    description: "指定CMS类型 (wordpress, joomla, drupal)"
+    flag: "--cms"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 延迟设置
+  delay:
+    type: "integer"
+    required: false
+    description: "请求之间的延迟（秒）"
+    flag: "--delay"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[WARNING]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+  - "beautifulsoup4"
+
+# 工具元数据
+metadata:
+  author: "CMSmap Team"
+  homepage: "https://github.com/Dionach/CMSmap"
+  license: "GPL-3.0"
+  description: "CMSmap是一个专门用于扫描CMS系统漏洞的安全工具，支持WordPress、Joomla和Drupal等主流CMS系统。"
+  tags:
+    - "cms"
+    - "wordpress"
+    - "joomla"
+    - "drupal"
+    - "scanning"
+    - "vulnerability"

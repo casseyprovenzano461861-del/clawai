@@ -1,0 +1,217 @@
+# ClawAI 工具路径配置
+# 将工具路径从代码中外部化，便于不同环境配置
+#
+# 支持的占位符:
+#   {TOOLS_DIR} - 工具目录 (默认 ./tools/penetration)
+#   {HOME} - 用户主目录
+#   {PROJECT_ROOT} - 项目根目录
+
+version: "1.0.0"
+
+# 全局配置
+global:
+  tools_dir: "{PROJECT_ROOT}/tools/penetration"
+  use_docker: false
+  fallback_to_simulated: true
+
+# 工具路径映射
+# Windows 路径使用正斜杠 (/) 或双反斜杠 (\\)
+tools:
+  # ==================== 信息收集 ====================
+  nmap:
+    path: "C:/Program Files (x86)/Nmap/nmap.exe"
+    docker_image: "instrumentisto/nmap:latest"
+    alt_paths:
+      - "/usr/bin/nmap"
+      - "{TOOLS_DIR}/nmap/nmap.exe"
+      - "nmap"  # 在 PATH 中查找
+
+  nuclei:
+    path: "{TOOLS_DIR}/nuclei.exe"
+    docker_image: "projectdiscovery/nuclei:latest"
+    alt_paths:
+      - "/usr/local/bin/nuclei"
+      - "{HOME}/go/bin/nuclei"
+
+  httpx:
+    path: "{TOOLS_DIR}/httpx.exe"
+    docker_image: "projectdiscovery/httpx:latest"
+    alt_paths:
+      - "/usr/local/bin/httpx"
+      - "{HOME}/go/bin/httpx"
+
+  naabu:
+    path: "{TOOLS_DIR}/naabu.exe"
+    docker_image: "projectdiscovery/naabu:latest"
+    alt_paths:
+      - "/usr/local/bin/naabu"
+      - "{HOME}/go/bin/naabu"
+
+  subfinder:
+    path: "{TOOLS_DIR}/subfinder.exe"
+    docker_image: "projectdiscovery/subfinder:latest"
+    alt_paths:
+      - "/usr/local/bin/subfinder"
+      - "{HOME}/go/bin/subfinder"
+
+  whatweb:
+    path: "whatweb"  # Ruby gem, 在 PATH 中
+    docker_image: "whatweb/whatweb:latest"
+    install_command: "gem install whatweb"
+
+  # ==================== 漏洞扫描 ====================
+  nikto:
+    path: "nikto"
+    docker_image: "k0kubun/nikto:latest"
+    alt_paths:
+      - "/usr/bin/nikto"
+      - "{TOOLS_DIR}/nikto/nikto.pl"
+
+  sqlmap:
+    path: "python {TOOLS_DIR}/sqlmap/sqlmap.py"
+    docker_image: "ghcr.io/sqlmapproject/sqlmap:latest"
+    alt_paths:
+      - "python /usr/share/sqlmap/sqlmap.py"
+
+  dirsearch:
+    path: "python {TOOLS_DIR}/dirsearch/dirsearch.py"
+    docker_image: "dirsearch/dirsearch:latest"
+    alt_paths:
+      - "dirsearch"
+
+  ffuf:
+    path: "{TOOLS_DIR}/ffuf.exe"
+    docker_image: "ffuf/ffuf:latest"
+    alt_paths:
+      - "/usr/local/bin/ffuf"
+      - "{HOME}/go/bin/ffuf"
+
+  # ==================== 暴力破解 ====================
+  hydra:
+    path: "hydra"
+    docker_image: "vanhauser/hydra:latest"
+    alt_paths:
+      - "/usr/bin/hydra"
+      - "{TOOLS_DIR}/hydra/hydra.exe"
+
+  john:
+    path: "john"
+    docker_image: "openwall/john:latest"
+    alt_paths:
+      - "/usr/sbin/john"
+      - "{TOOLS_DIR}/john/run/john.exe"
+
+  hashcat:
+    path: "hashcat"
+    docker_image: "dizys/hashcat:latest"
+    alt_paths:
+      - "/usr/bin/hashcat"
+      - "{TOOLS_DIR}/hashcat/hashcat.exe"
+
+  # ==================== DNS 工具 ====================
+  massdns:
+    path: "{TOOLS_DIR}/massdns.exe"
+    docker_image: "vimagick/massdns:latest"
+    alt_paths:
+      - "/usr/local/bin/massdns"
+
+  dnsrecon:
+    path: "dnsrecon"
+    docker_image: "k0kubun/dnsrecon:latest"
+    install_command: "pip install dnsrecon"
+
+  dnsx:
+    path: "{TOOLS_DIR}/dnsx.exe"
+    docker_image: "projectdiscovery/dnsx:latest"
+    alt_paths:
+      - "/usr/local/bin/dnsx"
+
+  # ==================== 网络工具 ====================
+  curl:
+    path: "curl"
+    docker_image: "curlimages/curl:latest"
+    alt_paths:
+      - "/usr/bin/curl"
+      - "C:/Windows/System32/curl.exe"
+
+  wget:
+    path: "wget"
+    docker_image: "wget:latest"
+    alt_paths:
+      - "/usr/bin/wget"
+
+  nc:
+    path: "nc"
+    docker_image: "subfuzion/netcat:latest"
+    alt_paths:
+      - "/usr/bin/nc"
+      - "/usr/bin/netcat"
+
+  # ==================== 其他工具 ====================
+  git:
+    path: "git"
+    alt_paths:
+      - "/usr/bin/git"
+      - "C:/Program Files/Git/bin/git.exe"
+
+  python:
+    path: "python"
+    alt_paths:
+      - "python3"
+      - "/usr/bin/python3"
+
+# 工具分组（用于批量管理）
+groups:
+  recon:
+    - nmap
+    - nuclei
+    - httpx
+    - subfinder
+    - whatweb
+    - naabu
+
+  vuln_scan:
+    - nikto
+    - sqlmap
+    - nuclei
+    - dirsearch
+
+  bruteforce:
+    - hydra
+    - john
+    - hashcat
+    - ffuf
+
+  dns:
+    - massdns
+    - dnsrecon
+    - dnsx
+    - subfinder
+
+# 工具优先级配置
+priority:
+  # P0 - 核心工具（必须可用）
+  p0:
+    - nmap
+    - httpx
+    - nuclei
+
+  # P1 - 常用工具
+  p1:
+    - sqlmap
+    - nikto
+    - subfinder
+    - whatweb
+
+  # P2 - 辅助工具
+  p2:
+    - hydra
+    - ffuf
+    - dirsearch
+    - massdns
+
+  # P3 - 可选工具
+  p3:
+    - john
+    - hashcat
+    - dnsrecon

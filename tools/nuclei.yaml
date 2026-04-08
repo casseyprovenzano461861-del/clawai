@@ -1,0 +1,96 @@
+name: "nuclei"
+command: "nuclei"
+enabled: true
+short_description: "基于模板的漏洞扫描工具"
+description: |
+  Nuclei是一个基于模板的漏洞扫描工具，用于快速扫描Web应用和网络设备的漏洞。
+  它支持多种协议，包括HTTP、HTTPS、DNS、TCP等。
+
+  **默认行为：**
+  - 使用默认模板扫描目标
+  - 自动检测漏洞
+  - 生成详细的扫描报告
+
+  **注意事项：**
+  - 请确保有权限测试目标网站
+  - 大型网站的扫描可能需要较长时间
+  - 某些模板可能会对目标系统造成影响
+parameters:
+  - name: "target"
+    type: "string"
+    description: |
+      目标URL或文件，包含要扫描的目标。
+      示例：http://example.com 或 targets.txt
+    required: true
+    format: "flag"
+    flag: "-u"
+  - name: "templates"
+    type: "string"
+    description: |
+      模板目录或文件，指定要使用的扫描模板。
+      示例：default 或 /path/to/templates
+    required: false
+    format: "flag"
+    flag: "-t"
+  - name: "severity"
+    type: "string"
+    description: |
+      严重程度过滤，只扫描指定严重程度的漏洞。
+      可用值：info, low, medium, high, critical
+    required: false
+    format: "flag"
+    flag: "-severity"
+  - name: "rate"
+    type: "string"
+    description: |
+      扫描速率，控制并发请求数量。
+      示例：100
+    required: false
+    format: "flag"
+    flag: "-rate"
+  - name: "output"
+    type: "string"
+    description: |
+      输出文件，将扫描结果保存到指定文件。
+      示例：results.json
+    required: false
+    format: "flag"
+    flag: "-o"
+  - name: "json"
+    type: "bool"
+    description: |
+      以JSON格式输出扫描结果。
+    required: false
+    format: "flag"
+    flag: "-json"
+    default: false
+  - name: "silent"
+    type: "bool"
+    description: |
+      静默模式，只输出找到的漏洞。
+    required: false
+    format: "flag"
+    flag: "-silent"
+    default: false
+  - name: "retries"
+    type: "string"
+    description: |
+      失败时的重试次数。
+      示例：3
+    required: false
+    format: "flag"
+    flag: "-retries"
+  - name: "timeout"
+    type: "string"
+    description: |
+      每个请求的超时时间（秒）。
+      示例：10
+    required: false
+    format: "flag"
+    flag: "-timeout"
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外参数，按空格追加到命令末尾。
+    required: false
+    format: "positional"

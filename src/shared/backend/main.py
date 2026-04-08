@@ -20,6 +20,7 @@ from backend.database import init_database, DatabaseManager
 from backend.auth.authentication import auth_manager
 from backend.core.tool_manager import ToolManager
 from backend.schemas import AttackRequest, AttackResponse, ToolExecuteRequest, ToolExecutionResult, AttackStep, ToolSeverity, RuleEngineDecision, TargetAnalysis
+from backend.core.vulnerability_validator import VulnerabilityValidator, AttackPathAnalyzer, RiskAssessor, ComplianceChecker
 from backend.services.attack_service import AttackService
 from backend.error.handler import setup_error_handlers
 from backend.log.manager import init_logging, get_logger
@@ -78,8 +79,7 @@ async def lifespan(app: FastAPI):
             db_manager.create_tables()
         
         # 初始化工具管理器
-        tools_dir = os.getenv("TOOLS_DIR", "./tools")
-        tool_manager = ToolManager(tools_dir)
+        tool_manager = ToolManager()
 
         # 修正工具命令路径
         try:
@@ -295,6 +295,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # 设置审计中间件
 setup_audit_middleware(app)
 
+# 导入API路由
+from src.shared.backend.api.v1.tools import router as tools_router
+
+# 注册API路由
+app.include_router(tools_router, prefix="/api/v1/tools", tags=["tools"])
 
 # 基础健康检查
 @app.get("/")
@@ -335,40 +340,67 @@ async def health_check():
             "error": str(e)
         }
 
-
-@app.get("/tools")
-async def get_tools(
-    _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
-):
-    """获取可用工具列表"""
-    if not tool_manager:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="工具管理器未初始化"
-        )
+@app.get("/api/health")
+async def api_health_check():
+    """API健康检查（用于Docker Compose健康检查）"""
+    try:
+        # 检查数据库
+        db_health = db_manager.health_check() if db_manager else {"status": "unknown"}
+        
+        # 检查工具管理器
+        tool_health = tool_manager.health_check() if tool_manager else {"status": "unknown"}
+        
+        return {
+            "status": "healthy" if db_health.get("status") == "healthy" else "degraded",
+            "services": {
+                "database": db_health,
+                "tools": tool_health
+            },
+            "version": "2.0.0"
+        }
     
-    tools = tool_manager.get_available_tools()
-    categories = tool_manager.get_tool_categories()
-    
-    return {
-        "tools": tools,
-        "categories": categories,
-        "count": len(tools)
-    }
+    except Exception as e:
+        logger.error(f"API健康检查失败: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
 
 
-@app.get("/tools/health")
-async def get_tools_health(
-    _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
-):
-    """获取工具健康状态"""
-    if not tool_manager:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="工具管理器未初始化"
-        )
+# @app.get("/tools")
+# async def get_tools(
+#     # 暂时禁用认证检查以方便测试
+#     # _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+# ):
+#     """获取可用工具列表"""
+#     if not tool_manager:
+#         raise HTTPException(
+#             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+#             detail="工具管理器未初始化"
+#         )
+#     
+#     tools = tool_manager.get_available_tools()
+#     categories = tool_manager.get_tool_categories()
+#     
+#     return {
+#         "tools": tools,
+#         "categories": categories,
+#         "count": len(tools)
+#     }
 
-    return tool_manager.health_check()
+
+# @app.get("/tools/health")
+# async def get_tools_health(
+#     _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+# ):
+#     """获取工具健康状态"""
+#     if not tool_manager:
+#         raise HTTPException(
+#             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+#             detail="工具管理器未初始化"
+#         )
+
+#     return tool_manager.health_check()
 
 
 @app.post("/attack", response_model=AttackResponse)
@@ -584,9 +616,180 @@ async def execute_tool(
         )
 
 
-# 导入API路由
-# 注意：这里需要根据实际的路由文件进行导入
-# 暂时使用占位符
+# 漏洞验证端点
+@app.post("/api/v1/vulnerability/validate")
+async def validate_vulnerability(
+    request: dict,
+    _has_permission: bool = Depends(require_permission(Permission.ATTACK_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """验证漏洞"""
+    if not tool_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="工具管理器未初始化"
+        )
+
+    try:
+        vulnerability = request.get("vulnerability")
+        target = request.get("target")
+        
+        if not vulnerability or not target:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供漏洞信息和目标地址"
+            )
+            
+        validator = VulnerabilityValidator(tool_manager)
+        result = validator.validate_vulnerability(vulnerability, target)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"验证漏洞时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"验证漏洞时出错: {str(e)}"
+        )
+
+
+# 攻击路径分析端点
+@app.post("/api/v1/attack-path/analyze")
+async def analyze_attack_path(
+    request: dict,
+    _has_permission: bool = Depends(require_permission(Permission.ATTACK_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """分析攻击路径"""
+    try:
+        vulnerabilities = request.get("vulnerabilities", [])
+        
+        analyzer = AttackPathAnalyzer()
+        result = analyzer.analyze_attack_path(vulnerabilities)
+        return result
+    except Exception as e:
+        logger.error(f"分析攻击路径时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"分析攻击路径时出错: {str(e)}"
+        )
+
+
+# 风险评估端点
+@app.post("/api/v1/risk/assess")
+async def assess_risk(
+    request: dict,
+    _has_permission: bool = Depends(require_permission(Permission.ATTACK_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """评估漏洞风险"""
+    try:
+        vulnerability = request.get("vulnerability")
+        
+        if not vulnerability:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="必须提供漏洞信息"
+            )
+            
+        assessor = RiskAssessor()
+        result = assessor.assess_risk(vulnerability)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"评估风险时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"评估风险时出错: {str(e)}"
+        )
+
+
+# 合规性检查端点
+@app.post("/api/v1/compliance/check")
+async def check_compliance(
+    request: dict,
+    _has_permission: bool = Depends(require_permission(Permission.ATTACK_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """检查合规性"""
+    try:
+        vulnerabilities = request.get("vulnerabilities", [])
+        standard = request.get("standard", "owasp")
+        
+        checker = ComplianceChecker()
+        result = checker.check_compliance(vulnerabilities, standard)
+        return result
+    except Exception as e:
+        logger.error(f"检查合规性时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"检查合规性时出错: {str(e)}"
+        )
+
+
+# 自定义工具管理端点
+@app.post("/api/v1/tools/custom")
+async def add_custom_tool(
+    tool_config: dict,
+    _has_permission: bool = Depends(require_permission(Permission.TOOL_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """添加自定义工具"""
+    if not tool_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="工具管理器未初始化"
+        )
+
+    try:
+        result = tool_manager.add_custom_tool(tool_config)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"添加自定义工具时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"添加自定义工具时出错: {str(e)}"
+        )
+
+
+# 工具链执行端点
+@app.post("/api/v1/tools/chain")
+async def execute_tool_chain(
+    request: dict,
+    _has_permission: bool = Depends(require_permission(Permission.TOOL_EXECUTE)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
+):
+    """执行工具链"""
+    if not tool_manager:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="工具管理器未初始化"
+        )
+
+    try:
+        tool_chain = request.get("tool_chain", [])
+        max_workers = request.get("max_workers", 5)
+        overall_timeout = request.get("overall_timeout", 600)
+        
+        if not tool_chain:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="工具链配置不能为空"
+            )
+        
+        result = tool_manager.execute_tool_chain(tool_chain, max_workers, overall_timeout)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"执行工具链时出错: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"执行工具链时出错: {str(e)}"
+        )
+
 
 # 导入审计API路由
 try:
@@ -651,6 +854,22 @@ try:
     logger.info("技能库API路由已加载")
 except ImportError as e:
     logger.warning(f"技能库API路由导入失败: {e}")
+
+# 导入工具API路由
+try:
+    from src.shared.backend.api.v1.tools import router as tools_router
+    app.include_router(tools_router, tags=["工具管理"])
+    logger.info("工具API路由已加载")
+except ImportError as e:
+    logger.warning(f"工具API路由导入失败: {e}")
+
+# 导入渗透测试API路由
+try:
+    from src.shared.backend.api.v1.pentest import router as pentest_router
+    app.include_router(pentest_router, prefix="/api/v1/pentest", tags=["渗透测试"])
+    logger.info("渗透测试API路由已加载")
+except ImportError as e:
+    logger.warning(f"渗透测试API路由导入失败: {e}")
 
 # 导入知识图谱API路由
 try:
@@ -720,15 +939,22 @@ except ImportError as e:
 
 if __name__ == "__main__":
     import uvicorn
+    import argparse
     
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="ClawAI 主应用")
+    parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"), help="服务器主机地址")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")), help="服务器端口")
+    args = parser.parse_args()
+    
+    host = args.host
+    port = args.port
     
     logger.info(f"启动服务器: http://{host}:{port}")
     logger.info(f"API文档: http://{host}:{port}/docs")
     
     uvicorn.run(
-        "backend.main:app",
+        "src.shared.backend.main:app",
         host=host,
         port=port,
         reload=True  # 开发模式

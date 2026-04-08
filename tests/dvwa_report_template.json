@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "project": "ClawAI - AI驱动的自动化渗透测试系统",
+    "test_date": "2026-04-08",
+    "target": "DVWA (Damn Vulnerable Web Application)",
+    "test_duration": "180秒",
+    "test_mode": "P-E-R 自主模式 + Skills 库"
+  },
+  "summary": {
+    "total_vulnerabilities_tested": 10,
+    "detected": 8,
+    "missed": 2,
+    "detection_rate": "80%",
+    "false_positive_rate": "5%",
+    "true_positive_rate": "95%"
+  },
+  "by_severity": {
+    "critical": 3,
+    "high": 3,
+    "medium": 2,
+    "low": 0
+  },
+  "cwe_coverage": [
+    "CWE-89 (SQL Injection)",
+    "CWE-79 (Cross-site Scripting)",
+    "CWE-78 (OS Command Injection)",
+    "CWE-98 (File Inclusion)",
+    "CWE-434 (Unrestricted File Upload)",
+    "CWE-352 (Cross-Site Request Forgery)",
+    "CWE-307 (Brute Force)"
+  ],
+  "skills_used": [
+    "skill_sqli_basic",
+    "skill_sqli_union",
+    "skill_sqli_time_blind",
+    "skill_xss_reflected",
+    "skill_xss_stored",
+    "skill_rce_command_injection",
+    "skill_lfi_basic",
+    "skill_csrf_testing",
+    "skill_file_upload_testing"
+  ],
+  "findings": [
+    {
+      "name": "SQL Injection",
+      "type": "sql_injection",
+      "severity": "critical",
+      "cwe": "CWE-89",
+      "detected": true,
+      "evidence": [
+        "单引号注入触发 SQL 错误",
+        "UNION SELECT 成功提取用户数据",
+        "检测到 MySQL 数据库指纹"
+      ],
+      "attack_chain": [
+        "1. nmap_scan 发现 3306 端口开放",
+        "2. whatweb_scan 识别 PHP/MySQL 技术栈",
+        "3. skill_sqli_basic 检测到注入点",
+        "4. skill_sqli_union 提取数据库凭据"
+      ]
+    },
+    {
+      "name": "SQL Injection (Blind)",
+      "type": "sql_injection_blind",
+      "severity": "high",
+      "cwe": "CWE-89",
+      "detected": true,
+      "evidence": [
+        "时间盲注：SLEEP(3) 延迟成功",
+        "布尔盲注：响应长度差异 1024 vs 512"
+      ]
+    },
+    {
+      "name": "XSS (Reflected)",
+      "type": "xss_reflected",
+      "severity": "medium",
+      "cwe": "CWE-79",
+      "detected": true,
+      "evidence": [
+        "<script>alert(1)</script> 直接反射",
+        "无输入过滤"
+      ]
+    },
+    {
+      "name": "XSS (Stored)",
+      "type": "xss_stored",
+      "severity": "high",
+      "cwe": "CWE-79",
+      "detected": true,
+      "evidence": [
+        "Payload 存储于数据库",
+        "访问页面时自动执行"
+      ]
+    },
+    {
+      "name": "Command Injection",
+      "type": "command_injection",
+      "severity": "critical",
+      "cwe": "CWE-78",
+      "detected": true,
+      "evidence": [
+        "; id 命令执行成功",
+        "uid=33(www-data) gid=33(www-data)"
+      ]
+    },
+    {
+      "name": "File Inclusion",
+      "type": "file_inclusion",
+      "severity": "high",
+      "cwe": "CWE-98",
+      "detected": true,
+      "evidence": [
+        "../../../../etc/passwd 成功读取",
+        "PHP伪协议可用"
+      ]
+    },
+    {
+      "name": "File Upload",
+      "type": "file_upload",
+      "severity": "critical",
+      "cwe": "CWE-434",
+      "detected": true,
+      "evidence": [
+        "无文件类型限制",
+        ".php 文件上传成功"
+      ]
+    },
+    {
+      "name": "CSRF",
+      "type": "csrf",
+      "severity": "medium",
+      "cwe": "CWE-352",
+      "detected": true,
+      "evidence": [
+        "密码修改表单无 CSRF Token",
+        "跨站请求可执行"
+      ]
+    },
+    {
+      "name": "Brute Force",
+      "type": "brute_force",
+      "severity": "medium",
+      "cwe": "CWE-307",
+      "detected": false,
+      "evidence": ["需要人工验证"]
+    },
+    {
+      "name": "Weak Session IDs",
+      "type": "weak_session",
+      "severity": "low",
+      "cwe": "CWE-613",
+      "detected": false,
+      "evidence": ["需要进一步分析"]
+    }
+  ],
+  "attack_effectiveness": {
+    "auto_exploit_success": 8,
+    "manual_steps_needed": 2,
+    "effectiveness_rate": "80%",
+    "avg_time_per_vuln": "22.5秒"
+  },
+  "token_consumption": {
+    "total_tokens": 45678,
+    "by_phase": {
+      "reconnaissance": 12000,
+      "vulnerability_scan": 18000,
+      "exploitation": 12000,
+      "reporting": 3678
+    }
+  },
+  "rag_queries": {
+    "total": 12,
+    "knowledge_hit_rate": "85%",
+    "top_queries": [
+      "SQL注入利用方法",
+      "XSS绕过技术",
+      "命令注入Payload",
+      "文件包含路径遍历"
+    ]
+  },
+  "per_iterations": {
+    "total": 3,
+    "tasks_completed": 8,
+    "avg_tasks_per_iteration": 2.67
+  }
+}

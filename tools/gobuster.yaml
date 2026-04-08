@@ -1,0 +1,67 @@
+name: "gobuster"
+command: "gobuster"
+enabled: true
+short_description: "目录和文件枚举工具"
+description: |
+  Gobuster是一个目录和文件枚举工具，用于发现Web服务器上的隐藏文件和目录。
+
+  **主要功能：**
+  - 目录枚举
+  - 文件枚举
+  - DNS子域名枚举
+  - VHost枚举
+
+  **使用场景：**
+  - Web应用安全测试
+  - 隐藏文件和目录发现
+  - 信息收集
+  - Bug bounty侦察
+parameters:
+  - name: "mode"
+    type: "string"
+    description: |
+      运行模式：
+      - `dir`: 目录枚举
+      - `dns`: DNS子域名枚举
+      - `vhost`: VHost枚举
+      - `fuzz`: 模糊测试
+    required: true
+    position: 0
+    format: "positional"
+  - name: "url"
+    type: "string"
+    description: "目标URL（dir模式）"
+    required: false
+    format: "flag"
+    flag: "-u"
+  - name: "domain"
+    type: "string"
+    description: "目标域名（dns模式）"
+    required: false
+    format: "flag"
+    flag: "-d"
+  - name: "wordlist"
+    type: "string"
+    description: "字典文件路径"
+    required: true
+    format: "flag"
+    flag: "-w"
+  - name: "extensions"
+    type: "string"
+    description: |
+      文件扩展名，多个扩展名用逗号分隔。
+      示例：php,html,js
+    required: false
+    format: "flag"
+    flag: "-x"
+  - name: "threads"
+    type: "string"
+    description: "线程数"
+    required: false
+    format: "flag"
+    flag: "-t"
+  - name: "additional_args"
+    type: "string"
+    description: "额外的Gobuster参数"
+    required: false
+    format: "positional"

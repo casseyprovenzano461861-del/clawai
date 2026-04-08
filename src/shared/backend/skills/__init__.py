@@ -1,50 +1,49 @@
+# -*- coding: utf-8 -*-
 """
-Skills library package.
+Skills 库模块
+
+提供 AI 可自动调用的渗透测试技能
+包括：POC、Exploit 脚本、利用方法等
+
+整合自优秀项目:
+- CyberStrikeAI: 知识型 Skills (XXE, SSRF, 文件上传等)
+- PentestGPT: 实战 Exploit (Flag检测, OpenSSH枚举)
+- NeuroSploit: PoC生成器, WAF绕过, Payload变异
 """
 
-from .base_skill import BaseSkill, SkillContext
-from .skill_registry import SkillRegistry, registry
-from .nmap_skill import NmapScanSkill
-from .whatweb_skill import WhatWebSkill
-from .sql_injection_skill import SQLInjectionSkill
-from .rce_skill import RCESkill
-from .privilege_escalation_skill import PrivilegeEscalationSkill
+from .core import (
+    Skill,
+    SkillType,
+    SkillCategory,
+    SkillParameter,
+    SkillExecutor,
+)
 
-# 导出所有技能类
+from .registry import (
+    SkillRegistry,
+    get_skill_registry,
+)
+
+from .extended_skills import (
+    PayloadMutator,
+    WAF_SIGNATURES,
+    FLAG_PATTERNS,
+    get_waf_bypass_payloads,
+)
+
 __all__ = [
-    'BaseSkill',
-    'SkillContext',
-    'SkillRegistry',
-    'registry',
-    'NmapScanSkill',
-    'WhatWebSkill',
-    'SQLInjectionSkill',
-    'RCESkill',
-    'PrivilegeEscalationSkill'
+    # 核心类
+    "Skill",
+    "SkillType",
+    "SkillCategory",
+    "SkillParameter",
+    "SkillExecutor",
+    # 注册表
+    "SkillRegistry",
+    "get_skill_registry",
+    # 扩展功能
+    "PayloadMutator",
+    "WAF_SIGNATURES",
+    "FLAG_PATTERNS",
+    "get_waf_bypass_payloads",
 ]
-
-# 自动注册所有技能
-def register_all_skills():
-    """注册所有技能到全局注册表"""
-    from .skill_registry import registry
-    
-    skills = [
-        NmapScanSkill(),
-        WhatWebSkill(),
-        SQLInjectionSkill(),
-        RCESkill(),
-        PrivilegeEscalationSkill()
-    ]
-    
-    for skill in skills:
-        registry.register_skill(skill)
-    
-    return len(skills)
-
-# 初始化时自动注册技能
-try:
-    skills_registered = register_all_skills()
-    print(f"[SUCCESS] 已自动注册 {skills_registered} 个技能到全局注册表")
-except Exception as e:
-    print(f"[WARNING] 技能自动注册失败: {e}")
-

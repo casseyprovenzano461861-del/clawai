@@ -3,7 +3,7 @@
  * 提供统一的API调用接口，包含错误处理、认证头管理和数据转换
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8081';
 
 /**
  * API请求配置

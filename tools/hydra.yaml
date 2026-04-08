@@ -1,0 +1,94 @@
+name: "hydra"
+description: "Hydra是一个强大的密码破解工具，能够对多种协议进行暴力破解。"
+category: "password-cracking"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "tools/penetration/hydra-main/hydra"
+  # 基础参数
+  base_args: []
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标主机
+  target:
+    type: "string"
+    required: true
+    description: "目标主机"
+    flag: "-l"
+  # 用户名
+  username:
+    type: "string"
+    required: true
+    description: "用户名"
+    flag: "-u"
+  # 密码文件
+  password-file:
+    type: "string"
+    required: true
+    description: "密码字典文件路径"
+    flag: "-P"
+  # 端口
+  port:
+    type: "integer"
+    required: false
+    description: "目标端口"
+    flag: "-s"
+  # 协议
+  protocol:
+    type: "string"
+    required: true
+    description: "要攻击的协议 (ssh, ftp, http, https, smb, etc.)"
+    flag: "-t"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "-t"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "-q"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 成功标志
+  success_pattern: "login:"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+
+# 工具元数据
+metadata:
+  author: "THC (The Hacker's Choice)"
+  homepage: "https://github.com/vanhauser-thc/thc-hydra"
+  license: "GPL-3.0"
+  description: "Hydra是一个强大的密码破解工具，能够对多种协议进行暴力破解。"
+  tags:
+    - "password-cracking"
+    - "brute-force"
+    - "security"
+    - "penetration-testing"
+    - "hacking"

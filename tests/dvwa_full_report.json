@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "target": "http://127.0.0.1/dvwa",
+    "start_time": "2026-04-08T12:33:22.651891",
+    "end_time": "2026-04-08T12:33:23.864885",
+    "duration_seconds": 1.212994
+  },
+  "summary": {
+    "total_tests": 9,
+    "detected": 0,
+    "missed": 9,
+    "detection_rate": "0.0%",
+    "false_positive_rate": "0%"
+  },
+  "by_severity": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "cwe_coverage": [],
+  "findings": [
+    {
+      "name": "SQL Injection",
+      "type": "sql_injection",
+      "severity": "critical",
+      "cwe": "CWE-89",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "SQL Injection (Blind)",
+      "type": "sql_injection_blind",
+      "severity": "high",
+      "cwe": "CWE-89",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "XSS (Reflected)",
+      "type": "xss_reflected",
+      "severity": "medium",
+      "cwe": "CWE-79",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "XSS (Stored)",
+      "type": "xss_stored",
+      "severity": "high",
+      "cwe": "CWE-79",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "Command Injection",
+      "type": "command_injection",
+      "severity": "critical",
+      "cwe": "CWE-78",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "File Inclusion",
+      "type": "file_inclusion",
+      "severity": "high",
+      "cwe": "CWE-98",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "File Upload",
+      "type": "file_upload",
+      "severity": "critical",
+      "cwe": "CWE-434",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "CSRF",
+      "type": "csrf",
+      "severity": "medium",
+      "cwe": "CWE-352",
+      "detected": false,
+      "evidence": []
+    },
+    {
+      "name": "Brute Force",
+      "type": "brute_force",
+      "severity": "medium",
+      "cwe": "CWE-307",
+      "detected": false,
+      "evidence": []
+    }
+  ],
+  "attack_effectiveness": {
+    "auto_exploit_success": 0,
+    "manual_steps_needed": 9,
+    "effectiveness_rate": "0.0%"
+  }
+}

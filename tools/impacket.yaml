@@ -1,0 +1,86 @@
+name: "impacket"
+description: "Impacket是一个网络协议工具集，用于处理各种网络协议，如SMB、MSRPC、NetBIOS等。"
+category: "network"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: []
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 子命令
+  command:
+    type: "string"
+    required: true
+    description: "要执行的子命令 (psexec, smbclient, wmiexec, etc.)"
+    position: "positional"
+  # 目标主机
+  target:
+    type: "string"
+    required: true
+    description: "目标主机"
+    position: "positional"
+  # 用户名
+  username:
+    type: "string"
+    required: false
+    description: "用户名"
+    flag: "-u"
+  # 密码
+  password:
+    type: "string"
+    required: false
+    description: "密码"
+    flag: "-p"
+  # 域
+  domain:
+    type: "string"
+    required: false
+    description: "域"
+    flag: "-d"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 成功标志
+  success_pattern: "Completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "pyasn1"
+  - "pycryptodome"
+  - "six"
+
+# 工具元数据
+metadata:
+  author: "SecureAuth Corporation"
+  homepage: "https://github.com/SecureAuthCorp/impacket"
+  license: "Apache-2.0"
+  description: "Impacket是一个网络协议工具集，用于处理各种网络协议，如SMB、MSRPC、NetBIOS等。"
+  tags:
+    - "network"
+    - "smb"
+    - "msrpc"
+    - "netbios"
+    - "security"
+    - "penetration-testing"

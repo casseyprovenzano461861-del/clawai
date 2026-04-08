@@ -1,0 +1,88 @@
+name: "theharvester"
+description: "theHarvester是一个信息收集工具，用于收集目标域名的电子邮件、子域名、IP地址等信息。"
+category: "information-gathering"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/theHarvester/theHarvester.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标域名
+  domain:
+    type: "string"
+    required: true
+    description: "目标域名"
+    flag: "-d"
+  # 搜索引擎
+  source:
+    type: "string"
+    required: true
+    description: "搜索引擎 (bing, google, yahoo, baidu, etc.)"
+    flag: "-b"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "-f"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 限制结果数量
+  limit:
+    type: "integer"
+    required: false
+    description: "限制结果数量"
+    flag: "-l"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "-p"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 电子邮件模式
+  email_pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+  # 子域名模式
+  subdomain_pattern: '[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+  # 成功标志
+  success_pattern: "Results found"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+  - "beautifulsoup4"
+
+# 工具元数据
+metadata:
+  author: "Christian Martorella"
+  homepage: "https://github.com/laramies/theHarvester"
+  license: "GPL-2.0"
+  description: "theHarvester是一个信息收集工具，用于收集目标域名的电子邮件、子域名、IP地址等信息。"
+  tags:
+    - "information-gathering"
+    - "email"
+    - "subdomain"
+    - "security"
+    - "bug-bounty"

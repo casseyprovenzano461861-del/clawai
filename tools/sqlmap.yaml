@@ -1,0 +1,113 @@
+name: "sqlmap"
+command: "sqlmap"
+enabled: true
+short_description: "SQL注入检测和利用工具"
+description: |
+  SQLmap是一个自动化的SQL注入工具，用于检测和利用SQL注入漏洞。
+  它支持多种数据库系统，包括MySQL、PostgreSQL、Oracle、SQL Server等。
+
+  **默认行为：**
+  - 自动检测注入点
+  - 尝试获取数据库信息
+  - 支持多种注入技术
+
+  **注意事项：**
+  - 请确保有权限测试目标网站
+  - 某些测试可能会对目标系统造成影响
+  - 大型网站的扫描可能需要较长时间
+parameters:
+  - name: "url"
+    type: "string"
+    description: |
+      目标URL，包含可能的注入点。
+      示例：http://example.com/page.php?id=1
+    required: true
+    format: "flag"
+    flag: "-u"
+  - name: "param"
+    type: "string"
+    description: |
+      指定参数名进行测试。
+      示例：id
+    required: false
+    format: "flag"
+    flag: "-p"
+  - name: "dbms"
+    type: "string"
+    description: |
+      指定数据库类型。
+      示例：mysql, postgresql, oracle, mssql
+    required: false
+    format: "flag"
+    flag: "--dbms"
+  - name: "level"
+    type: "string"
+    description: |
+      测试级别 (1-5)，默认为1。
+      级别越高，测试越全面，但耗时越长。
+    required: false
+    format: "flag"
+    flag: "--level"
+  - name: "risk"
+    type: "string"
+    description: |
+      风险级别 (1-3)，默认为1。
+      级别越高，使用的测试技术越危险。
+    required: false
+    format: "flag"
+    flag: "--risk"
+  - name: "technique"
+    type: "string"
+    description: |
+      指定SQL注入技术。
+      可用技术：B(布尔盲注), E(错误注入), U(联合查询), S(堆叠查询), T(时间盲注), Q(内联查询)
+      示例：BEUST
+    required: false
+    format: "flag"
+    flag: "--technique"
+  - name: "dbs"
+    type: "bool"
+    description: |
+      枚举数据库名称。
+    required: false
+    format: "flag"
+    flag: "--dbs"
+    default: false
+  - name: "tables"
+    type: "bool"
+    description: |
+      枚举表名。
+    required: false
+    format: "flag"
+    flag: "--tables"
+    default: false
+  - name: "columns"
+    type: "bool"
+    description: |
+      枚举列名。
+    required: false
+    format: "flag"
+    flag: "--columns"
+    default: false
+  - name: "dump"
+    type: "bool"
+    description: |
+      转储数据。
+    required: false
+    format: "flag"
+    flag: "--dump"
+    default: false
+  - name: "batch"
+    type: "bool"
+    description: |
+      自动回答所有提示。
+    required: false
+    format: "flag"
+    flag: "--batch"
+    default: false
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外参数，按空格追加到命令末尾。
+    required: false
+    format: "positional"

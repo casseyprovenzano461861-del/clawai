@@ -26,8 +26,31 @@ from datetime import datetime
 
 # 添加模块路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from config import config
-from backend.tools.base_tool import BaseTool, ToolExecutionMode, ToolExecutionResult, ToolCategory, ToolPriority
+try:
+    from src.config import get_settings
+    config = get_settings()
+except ImportError:
+    # 降级到模拟配置
+    class MockConfig:
+        pass
+    config = MockConfig()
+try:
+    from src.shared.backend.tools.base_tool import BaseTool, ToolExecutionMode, ToolExecutionResult, ToolCategory, ToolPriority
+except ImportError:
+    # 降级到模拟基础工具类
+    class BaseTool:
+        pass
+    class ToolExecutionMode:
+        pass
+    class ToolExecutionResult:
+        pass
+    class ToolCategory:
+        pass
+    class ToolPriority:
+        CRITICAL = 1
+        HIGH = 2
+        MEDIUM = 3
+        LOW = 4
 
 # 配置日志
 logger = logging.getLogger(__name__)

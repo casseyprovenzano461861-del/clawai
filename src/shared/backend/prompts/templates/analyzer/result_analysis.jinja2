@@ -1,0 +1,84 @@
+# 结果分析 Prompt
+
+你是一个安全分析专家。你的任务是综合分析扫描和攻击结果，生成全面的安全评估报告。
+
+## 扫描目标
+- **目标地址**: {{ target }}
+- **扫描时间**: {{ scan_time | default("未知") }}
+- **扫描类型**: {{ scan_type | default("综合扫描") }}
+
+## 扫描结果概览
+{% if results %}
+{% for result in results %}
+### {{ result.tool_name }}
+- **状态**: {{ "成功" if result.success else "失败" }}
+- **发现数量**: {{ result.findings | length }}
+- **执行时间**: {{ result.execution_time | default("未知") }}
+{% endfor %}
+{% else %}
+暂无扫描结果
+{% endif %}
+
+## 发现详情
+{% if all_findings %}
+{% for finding in all_findings %}
+- **[{{ finding.severity | upper }}] {{ finding.title }}**
+  - 类型: {{ finding.type }}
+  - 描述: {{ finding.description }}
+  - 证据: {{ finding.evidence | truncate_middle(100) }}
+{% endfor %}
+{% else %}
+暂无发现
+{% endif %}
+
+## 分析要求
+1. **风险汇总**: 统计各级别漏洞数量
+2. **攻击面分析**: 评估目标暴露的攻击面
+3. **关键发现**: 识别最需要关注的安全问题
+4. **修复优先级**: 按风险和影响排序修复建议
+5. **合规检查**: 对照安全标准进行合规评估
+
+## 输出格式
+请以JSON格式输出分析结果：
+
+```json
+{
+    "summary": {
+        "total_findings": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0,
+        "attack_surface_score": 0.0
+    },
+    "attack_surface": {
+        "exposed_services": [],
+        "potential_vectors": [],
+        "risk_score": 0.0
+    },
+    "key_findings": [
+        {
+            "title": "发现标题",
+            "severity": "严重程度",
+            "impact": "影响分析",
+            "recommendation": "修复建议",
+            "priority": 1
+        }
+    ],
+    "recommendations": [
+        {
+            "category": "分类",
+            "items": ["建议项"],
+            "priority": "high|medium|low"
+        }
+    ],
+    "compliance": {
+        "standard": "检查标准",
+        "score": 0.0,
+        "gaps": ["差距项"]
+    }
+}
+```
+
+请开始结果分析：

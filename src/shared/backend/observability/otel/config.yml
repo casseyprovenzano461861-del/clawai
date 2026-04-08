@@ -1,0 +1,65 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'clawai'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['localhost:8000']
+  zipkin:
+    endpoint: 0.0.0.0:9411
+
+processors:
+  batch:
+  memory_limiter:
+    limit_mib: 4000
+    spike_limit_mib: 8000
+    check_interval: 5s
+
+  resourcedetection:
+    detectors:
+      - env
+      - system
+    timeout: 10s
+    override: false
+
+exporters:
+  otlp:
+    endpoint: "localhost:4317"
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: "0.0.0.0:9090"
+  logging:
+    loglevel: info
+  zipkin:
+    endpoint: "http://localhost:9411/api/v2/spans"
+    format: protobuf
+
+connectors:
+  spanmetrics:
+    metrics_flush_interval: 10s
+    dimensions:
+      - name: service.name
+      - name: operation.name
+      - name: status.code
+
+pipelines:
+  traces:
+    receivers: [otlp, zipkin]
+    processors: [batch, memory_limiter, resourcedetection]
+    exporters: [otlp, logging, spanmetrics]
+  metrics:
+    receivers: [otlp, prometheus, spanmetrics]
+    processors: [batch, memory_limiter, resourcedetection]
+    exporters: [otlp, prometheus, logging]
+  logs:
+    receivers: [otlp]
+    processors: [batch, memory_limiter, resourcedetection]
+    exporters: [logging]

@@ -1,0 +1,43 @@
+name: "nikto"
+command: "perl"
+args: ["./tools/penetration/nikto/program/nikto.pl"]
+enabled: true
+short_description: "Web服务器安全扫描工具"
+description: |
+  Nikto是一个Web服务器安全扫描工具，用于发现Web服务器上的常见安全问题和漏洞。
+
+  **主要功能：**
+  - 扫描Web服务器配置错误
+  - 检测过时的软件版本
+  - 发现常见的安全漏洞
+  - 检测恶意软件和后门
+  - 支持SSL扫描
+
+  **使用场景：**
+  - Web服务器安全评估
+  - 漏洞扫描
+  - 安全审计
+parameters:
+  - name: "target"
+    type: "string"
+    description: "目标URL或IP地址"
+    required: true
+    flag: "-h"
+    format: "flag"
+  - name: "port"
+    type: "string"
+    description: "目标端口"
+    required: false
+    flag: "-p"
+    format: "flag"
+  - name: "output"
+    type: "string"
+    description: "输出文件路径"
+    required: false
+    flag: "-o"
+    format: "flag"
+  - name: "additional_args"
+    type: "string"
+    description: "额外的nikto参数"
+    required: false
+    format: "positional"

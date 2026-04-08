@@ -1,0 +1,42 @@
+name: "subfinder"
+command: "subfinder"
+enabled: true
+short_description: "快速子域名发现工具"
+description: |
+  Subfinder是一个快速的子域名发现工具，用于枚举目标域名的子域名。
+
+  **主要功能：**
+  - 支持多种子域名发现技术
+  - 快速的并发扫描
+  - 支持多种数据源
+  - 可配置的输出格式
+
+  **使用场景：**
+  - 信息收集
+  - 域名枚举
+  - 安全测试
+parameters:
+  - name: "domain"
+    type: "string"
+    description: "目标域名"
+    required: true
+    flag: "-d"
+    format: "flag"
+  - name: "output"
+    type: "string"
+    description: "输出文件路径"
+    required: false
+    flag: "-o"
+    format: "flag"
+  - name: "silent"
+    type: "bool"
+    description: "静默模式，只输出子域名"
+    required: false
+    flag: "-silent"
+    format: "flag"
+    default: false
+  - name: "additional_args"
+    type: "string"
+    description: "额外的Subfinder参数"
+    required: false
+    format: "positional"

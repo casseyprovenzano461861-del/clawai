@@ -1,0 +1,110 @@
+{#
+  Reflector Template - 反思器模板
+  用于分析执行结果、提取经验教训
+#}
+
+作为渗透测试反思器，你的任务是分析执行结果，评估任务完成情况，并提供改进建议。
+
+## 执行结果
+
+**任务ID**: {{ task_id or 'unknown' }}
+**任务描述**: {{ task_description or '未知' }}
+**执行状态**: {{ execution_status or '未知' }}
+
+{% if execution_output %}
+## 执行输出
+```
+{{ execution_output }}
+```
+{% endif %}
+
+## 目标信息
+
+**目标地址**: {{ target or '未设置' }}
+**当前阶段**: {{ phase }}
+**迭代次数**: {{ iteration }}/{{ max_iterations }}
+
+{% if findings %}
+## 已发现信息 ({{ findings|length }}项)
+{% for finding in findings[:10] %}
+- {{ finding }}
+{% endfor %}
+{% endif %}
+
+{% if vulnerabilities %}
+## 已发现漏洞 ({{ vulnerabilities|length }}个)
+{% for vuln in vulnerabilities %}
+- **{{ vuln.type }}** ({{ vuln.severity }}): {{ vuln.location|default('未知位置') }}
+  {% if vuln.description %}{{ vuln.description }}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if compressed_history %}
+## 执行历史摘要
+{{ compressed_history }}
+{% endif %}
+
+## 分析框架
+
+### 1. 任务完成评估
+- 任务是否按预期完成？
+- 是否达到完成标准？
+- 有没有遗漏的信息？
+
+### 2. 结果分析
+- 执行结果中有什么关键发现？
+- 是否发现了潜在的安全问题？
+- 结果是否符合预期？
+
+### 3. 失败原因分析（如果失败）
+- 失败的根本原因是什么？
+- 是工具问题、参数问题还是目标问题？
+- 如何改进？
+
+### 4. 下一步建议
+- 根据当前结果，建议下一步做什么？
+- 是否需要重新规划？
+- 是否需要补充更多信息？
+
+## 输出要求
+
+请以 JSON 格式输出反思结果：
+
+```json
+{
+  "audit_result": {
+    "status": "goal_achieved|partial_success|failed|in_progress",
+    "completion_check": "完成情况描述",
+    "confidence": 0.0-1.0
+  },
+  "key_findings": [
+    "关键发现1",
+    "关键发现2"
+  ],
+  "patterns": {
+    "success_pattern": "成功模式（如果有）",
+    "failure_pattern": "失败模式（如果有）"
+  },
+  "insight": "本次执行的核心洞察",
+  "recommendations": [
+    "建议1",
+    "建议2"
+  ],
+  "next_actions": [
+    {
+      "action": "建议的下一步行动",
+      "priority": "high|medium|low",
+      "reason": "原因"
+    }
+  ]
+}
+```
+
+## 反思原则
+
+1. **客观性**：基于事实分析，不带主观偏见
+2. **建设性**：提供可操作的改进建议
+3. **系统性**：从多角度分析问题
+4. **学习性**：提取可复用的经验教训
+
+请分析执行结果并输出反思报告。

@@ -1,0 +1,112 @@
+name: "wpscan"
+description: "WPScan是一个专门用于WordPress安全扫描的工具，能够检测WordPress网站的漏洞和安全问题。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "ruby"
+  # 基础参数
+  base_args: ["tools/penetration/wpscan/bin/wpscan"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标WordPress网站的URL"
+    flag: "--url"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 枚举插件
+  enum-plugins:
+    type: "boolean"
+    required: false
+    description: "枚举插件"
+    flag: "--enumerate"
+    value: "p"
+  # 枚举主题
+  enum-themes:
+    type: "boolean"
+    required: false
+    description: "枚举主题"
+    flag: "--enumerate"
+    value: "t"
+  # 枚举用户
+  enum-users:
+    type: "boolean"
+    required: false
+    description: "枚举用户"
+    flag: "--enumerate"
+    value: "u"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "--threads"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "--quiet"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (json, cli, xml)"
+    flag: "--format"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[WARNING]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "ruby"
+  - "bundler"
+
+# 工具元数据
+metadata:
+  author: "WPScan Team"
+  homepage: "https://github.com/wpscanteam/wpscan"
+  license: "MIT"
+  description: "WPScan是一个专门用于WordPress安全扫描的工具，能够检测WordPress网站的漏洞和安全问题。"
+  tags:
+    - "wordpress"
+    - "scanning"
+    - "web-security"
+    - "vulnerability"
+    - "penetration-testing"

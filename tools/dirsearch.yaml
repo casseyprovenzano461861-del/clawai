@@ -1,0 +1,97 @@
+name: "dirsearch"
+description: "Dirsearch是一个高级Web路径扫描工具，用于发现Web服务器上的隐藏文件和目录。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/dirsearch/dirsearch.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标URL"
+    flag: "-u"
+  # 字典文件
+  wordlist:
+    type: "string"
+    required: false
+    description: "字典文件路径"
+    flag: "-w"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "-t"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 递归扫描
+  recursive:
+    type: "boolean"
+    required: false
+    description: "启用递归扫描"
+    flag: "-r"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (json, xml, plain, simple)"
+    flag: "--format"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "--output"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 发现文件模式
+  file_pattern: '[\d+]'
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+
+# 工具元数据
+metadata:
+  author: "Mauro Soria"
+  homepage: "https://github.com/maurosoria/dirsearch"
+  license: "MIT"
+  description: "Dirsearch是一个高级Web路径扫描工具，用于发现Web服务器上的隐藏文件和目录。"
+  tags:
+    - "web-scanning"
+    - "directory-enumeration"
+    - "security"
+    - "penetration-testing"
+    - "bug-bounty"

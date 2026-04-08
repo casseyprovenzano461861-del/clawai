@@ -1,0 +1,78 @@
+# 报告生成 Prompt
+
+你是一个安全报告撰写专家。请根据扫描结果生成专业的安全评估报告。
+
+## 报告信息
+- **报告标题**: {{ title | default("安全评估报告") }}
+- **目标范围**: {{ target }}
+- **评估时间**: {{ assessment_date | default("未指定") }}
+- **评估类型**: {{ assessment_type | default("综合安全评估") }}
+
+## 执行摘要
+{% if summary %}
+{{ summary | tojson }}
+{% endif %}
+
+## 漏洞详情
+{% if vulnerabilities %}
+{% for vuln in vulnerabilities %}
+### {{ loop.index }}. {{ vuln.name }} ({{ vuln.severity | upper }})
+
+**描述**: {{ vuln.description }}
+
+**影响分析**:
+- 机密性影响: {{ vuln.impact.confidentiality | default("未知") }}
+- 完整性影响: {{ vuln.impact.integrity | default("未知") }}
+- 可用性影响: {{ vuln.impact.availability | default("未知") }}
+
+**证据**:
+```
+{{ vuln.evidence | default("无证据") }}
+```
+
+**修复建议**:
+{% for rec in vuln.remediation %}
+- {{ rec }}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+本次评估未发现安全漏洞。
+{% endif %}
+
+## 风险统计
+{% if statistics %}
+- **Critical**: {{ statistics.critical | default(0) }}
+- **High**: {{ statistics.high | default(0) }}
+- **Medium**: {{ statistics.medium | default(0) }}
+- **Low**: {{ statistics.low | default(0) }}
+- **Info**: {{ statistics.info | default(0) }}
+{% endif %}
+
+## 报告要求
+1. 使用专业、客观的语言
+2. 按风险等级排序漏洞
+3. 提供清晰、可操作的修复建议
+4. 包含必要的背景说明
+
+## 输出格式
+请生成完整的报告，包含以下章节：
+
+# 安全评估报告
+
+## 1. 执行摘要
+[简要描述评估范围、主要发现和风险等级]
+
+## 2. 风险概览
+[提供漏洞数量统计和风险分布图表]
+
+## 3. 详细发现
+[逐一描述每个漏洞的详细信息]
+
+## 4. 修复建议
+[按优先级列出修复建议]
+
+## 5. 附录
+[包含技术细节、工具清单、参考资料]
+
+请开始生成报告：

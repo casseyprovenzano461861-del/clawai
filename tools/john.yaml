@@ -1,0 +1,82 @@
+name: "john"
+description: "John the Ripper是一个强大的密码破解工具，能够破解各种密码哈希。"
+category: "password-cracking"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "tools/penetration/john-bleeding-jumbo/john"
+  # 基础参数
+  base_args: []
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 密码文件
+  password-file:
+    type: "string"
+    required: true
+    description: "包含密码哈希的文件路径"
+    position: "positional"
+  # 格式
+  format:
+    type: "string"
+    required: false
+    description: "哈希格式"
+    flag: "--format"
+  # 字典文件
+  wordlist:
+    type: "string"
+    required: false
+    description: "字典文件路径"
+    flag: "--wordlist"
+  # 规则文件
+  rule-file:
+    type: "string"
+    required: false
+    description: "规则文件路径"
+    flag: "--rules"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "-q"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 成功标志
+  success_pattern: "Cracked"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "openssl"
+
+# 工具元数据
+metadata:
+  author: "Openwall Project"
+  homepage: "https://www.openwall.com/john/"
+  license: "GPL-2.0"
+  description: "John the Ripper是一个强大的密码破解工具，能够破解各种密码哈希。"
+  tags:
+    - "password-cracking"
+    - "hash"
+    - "security"
+    - "penetration-testing"
+    - "hacking"

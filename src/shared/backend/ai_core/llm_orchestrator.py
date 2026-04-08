@@ -23,8 +23,11 @@ import requests
 from functools import lru_cache
 
 # 添加模块路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from config import config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+from src.config import get_settings
+
+# 获取配置实例
+config = get_settings()
 
 
 class ModelType(Enum):
@@ -311,12 +314,12 @@ class LLMOrchestrator:
         # DeepSeek模型配置
         deepseek_config = ModelConfig(
             name="DeepSeek",
-            api_key=config.DEEPSEEK_API_KEY,
-            base_url=config.DEEPSEEK_BASE_URL,
-            model_name=config.DEEPSEEK_MODEL,
-            max_tokens=config.DEEPSEEK_MAX_TOKENS,
-            timeout=config.DEEPSEEK_TIMEOUT,
-            enabled=bool(config.DEEPSEEK_API_KEY),
+            api_key=config.llm_api_key,
+            base_url=config.llm_base_url or "https://api.deepseek.com",
+            model_name=config.llm_model or "deepseek-chat",
+            max_tokens=2000,
+            timeout=30,
+            enabled=bool(config.llm_api_key),
             priority=1
         )
         self.models[ModelType.DEEPSEEK] = DeepSeekModel(deepseek_config)

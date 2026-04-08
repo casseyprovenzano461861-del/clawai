@@ -48,9 +48,10 @@ class DatabaseManager:
             # 创建引擎
             self.engine = create_engine(
                 self.database_url,
-                pool_size=20,
-                max_overflow=10,
+                pool_size=30,
+                max_overflow=20,
                 pool_pre_ping=True,
+                pool_recycle=3600,  # 连接回收时间
                 echo=False  # 设置为True可以查看SQL语句
             )
             

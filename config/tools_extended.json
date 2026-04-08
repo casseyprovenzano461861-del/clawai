@@ -1,0 +1,753 @@
+{
+  "version": "2.0.0",
+  "description": "ClawAI 工具配置 - 借鉴 LuaN1aoAgent MCP 设计",
+  "tools": {
+    "http_request": {
+      "name": "http_request",
+      "category": "network",
+      "description": "专业HTTP请求工具，支持所有HTTP方法，自动会话管理",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "method": {
+          "type": "string",
+          "required": false,
+          "default": "GET",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+          "description": "HTTP方法"
+        },
+        "headers": {
+          "type": "object",
+          "required": false,
+          "description": "HTTP请求头"
+        },
+        "data": {
+          "type": ["string", "object"],
+          "required": false,
+          "description": "请求体数据"
+        },
+        "timeout": {
+          "type": "integer",
+          "required": false,
+          "default": 10,
+          "description": "超时时间(秒)"
+        },
+        "allow_redirects": {
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "是否允许重定向"
+        }
+      },
+      "return_type": "object",
+      "tags": ["network", "http", "web"]
+    },
+    "shell_exec": {
+      "name": "shell_exec",
+      "category": "execution",
+      "description": "Shell命令执行工具，支持任意系统命令",
+      "type": "builtin",
+      "enabled": true,
+      "dangerous": true,
+      "parameters": {
+        "command": {
+          "type": "string",
+          "required": true,
+          "description": "要执行的Shell命令"
+        },
+        "timeout": {
+          "type": "integer",
+          "required": false,
+          "default": 300,
+          "description": "超时时间(秒)"
+        },
+        "cwd": {
+          "type": "string",
+          "required": false,
+          "description": "工作目录"
+        }
+      },
+      "return_type": "object",
+      "tags": ["execution", "shell", "system"],
+      "security": {
+        "requires_confirmation": true,
+        "blocked_commands": ["rm -rf /", "mkfs", "dd if="],
+        "sandboxed": false
+      }
+    },
+    "python_exec": {
+      "name": "python_exec",
+      "category": "execution",
+      "description": "Python脚本执行工具，用于数据处理和自定义脚本",
+      "type": "builtin",
+      "enabled": true,
+      "dangerous": true,
+      "parameters": {
+        "script": {
+          "type": "string",
+          "required": true,
+          "description": "要执行的Python代码"
+        },
+        "timeout": {
+          "type": "integer",
+          "required": false,
+          "default": 60,
+          "description": "超时时间(秒)"
+        }
+      },
+      "return_type": "object",
+      "tags": ["execution", "python", "script"],
+      "security": {
+        "requires_confirmation": true,
+        "blocked_modules": ["os.system", "subprocess.call"],
+        "sandboxed": false
+      }
+    },
+    "think": {
+      "name": "think",
+      "category": "meta",
+      "description": "结构化思考与推理工具，用于深度分析问题",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "analysis": {
+          "type": "string",
+          "required": true,
+          "description": "对当前情况或上下文的简要分析"
+        },
+        "problem": {
+          "type": "string",
+          "required": true,
+          "description": "正在试图解决的具体问题"
+        },
+        "reasoning_steps": {
+          "type": "array",
+          "required": true,
+          "items": "string",
+          "description": "推理过程的步骤列表"
+        },
+        "conclusion": {
+          "type": "string",
+          "required": true,
+          "description": "基于推理得出的最终结论"
+        }
+      },
+      "return_type": "object",
+      "tags": ["meta", "reasoning", "analysis"]
+    },
+    "formulate_hypotheses": {
+      "name": "formulate_hypotheses",
+      "category": "meta",
+      "description": "假设生成工具，用于在陷入僵局时提出新的攻击可能性",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "hypotheses": {
+          "type": "array",
+          "required": true,
+          "description": "假设对象列表，每个包含description和confidence"
+        }
+      },
+      "return_type": "object",
+      "tags": ["meta", "hypothesis", "planning"]
+    },
+    "reflect_on_failure": {
+      "name": "reflect_on_failure",
+      "category": "meta",
+      "description": "失败反思工具，用于在动作失败后进行结构化的根因分析",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "failed_action": {
+          "type": "object",
+          "required": true,
+          "description": "执行失败的整个action对象"
+        },
+        "error_message": {
+          "type": "string",
+          "required": true,
+          "description": "工具返回的明确错误信息"
+        }
+      },
+      "return_type": "object",
+      "tags": ["meta", "reflection", "analysis"]
+    },
+    "complete_mission": {
+      "name": "complete_mission",
+      "category": "control",
+      "description": "任务完成信号工具，当100%确定目标已达成时调用",
+      "type": "builtin",
+      "enabled": true,
+      "priority": "high",
+      "parameters": {
+        "reason": {
+          "type": "string",
+          "required": true,
+          "description": "任务完成的详细理由说明"
+        },
+        "evidence": {
+          "type": "string",
+          "required": true,
+          "description": "关键证据"
+        }
+      },
+      "return_type": "object",
+      "tags": ["control", "mission", "completion"]
+    },
+    "halt_task": {
+      "name": "halt_task",
+      "category": "control",
+      "description": "任务终止工具，用于提前终止当前任务",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "reason": {
+          "type": "string",
+          "required": true,
+          "description": "终止原因"
+        }
+      },
+      "return_type": "object",
+      "tags": ["control", "halt", "terminate"]
+    },
+    "web_search": {
+      "name": "web_search",
+      "category": "intelligence",
+      "description": "网络搜索工具，用于查找漏洞利用、绕过技巧、CVE等",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "query": {
+          "type": "string",
+          "required": true,
+          "description": "搜索关键词"
+        },
+        "num_results": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "description": "返回结果数量"
+        }
+      },
+      "return_type": "object",
+      "tags": ["intelligence", "search", "osint"]
+    },
+    "retrieve_knowledge": {
+      "name": "retrieve_knowledge",
+      "category": "intelligence",
+      "description": "从知识库中检索相关信息",
+      "type": "builtin",
+      "enabled": true,
+      "parameters": {
+        "query": {
+          "type": "string",
+          "required": true,
+          "description": "查询问题或关键字"
+        },
+        "top_k": {
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "description": "返回结果数量"
+        }
+      },
+      "return_type": "object",
+      "tags": ["intelligence", "knowledge", "rag"]
+    },
+    "nmap": {
+      "name": "nmap",
+      "category": "reconnaissance",
+      "description": "网络端口扫描工具，用于发现开放端口和服务",
+      "type": "external",
+      "enabled": true,
+      "command": "nmap",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标IP或域名"
+        },
+        "ports": {
+          "type": "string",
+          "required": false,
+          "default": "1-1000",
+          "description": "端口范围"
+        },
+        "scan_type": {
+          "type": "string",
+          "required": false,
+          "default": "connect",
+          "enum": ["connect", "syn", "udp", "version"],
+          "description": "扫描类型"
+        },
+        "scripts": {
+          "type": "string",
+          "required": false,
+          "description": "Nmap脚本"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "network", "scanning"]
+    },
+    "sqlmap": {
+      "name": "sqlmap",
+      "category": "exploitation",
+      "description": "SQL注入检测和利用工具",
+      "type": "external",
+      "enabled": true,
+      "command": "python sqlmap.py",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "level": {
+          "type": "integer",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "max": 5,
+          "description": "测试级别"
+        },
+        "risk": {
+          "type": "integer",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "max": 3,
+          "description": "风险级别"
+        },
+        "tamper": {
+          "type": "string",
+          "required": false,
+          "description": "Tamper脚本"
+        },
+        "dbms": {
+          "type": "string",
+          "required": false,
+          "description": "指定数据库类型"
+        }
+      },
+      "return_type": "object",
+      "tags": ["exploitation", "sqli", "database"]
+    },
+    "nikto": {
+      "name": "nikto",
+      "category": "scanning",
+      "description": "Web服务器漏洞扫描工具",
+      "type": "external",
+      "enabled": true,
+      "command": "nikto",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL或IP"
+        },
+        "port": {
+          "type": "integer",
+          "required": false,
+          "description": "目标端口"
+        },
+        "ssl": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "是否使用SSL"
+        }
+      },
+      "return_type": "object",
+      "tags": ["scanning", "web", "vulnerability"]
+    },
+    "dirsearch": {
+      "name": "dirsearch",
+      "category": "reconnaissance",
+      "description": "Web目录扫描工具",
+      "type": "external",
+      "enabled": true,
+      "command": "python dirsearch.py",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "extensions": {
+          "type": "string",
+          "required": false,
+          "default": "php,html,js,txt",
+          "description": "文件扩展名"
+        },
+        "recursive": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "是否递归扫描"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "web", "directory"]
+    },
+    "whatweb": {
+      "name": "whatweb",
+      "category": "reconnaissance",
+      "description": "Web技术识别工具",
+      "type": "external",
+      "enabled": true,
+      "command": "whatweb",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "verbose": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "详细输出"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "web", "fingerprint"]
+    },
+    "gobuster": {
+      "name": "gobuster",
+      "category": "reconnaissance",
+      "description": "目录和子域名爆破工具",
+      "type": "external",
+      "enabled": true,
+      "command": "gobuster",
+      "parameters": {
+        "mode": {
+          "type": "string",
+          "required": true,
+          "enum": ["dir", "dns", "vhost"],
+          "description": "运行模式"
+        },
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL或域名"
+        },
+        "wordlist": {
+          "type": "string",
+          "required": true,
+          "description": "字典文件路径"
+        },
+        "threads": {
+          "type": "integer",
+          "required": false,
+          "default": 10,
+          "description": "线程数"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "brute-force", "enumeration"]
+    },
+    "nuclei": {
+      "name": "nuclei",
+      "category": "scanning",
+      "description": "基于模板的漏洞扫描工具",
+      "type": "external",
+      "enabled": true,
+      "command": "nuclei",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "templates": {
+          "type": "string",
+          "required": false,
+          "description": "模板目录或文件"
+        },
+        "severity": {
+          "type": "string",
+          "required": false,
+          "description": "最低严重级别过滤"
+        },
+        "tags": {
+          "type": "string",
+          "required": false,
+          "description": "模板标签过滤"
+        }
+      },
+      "return_type": "object",
+      "tags": ["scanning", "vulnerability", "templates"]
+    },
+    "xssstrike": {
+      "name": "xssstrike",
+      "category": "exploitation",
+      "description": "XSS漏洞检测工具",
+      "type": "external",
+      "enabled": true,
+      "command": "python xsstrike.py",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL"
+        },
+        "data": {
+          "type": "string",
+          "required": false,
+          "description": "POST数据"
+        },
+        "headers": {
+          "type": "object",
+          "required": false,
+          "description": "HTTP头"
+        }
+      },
+      "return_type": "object",
+      "tags": ["exploitation", "xss", "web"]
+    },
+    "hydra": {
+      "name": "hydra",
+      "category": "exploitation",
+      "description": "密码爆破工具",
+      "type": "external",
+      "enabled": true,
+      "dangerous": true,
+      "command": "hydra",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标IP或域名"
+        },
+        "service": {
+          "type": "string",
+          "required": true,
+          "description": "服务类型(ssh, ftp, http等)"
+        },
+        "user": {
+          "type": "string",
+          "required": false,
+          "description": "用户名或用户名字典"
+        },
+        "pass": {
+          "type": "string",
+          "required": false,
+          "description": "密码或密码字典"
+        }
+      },
+      "return_type": "object",
+      "tags": ["exploitation", "brute-force", "password"],
+      "security": {
+        "requires_confirmation": true
+      }
+    },
+    "john": {
+      "name": "john",
+      "category": "exploitation",
+      "description": "密码破解工具",
+      "type": "external",
+      "enabled": true,
+      "dangerous": true,
+      "command": "john",
+      "parameters": {
+        "hash_file": {
+          "type": "string",
+          "required": true,
+          "description": "哈希文件路径"
+        },
+        "wordlist": {
+          "type": "string",
+          "required": false,
+          "description": "字典文件"
+        },
+        "format": {
+          "type": "string",
+          "required": false,
+          "description": "哈希格式"
+        }
+      },
+      "return_type": "object",
+      "tags": ["exploitation", "cracking", "password"],
+      "security": {
+        "requires_confirmation": true
+      }
+    },
+    "metasploit": {
+      "name": "metasploit",
+      "category": "exploitation",
+      "description": "渗透测试框架",
+      "type": "external",
+      "enabled": true,
+      "dangerous": true,
+      "command": "msfconsole",
+      "parameters": {
+        "module": {
+          "type": "string",
+          "required": true,
+          "description": "Metasploit模块路径"
+        },
+        "options": {
+          "type": "object",
+          "required": false,
+          "description": "模块选项"
+        }
+      },
+      "return_type": "object",
+      "tags": ["exploitation", "framework", "payload"],
+      "security": {
+        "requires_confirmation": true,
+        "blocked": ["exploit/windows/local/ms16_075_reflection_juicy"]
+      }
+    },
+    "searchsploit": {
+      "name": "searchsploit",
+      "category": "intelligence",
+      "description": "漏洞利用数据库搜索工具",
+      "type": "external",
+      "enabled": true,
+      "command": "searchsploit",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "required": true,
+          "description": "搜索关键词"
+        },
+        "exact": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "精确匹配"
+        }
+      },
+      "return_type": "object",
+      "tags": ["intelligence", "exploit", "database"]
+    },
+    "masscan": {
+      "name": "masscan",
+      "category": "reconnaissance",
+      "description": "高速端口扫描工具",
+      "type": "external",
+      "enabled": true,
+      "command": "masscan",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": true,
+          "description": "目标IP范围"
+        },
+        "ports": {
+          "type": "string",
+          "required": true,
+          "description": "端口范围"
+        },
+        "rate": {
+          "type": "integer",
+          "required": false,
+          "default": 1000,
+          "description": "扫描速率"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "network", "fast"]
+    },
+    "amass": {
+      "name": "amass",
+      "category": "reconnaissance",
+      "description": "子域名枚举工具",
+      "type": "external",
+      "enabled": true,
+      "command": "amass",
+      "parameters": {
+        "domain": {
+          "type": "string",
+          "required": true,
+          "description": "目标域名"
+        },
+        "passive": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "被动模式"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "subdomain", "osint"]
+    },
+    "ffuf": {
+      "name": "ffuf",
+      "category": "reconnaissance",
+      "description": "Web Fuzzing工具",
+      "type": "external",
+      "enabled": true,
+      "command": "ffuf",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "目标URL(含FUZZ关键字)"
+        },
+        "wordlist": {
+          "type": "string",
+          "required": true,
+          "description": "字典文件路径"
+        },
+        "mode": {
+          "type": "string",
+          "required": false,
+          "default": "dir",
+          "enum": ["dir", "fuzz", "param", "vhost"],
+          "description": "Fuzzing模式"
+        }
+      },
+      "return_type": "object",
+      "tags": ["reconnaissance", "fuzzing", "web"]
+    }
+  },
+  "categories": {
+    "meta": {
+      "name": "元认知工具",
+      "description": "用于思考、推理、假设生成等高级认知任务",
+      "priority": 1
+    },
+    "control": {
+      "name": "控制工具",
+      "description": "用于任务控制和终止",
+      "priority": 2
+    },
+    "intelligence": {
+      "name": "情报收集",
+      "description": "用于信息收集和知识检索",
+      "priority": 3
+    },
+    "reconnaissance": {
+      "name": "侦察工具",
+      "description": "用于网络和Web侦察",
+      "priority": 4
+    },
+    "scanning": {
+      "name": "扫描工具",
+      "description": "用于漏洞和服务扫描",
+      "priority": 5
+    },
+    "exploitation": {
+      "name": "利用工具",
+      "description": "用于漏洞利用和攻击",
+      "priority": 6
+    },
+    "network": {
+      "name": "网络工具",
+      "description": "用于网络请求和探测",
+      "priority": 7
+    },
+    "execution": {
+      "name": "执行工具",
+      "description": "用于命令和脚本执行",
+      "priority": 8
+    }
+  }
+}

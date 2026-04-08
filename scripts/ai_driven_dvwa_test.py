@@ -14,13 +14,13 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入AI编排器
 try:
-    from backend.ai_core.honest_ai_orchestrator import HonestAIOrchestrator, AnalysisResult
-    from backend.ai_core.llm_orchestrator import LLMOrchestrator
-    from backend.tools.unified_executor_final import UnifiedExecutor
+    from src.shared.backend.ai_core.honest_ai_orchestrator import HonestAIOrchestrator, AnalysisResult
+    from src.shared.backend.ai_core.llm_orchestrator import LLMOrchestrator
+    from src.shared.backend.tools.unified_executor_final import UnifiedExecutor
     print("✅ AI编排器和工具执行器导入成功")
 except ImportError as e:
     print(f"❌ 导入失败: {e}")
@@ -131,7 +131,7 @@ class ToolExecutor:
     def __init__(self):
         self.executor = None
         try:
-            from backend.tools.unified_executor_final import UnifiedExecutor
+            from src.shared.backend.tools.unified_executor_final import UnifiedExecutor
             self.executor = UnifiedExecutor()
             print("✅ 统一工具执行器初始化成功")
         except:
@@ -664,10 +664,9 @@ def main():
     print("🤖 AI驱动的DVWA渗透测试系统")
     print("=" * 80)
     
-    # 获取目标URL
-    target_url = input("请输入DVWA靶场URL (默认: http://127.0.0.1/dvwa/): ").strip()
-    if not target_url:
-        target_url = "http://127.0.0.1/dvwa/"
+    # 使用默认的DVWA靶场URL
+    target_url = "http://127.0.0.1/dvwa/"
+    print(f"使用默认DVWA靶场URL: {target_url}")
     
     # 创建测试器
     tester = AIDrivenDWVATester(target_url)

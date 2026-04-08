@@ -1,0 +1,99 @@
+name: "droopescan"
+description: "droopescan是一个CMS扫描工具，专门用于检测Drupal、Joomla、WordPress等CMS系统的漏洞。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/droopescan/droopescan"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标URL"
+    flag: "-u"
+  # CMS类型
+  cms:
+    type: "string"
+    required: false
+    description: "指定CMS类型 (drupal, joomla, wordpress, moodle, silverstripe)"
+    flag: "-t"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (json, txt)"
+    flag: "-f"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "--threads"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "--quiet"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[WARNING]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+  - "beautifulsoup4"
+
+# 工具元数据
+metadata:
+  author: "thesp0nge"
+  homepage: "https://github.com/droope/droopescan"
+  license: "GPL-3.0"
+  description: "droopescan是一个CMS扫描工具，专门用于检测Drupal、Joomla、WordPress等CMS系统的漏洞。"
+  tags:
+    - "cms"
+    - "drupal"
+    - "joomla"
+    - "wordpress"
+    - "scanning"
+    - "vulnerability"

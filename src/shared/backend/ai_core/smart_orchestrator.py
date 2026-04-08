@@ -21,8 +21,11 @@ from datetime import datetime
 import uuid
 
 # 添加模块路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from config import config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+from src.config import get_settings
+
+# 获取配置实例
+config = get_settings()
 
 
 class TaskStatus(Enum):

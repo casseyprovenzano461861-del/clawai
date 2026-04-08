@@ -1,0 +1,80 @@
+{
+    "planner/attack_planning": {
+        "name": "attack_planning",
+        "template_path": "planner/attack_planning.jinja2",
+        "description": "攻击规划模板 - 用于制定渗透测试策略和攻击链",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["planner", "attack", "planning"],
+        "required_vars": ["target"]
+    },
+    "planner/system_prompt": {
+        "name": "planner_system",
+        "template_path": "planner/system_prompt.jinja2",
+        "description": "规划器系统提示 - 定义规划器的角色和行为规范",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["planner", "system", "prompt"]
+    },
+    "executor/tool_execution": {
+        "name": "tool_execution",
+        "template_path": "executor/tool_execution.jinja2",
+        "description": "工具执行模板 - 用于执行安全工具和分析结果",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["executor", "tool", "execution"],
+        "required_vars": ["tool_name", "target"]
+    },
+    "executor/system_prompt": {
+        "name": "executor_system",
+        "template_path": "executor/system_prompt.jinja2",
+        "description": "执行器系统提示 - 定义执行器的角色和行为规范",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["executor", "system", "prompt"]
+    },
+    "analyzer/vulnerability_verification": {
+        "name": "vulnerability_verification",
+        "template_path": "analyzer/vulnerability_verification.jinja2",
+        "description": "漏洞验证模板 - 用于验证漏洞的真实性和可利用性",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["analyzer", "vulnerability", "verification"],
+        "required_vars": ["vulnerability", "target"]
+    },
+    "analyzer/result_analysis": {
+        "name": "result_analysis",
+        "template_path": "analyzer/result_analysis.jinja2",
+        "description": "结果分析模板 - 用于综合分析扫描结果",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["analyzer", "result", "analysis"],
+        "required_vars": ["target"]
+    },
+    "reflector/system_prompt": {
+        "name": "reflector_system",
+        "template_path": "reflector/system_prompt.jinja2",
+        "description": "反思器系统提示 - 定义反思器的角色和审计规范",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["reflector", "system", "prompt"]
+    },
+    "reflector/reflection": {
+        "name": "reflection",
+        "template_path": "reflector/reflection.jinja2",
+        "description": "经验反思模板 - 用于复盘分析执行过程",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["reflector", "reflection", "analysis"],
+        "required_vars": ["target", "task_id"]
+    },
+    "report/generation": {
+        "name": "report_generation",
+        "template_path": "report/generation.jinja2",
+        "description": "报告生成模板 - 用于生成安全评估报告",
+        "version": "1.0.0",
+        "language": "zh",
+        "tags": ["report", "generation"],
+        "required_vars": ["target"]
+    }
+}

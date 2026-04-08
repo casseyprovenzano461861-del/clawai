@@ -1,0 +1,97 @@
+name: "rustscan"
+description: "RustScan是一个快速的端口扫描工具，使用Rust语言开发，能够在短时间内扫描大量端口。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "tools/penetration/RustScan-master/target/release/rustscan"
+  # 基础参数
+  base_args: []
+  # 超时设置（秒）
+  timeout: 120
+
+# 工具参数配置
+parameters:
+  # 目标IP地址
+  target:
+    type: "string"
+    required: true
+    description: "目标IP地址或IP范围"
+    position: "positional"
+  # 端口范围
+  ports:
+    type: "string"
+    required: false
+    description: "要扫描的端口范围，例如 1-1000"
+    flag: "-p"
+  # 扫描速度
+  speed:
+    type: "integer"
+    required: false
+    description: "扫描速度，1-5（默认为4）"
+    flag: "--speed"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (json, xml, nmap)"
+    flag: "--format"
+  # 只显示开放端口
+  only-open:
+    type: "boolean"
+    required: false
+    description: "只显示开放的端口"
+    flag: "--only-open"
+  # 扫描所有端口
+  all-ports:
+    type: "boolean"
+    required: false
+    description: "扫描所有65535个端口"
+    flag: "--all-ports"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 开放端口模式
+  open_port_pattern: 'Open \d+'
+  # 成功标志
+  success_pattern: "Finished"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "rust"
+  - "cargo"
+
+# 工具元数据
+metadata:
+  author: "RustScan Team"
+  homepage: "https://github.com/RustScan/RustScan"
+  license: "MIT"
+  description: "RustScan是一个快速的端口扫描工具，使用Rust语言开发，能够在短时间内扫描大量端口。"
+  tags:
+    - "port-scanning"
+    - "rust"
+    - "fast"
+    - "network"
+    - "security"

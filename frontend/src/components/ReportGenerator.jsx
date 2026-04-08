@@ -5,7 +5,7 @@ import {
   Database, Globe, Lock, Calendar, User, BarChart3,
   PieChart, TrendingUp, Filter, Settings, Copy,
   ChevronDown, ChevronRight, ExternalLink, BookOpen,
-  FileCode, FileJson, FilePdf, FileSpreadsheet,
+  FileCode, FileJson, FileSpreadsheet,
   RefreshCw, Save, Trash2, Star, History, Clock
 } from 'lucide-react';
 
@@ -196,7 +196,7 @@ const ReportGenerator = () => {
   // 导出格式选项
   const exportFormats = [
     { id: 'html', name: 'HTML', icon: <FileText className="w-4 h-4" />, description: '交互式网页报告' },
-    { id: 'pdf', name: 'PDF', icon: <FilePdf className="w-4 h-4" />, description: '可打印文档' },
+    { id: 'pdf', name: 'PDF', icon: <FileText className="w-4 h-4" />, description: '可打印文档' },
     { id: 'json', name: 'JSON', icon: <FileJson className="w-4 h-4" />, description: '结构化数据' },
     { id: 'csv', name: 'CSV', icon: <FileSpreadsheet className="w-4 h-4" />, description: '表格数据' }
   ];

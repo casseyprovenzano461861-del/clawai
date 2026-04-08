@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "target": "http://127.0.0.1/dvwa",
+    "test_time": "2026-04-08T12:31:11.237028",
+    "end_time": "2026-04-08T12:31:14.108608"
+  },
+  "summary": {
+    "total_known_vulnerabilities": 10,
+    "detected": 1,
+    "missed": 9,
+    "detection_rate": "10.0%",
+    "false_positive_rate": "0%"
+  },
+  "by_severity": {
+    "critical": 1,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "cwe_coverage": [
+    "CWE-89"
+  ],
+  "findings": [
+    {
+      "type": "sql_injection",
+      "name": "SQL Injection",
+      "severity": "critical",
+      "cwe": "CWE-89",
+      "location": "/vulnerabilities/sqli/",
+      "description": "SQL注入漏洞，可提取数据库数据",
+      "detected": true
+    },
+    {
+      "type": "sql_injection_blind",
+      "name": "SQL Injection (Blind)",
+      "severity": "high",
+      "cwe": "CWE-89",
+      "location": "/vulnerabilities/sqli_blind/",
+      "description": "盲注漏洞",
+      "detected": false
+    },
+    {
+      "type": "xss_reflected",
+      "name": "XSS (Reflected)",
+      "severity": "medium",
+      "cwe": "CWE-79",
+      "location": "/vulnerabilities/xss_r/",
+      "description": "反射型XSS",
+      "detected": false
+    },
+    {
+      "type": "xss_stored",
+      "name": "XSS (Stored)",
+      "severity": "high",
+      "cwe": "CWE-79",
+      "location": "/vulnerabilities/xss_s/",
+      "description": "存储型XSS",
+      "detected": false
+    },
+    {
+      "type": "command_injection",
+      "name": "Command Injection",
+      "severity": "critical",
+      "cwe": "CWE-78",
+      "location": "/vulnerabilities/exec/",
+      "description": "操作系统命令注入",
+      "detected": false
+    },
+    {
+      "type": "file_inclusion",
+      "name": "File Inclusion (LFI/RFI)",
+      "severity": "high",
+      "cwe": "CWE-98",
+      "location": "/vulnerabilities/fi/",
+      "description": "文件包含漏洞",
+      "detected": false
+    },
+    {
+      "type": "file_upload",
+      "name": "File Upload",
+      "severity": "critical",
+      "cwe": "CWE-434",
+      "location": "/vulnerabilities/upload/",
+      "description": "任意文件上传",
+      "detected": false
+    },
+    {
+      "type": "csrf",
+      "name": "CSRF",
+      "severity": "medium",
+      "cwe": "CWE-352",
+      "location": "/vulnerabilities/csrf/",
+      "description": "跨站请求伪造",
+      "detected": false
+    },
+    {
+      "type": "brute_force",
+      "name": "Brute Force",
+      "severity": "medium",
+      "cwe": "CWE-307",
+      "location": "/vulnerabilities/brute/",
+      "description": "暴力破解",
+      "detected": false
+    },
+    {
+      "type": "weak_session",
+      "name": "Weak Session IDs",
+      "severity": "low",
+      "cwe": "CWE-613",
+      "location": "/vulnerabilities/weak_id/",
+      "description": "弱会话ID",
+      "detected": false
+    }
+  ],
+  "attack_effectiveness": {
+    "auto_exploit_success": 1,
+    "manual_steps_needed": 9,
+    "effectiveness_rate": "10.0%"
+  }
+}

@@ -1,0 +1,98 @@
+name: "dnsrecon"
+description: "dnsrecon是一个DNS枚举和扫描工具，用于发现DNS服务器的信息和漏洞。"
+category: "information-gathering"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/dnsrecon/dnsrecon.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标域名
+  domain:
+    type: "string"
+    required: true
+    description: "目标域名"
+    flag: "-d"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "-o"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "-t"
+  # 枚举类型
+  enum:
+    type: "string"
+    required: false
+    description: "枚举类型 (axfr, brt, srv, zonewalk, etc.)"
+    flag: "-t"
+  # 字典文件
+  wordlist:
+    type: "string"
+    required: false
+    description: "暴力破解使用的字典文件"
+    flag: "-D"
+  # 名称服务器
+  nameserver:
+    type: "string"
+    required: false
+    description: "使用指定的名称服务器"
+    flag: "-n"
+  # 反向查询
+  reverse:
+    type: "boolean"
+    required: false
+    description: "执行反向DNS查询"
+    flag: "-r"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 子域名模式
+  subdomain_pattern: '[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "dnspython"
+  - "requests"
+
+# 工具元数据
+metadata:
+  author: "Carlos Perez"
+  homepage: "https://github.com/darkoperator/dnsrecon"
+  license: "GPL-2.0"
+  description: "dnsrecon是一个DNS枚举和扫描工具，用于发现DNS服务器的信息和漏洞。"
+  tags:
+    - "dns"
+    - "enumeration"
+    - "information-gathering"
+    - "security"
+    - "network"

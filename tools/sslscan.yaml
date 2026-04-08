@@ -1,0 +1,90 @@
+name: "sslscan"
+description: "sslscan是一个用于测试SSL/TLS配置安全性的工具，能够检测SSL/TLS证书和配置的安全问题。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "tools/penetration/sslscan-master/sslscan"
+  # 基础参数
+  base_args: []
+  # 超时设置（秒）
+  timeout: 120
+
+# 工具参数配置
+parameters:
+  # 目标主机和端口
+  target:
+    type: "string"
+    required: true
+    description: "目标主机和端口，例如 example.com:443"
+    position: "positional"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 无颜色输出
+  no-color:
+    type: "boolean"
+    required: false
+    description: "禁用颜色输出"
+    flag: "--no-colour"
+  # 输出格式
+  format:
+    type: "string"
+    required: false
+    description: "输出格式 (text, xml, json)"
+    flag: "--format"
+  # 扫描所有端口
+  all-ports:
+    type: "boolean"
+    required: false
+    description: "扫描所有端口"
+    flag: "--all"
+  # 扫描速度
+  speed:
+    type: "integer"
+    required: false
+    description: "扫描速度，1-5（默认为4）"
+    flag: "--speed"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[WARNING]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Done"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "openssl"
+
+# 工具元数据
+metadata:
+  author: "Rapid7"
+  homepage: "https://github.com/rbsec/sslscan"
+  license: "GPL-3.0"
+  description: "sslscan是一个用于测试SSL/TLS配置安全性的工具，能够检测SSL/TLS证书和配置的安全问题。"
+  tags:
+    - "ssl"
+    - "tls"
+    - "scanning"
+    - "security"
+    - "penetration-testing"

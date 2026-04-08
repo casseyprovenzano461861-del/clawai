@@ -1,0 +1,110 @@
+name: "commix"
+description: "Commix是一个自动化的命令注入漏洞检测工具，能够发现和利用命令注入漏洞。"
+category: "scanning"
+required: false
+version: "0.1"
+
+# 执行命令配置
+execution:
+  # 可执行文件路径
+  executable: "python"
+  # 基础参数
+  base_args: ["tools/penetration/commix/commix.py"]
+  # 超时设置（秒）
+  timeout: 300
+
+# 工具参数配置
+parameters:
+  # 目标URL
+  url:
+    type: "string"
+    required: true
+    description: "目标URL"
+    flag: "-u"
+  # 表单模式
+  form:
+    type: "boolean"
+    required: false
+    description: "检测表单中的命令注入漏洞"
+    flag: "--forms"
+  # 详细模式
+  verbose:
+    type: "boolean"
+    required: false
+    description: "启用详细输出"
+    flag: "-v"
+  # 代理设置
+  proxy:
+    type: "string"
+    required: false
+    description: "使用代理服务器"
+    flag: "--proxy"
+  # 线程数
+  threads:
+    type: "integer"
+    required: false
+    description: "线程数"
+    flag: "--threads"
+  # 无交互模式
+  silent:
+    type: "boolean"
+    required: false
+    description: "无交互模式"
+    flag: "--silent"
+  # 输出文件
+  output:
+    type: "string"
+    required: false
+    description: "输出文件路径"
+    flag: "--output-dir"
+  # 测试参数
+  param:
+    type: "string"
+    required: false
+    description: "要测试的参数"
+    flag: "--param"
+  # cookie设置
+  cookie:
+    type: "string"
+    required: false
+    description: "Cookie值"
+    flag: "--cookie"
+
+# 结果解析配置
+result_parsing:
+  # 结果格式
+  format: "text"
+  # 漏洞模式
+  vulnerability_patterns:
+    - pattern: '[VULNERABLE]'
+      severity: "high"
+    - pattern: '[POTENTIAL]'
+      severity: "medium"
+    - pattern: '[INFO]'
+      severity: "low"
+  # 成功标志
+  success_pattern: "Scan completed"
+  # 错误标志
+  error_patterns:
+    - "Error"
+    - "Failed"
+    - "Connection refused"
+
+# 工具依赖
+requirements:
+  - "python3"
+  - "requests"
+  - "lxml"
+
+# 工具元数据
+metadata:
+  author: "Stavros Giannopoulos"
+  homepage: "https://github.com/commixproject/commix"
+  license: "GPL-3.0"
+  description: "Commix是一个自动化的命令注入漏洞检测工具，能够发现和利用命令注入漏洞。"
+  tags:
+    - "command-injection"
+    - "scanning"
+    - "web-security"
+    - "vulnerability"
+    - "penetration-testing"
