@@ -16,6 +16,27 @@ import os
 # 添加路径以便导入现有模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
+try:
+    from .prompts import (
+        get_reflector_system_prompt,
+        get_reflector_analysis_prompt,
+        get_reflector_intelligence_prompt,
+    )
+except ImportError:
+    from prompts import (
+        get_reflector_system_prompt,
+        get_reflector_analysis_prompt,
+        get_reflector_intelligence_prompt,
+    )
+
+try:
+    from ..events import EventBus
+except ImportError:
+    try:
+        from events import EventBus
+    except ImportError:
+        EventBus = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,13 +77,15 @@ class PERReflector:
     5. 维护反思历史，支持模式识别
     """
     
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, use_llm: bool = True):
         """初始化反思器
         
         Args:
             llm_client: LLM客户端实例（可选）
+            use_llm: 是否使用LLM进行反思（默认True）
         """
         self.llm_client = llm_client
+        self.use_llm = use_llm and llm_client is not None
         
         # 反思历史
         self.reflection_log: List[ReflectionInsight] = []
@@ -80,8 +103,111 @@ class PERReflector:
         # 需要压缩标志
         self._needs_compression: bool = False
         
-        logger.info("PERReflector初始化完成")
+        # 初始化LLM集成
+        self._init_llm_integration()
+        
+        logger.info(f"PERReflector初始化完成 (use_llm={self.use_llm})")
     
+    def _init_llm_integration(self):
+        """初始化LLM集成"""
+        if self.use_llm:
+            try:
+                from .llm_integration import create_llm_integration
+                self.llm_integration = create_llm_integration(llm_client=self.llm_client)
+                logger.info("LLM集成初始化成功")
+            except Exception as e:
+                logger.warning(f"LLM集成初始化失败: {e}，将使用回退模式")
+                self.use_llm = False
+                self.llm_integration = None
+        else:
+            self.llm_integration = None
+    
+    # ------------------------------------------------------------------
+    # 硬规则层：在 LLM 分析之前优先执行，确保关键场景稳定决策
+    # ------------------------------------------------------------------
+
+    def _apply_hard_rules(self, execution_result: Dict[str, Any]) -> Optional[str]:
+        """硬规则快速判断，返回 hard_status 字符串，None 表示交给 LLM/规则分析。
+
+        规则优先级（从高到低）：
+        1. 工具执行失败             → "tool_failed"
+        2. 发现漏洞（vuln_found）   → "vuln_found"
+        3. 无新发现                 → "no_new_finding"
+        4. 其他（有发现但未确认）   → None（继续常规分析）
+        """
+        success = execution_result.get("success", False)
+
+        # 规则1：工具失败
+        if not success:
+            return "tool_failed"
+
+        # 规则2：发现可疑漏洞（Skill 或工具已标记）
+        if execution_result.get("vulnerable") or execution_result.get("vulnerabilities"):
+            return "vuln_found"
+
+        # 规则3：无任何新发现（findings 为空且没有有效输出）
+        findings = execution_result.get("findings", [])
+        output = execution_result.get("output", "")
+        has_output = bool(output and len(str(output).strip()) > 20)
+        if not findings and not has_output:
+            return "no_new_finding"
+
+        return None
+
+    def _build_hard_rule_report(
+        self,
+        subtask_id: str,
+        hard_status: str,
+        execution_result: Dict[str, Any],
+        subtask_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """根据硬规则状态构建反思报告"""
+        task_type = execution_result.get("task_type", "unknown")
+        description = subtask_data.get("description", "")
+
+        if hard_status == "tool_failed":
+            error = execution_result.get("error", "未知错误")
+            audit_status = "failed"
+            insight = f"工具执行失败: {error}。建议切换同类别备选工具或调整参数。"
+            recommendations = ["切换备选工具", "检查工具安装状态", "调整超时/权限参数"]
+            # 携带 hard_action 让 Planner 知道该做什么
+            hard_action = "switch_tool"
+
+        elif hard_status == "vuln_found":
+            vuln_list = execution_result.get("vulnerabilities", [])
+            vuln_info = vuln_list[0] if vuln_list else execution_result
+            vuln_type = vuln_info.get("type", "unknown") if isinstance(vuln_info, dict) else "unknown"
+            audit_status = "partial_success"
+            insight = f"发现疑似漏洞（{vuln_type}），需要二次验证确认是否真实成立。"
+            recommendations = ["触发验证任务", "保存 payload 和响应作为证据"]
+            hard_action = "trigger_validation"
+
+        else:  # no_new_finding
+            audit_status = "partial_success"
+            insight = "本轮扫描无新发现，自动变换 Payload 变体后重试。"
+            recommendations = ["使用 PayloadMutator 生成变体", "尝试不同参数组合"]
+            hard_action = "mutate_payload"
+
+        return {
+            "subtask_id": subtask_id,
+            "description": description,
+            "audit_result": {
+                "status": audit_status,
+                "completion_check": insight,
+                "confidence": 0.85,
+                "recommendations": recommendations,
+            },
+            "key_findings": execution_result.get("findings", []),
+            "patterns": {"hard_rule_triggered": hard_status},
+            "insight": insight,
+            "hard_action": hard_action,
+            "hard_status": hard_status,
+            "timestamp": datetime.now().isoformat(),
+            "execution_summary": self._summarize_execution(execution_result),
+            "llm_analysis": False,
+            "hard_rule": True,
+        }
+
     def analyze_execution_result(self,
                                 subtask_id: str,
                                 execution_result: Dict[str, Any],
@@ -97,7 +223,146 @@ class PERReflector:
             Dict[str, Any]: 反思结果
         """
         logger.info(f"分析执行结果: {subtask_id}")
+
+        _bus = EventBus.get() if EventBus else None
+
+        # ---- 硬规则优先判断 ----
+        hard_status = self._apply_hard_rules(execution_result)
+        if hard_status is not None:
+            report = self._build_hard_rule_report(subtask_id, hard_status, execution_result, subtask_data)
+            logger.info(f"[硬规则] {subtask_id}: {hard_status} -> hard_action={report.get('hard_action')}")
+            if _bus:
+                _bus.emit_message(f"[硬规则] {subtask_id}: {report['insight']}", msg_type="warning")
+            # 记录反思
+            self.reflection_log.append(ReflectionInsight(
+                timestamp=report["timestamp"],
+                subtask_id=subtask_id,
+                normalized_status=report["audit_result"]["status"],
+                key_insight=report["insight"],
+                failure_pattern=hard_status if hard_status == "tool_failed" else None,
+                full_reflection_report=report,
+            ))
+            return report
+
+        # 如果使用LLM，尝试智能分析
+        if self.use_llm and self.llm_integration:
+            try:
+                reflection_report = self._analyze_with_llm(subtask_id, execution_result, subtask_data)
+                if reflection_report:
+                    logger.info(f"LLM反思完成: {subtask_id}")
+                    if _bus:
+                        insight = reflection_report.get("key_insight", "")
+                        status = reflection_report.get("normalized_status", "")
+                        msg_type = "success" if "success" in status.lower() else "warning"
+                        _bus.emit_message(f"[反思] {subtask_id}: {insight}", msg_type=msg_type)
+                    return reflection_report
+            except Exception as e:
+                logger.warning(f"LLM反思失败: {e}，使用回退模式")
         
+        # 回退到基于规则的分析
+        report = self._analyze_with_rules(subtask_id, execution_result, subtask_data)
+        if _bus:
+            insight = report.get("key_insight", "")
+            _bus.emit_message(f"[反思] {subtask_id}: {insight}", msg_type="info")
+        return report
+    
+    def _analyze_with_llm(self, subtask_id: str, execution_result: Dict[str, Any],
+                          subtask_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """使用LLM分析执行结果
+        
+        Args:
+            subtask_id: 子任务ID
+            execution_result: 执行结果
+            subtask_data: 子任务数据
+            
+        Returns:
+            Optional[Dict[str, Any]]: 反思报告
+        """
+        
+        # 使用优化后的提示词
+        system_prompt = get_reflector_system_prompt()
+
+        user_prompt = get_reflector_analysis_prompt(
+            subtask_id=subtask_id,
+            description=subtask_data.get('description', 'N/A'),
+            mission_briefing=subtask_data.get('mission_briefing', 'N/A'),
+            completion_criteria=subtask_data.get('completion_criteria', 'N/A'),
+            execution_result=json.dumps(execution_result, ensure_ascii=False, indent=2),
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # 直接同步调用 LLM
+        try:
+            from ..llm_integration import TaskType as _TT
+            _task_type = _TT.REFLECTION if _TT else None
+        except Exception:
+            _task_type = None
+        response = self.llm_integration.call_llm(messages, temperature=0.5, max_tokens=4096, task_type=_task_type)
+        
+        if not response.success:
+            logger.warning(f"LLM调用失败: {response.error}")
+            return None
+        
+        # 解析JSON响应
+        parsed = self.llm_integration.parse_json_response(response.content)
+        
+        if "parse_error" in parsed:
+            logger.warning(f"LLM响应解析失败: {response.content[:200]}")
+            return None
+        
+        # 构建完整的反思报告
+        reflection_report = {
+            "subtask_id": subtask_id,
+            "description": subtask_data.get("description", ""),
+            "audit_result": parsed.get("audit_result", {}),
+            "key_findings": parsed.get("key_findings", []),
+            "patterns": parsed.get("patterns", {}),
+            "insight": parsed.get("insight", ""),
+            "timestamp": datetime.now().isoformat(),
+            "execution_summary": self._summarize_execution(execution_result),
+            "llm_analysis": True
+        }
+        
+        # 记录反思
+        audit_result = parsed.get("audit_result", {})
+        reflection_insight = ReflectionInsight(
+            timestamp=datetime.now().isoformat(),
+            subtask_id=subtask_id,
+            normalized_status=audit_result.get("status", "unknown"),
+            key_insight=parsed.get("insight", ""),
+            failure_pattern=parsed.get("patterns", {}).get("failure_pattern"),
+            full_reflection_report=reflection_report,
+            llm_reflection_prompt=user_prompt,
+            llm_reflection_response=response.content
+        )
+        
+        self.reflection_log.append(reflection_insight)
+        
+        # 更新模式库
+        self._update_pattern_libraries(parsed.get("patterns", {}), audit_result)
+        
+        # 检查是否需要压缩
+        if len(self.reflection_log) > 15:
+            self._needs_compression = True
+        
+        return reflection_report
+    
+    def _analyze_with_rules(self, subtask_id: str, execution_result: Dict[str, Any],
+                            subtask_data: Dict[str, Any]) -> Dict[str, Any]:
+        """使用规则分析执行结果（回退模式）
+        
+        Args:
+            subtask_id: 子任务ID
+            execution_result: 执行结果
+            subtask_data: 子任务数据
+            
+        Returns:
+            Dict[str, Any]: 反思报告
+        """
         # 1. 提取基本信息
         description = subtask_data.get("description", "")
         mission_briefing = subtask_data.get("mission_briefing", "")
@@ -134,7 +399,8 @@ class PERReflector:
             "patterns": patterns,
             "insight": insight,
             "timestamp": datetime.now().isoformat(),
-            "execution_summary": self._summarize_execution(execution_result)
+            "execution_summary": self._summarize_execution(execution_result),
+            "llm_analysis": False
         }
         
         # 7. 记录反思
@@ -153,7 +419,7 @@ class PERReflector:
         self._update_pattern_libraries(patterns, audit_result)
         
         # 9. 检查是否需要压缩
-        if len(self.reflection_log) > 15:  # 历史窗口大小
+        if len(self.reflection_log) > 15:
             self._needs_compression = True
         
         logger.debug(f"反思完成: {subtask_id} - 状态: {audit_result.status}")
@@ -312,17 +578,16 @@ class PERReflector:
         
         if task_type == "reconnaissance":
             recon_findings = execution_result.get("findings", [])
-            for finding in recon_findings[:5]:  # 最多取5个关键发现
+            for finding in recon_findings[:5]:
                 if isinstance(finding, str):
                     findings.append(f"侦察发现: {finding}")
                 elif isinstance(finding, dict):
-                    # 尝试从字典中提取文本
                     text = finding.get("description") or finding.get("text") or str(finding)
                     findings.append(f"侦察发现: {text}")
         
         elif task_type == "vulnerability_scan":
             vulnerabilities = execution_result.get("vulnerabilities", [])
-            for vuln in vulnerabilities[:3]:  # 最多取3个关键漏洞
+            for vuln in vulnerabilities[:3]:
                 if isinstance(vuln, dict):
                     vuln_type = vuln.get("type", "未知漏洞")
                     severity = vuln.get("severity", "未知严重性")
@@ -508,9 +773,13 @@ class PERReflector:
         
         Args:
             patterns: 识别到的模式
-            audit_result: 审计结果
+            audit_result: 审计结果（AuditResult 对象或 dict）
         """
-        status = audit_result.status
+        # 兼容 AuditResult 对象和 dict 两种类型
+        if isinstance(audit_result, dict):
+            status = audit_result.get("status", "unknown")
+        else:
+            status = audit_result.status
         
         # 更新失败模式库
         failure_pattern = patterns.get("failure_pattern")
@@ -555,10 +824,96 @@ class PERReflector:
         if recent_reflections is None:
             # 使用最近的反思记录
             recent_reflections = []
-            for insight in self.reflection_log[-10:]:  # 最近10个
+            for insight in self.reflection_log[-10:]:
                 if insight.full_reflection_report:
                     recent_reflections.append(insight.full_reflection_report)
         
+        # 如果使用LLM且有足够的反思记录，尝试智能汇总
+        if self.use_llm and self.llm_integration and len(recent_reflections) >= 2:
+            try:
+                summary = self._generate_intelligence_with_llm(recent_reflections)
+                if summary:
+                    return summary
+            except Exception as e:
+                logger.warning(f"LLM情报汇总失败: {e}，使用回退模式")
+        
+        # 回退到基于规则的汇总
+        return self._generate_intelligence_with_rules(recent_reflections)
+    
+    def _generate_intelligence_with_llm(self, recent_reflections: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """使用LLM生成情报摘要
+        
+        Args:
+            recent_reflections: 最近的反思结果
+            
+        Returns:
+            Optional[Dict[str, Any]]: 情报摘要
+        """
+        # 简化反思数据以避免 token 过多
+        simplified_reflections = []
+        for r in recent_reflections[-5:]:  # 只取最近5个
+            simplified_reflections.append({
+                "subtask_id": r.get("subtask_id"),
+                "status": r.get("audit_result", {}).get("status"),
+                "key_findings": r.get("key_findings", [])[:3],
+                "insight": r.get("insight", "")[:200]
+            })
+
+        # 使用优化后的提示词
+        system_prompt = get_reflector_system_prompt()
+
+        user_prompt = get_reflector_intelligence_prompt(
+            recent_reflections=json.dumps(simplified_reflections, ensure_ascii=False, indent=2),
+            failure_patterns=json.dumps({k: v['count'] for k, v in self.failure_patterns.items()}, ensure_ascii=False),
+            success_patterns=json.dumps({k: v['count'] for k, v in self.success_patterns.items()}, ensure_ascii=False),
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # 直接同步调用 LLM
+        response = self.llm_integration.call_llm(messages, temperature=0.5, max_tokens=4096)
+        
+        if not response.success:
+            return None
+        
+        # 解析JSON响应
+        parsed = self.llm_integration.parse_json_response(response.content)
+        
+        if "parse_error" in parsed:
+            return None
+        
+        # 构建完整的情报摘要
+        intelligence_summary = {
+            "findings": parsed.get("findings", []),
+            "audit_result": parsed.get("audit_result", {
+                "status": "AGGREGATED",
+                "completion_check": "汇总多个任务的审计结果",
+                "confidence": 0.6
+            }),
+            "patterns_summary": parsed.get("patterns_summary", {
+                "failure_patterns": {k: v["count"] for k, v in self.failure_patterns.items()},
+                "success_patterns": {k: v["count"] for k, v in self.success_patterns.items()}
+            }),
+            "strategic_recommendations": parsed.get("strategic_recommendations", []),
+            "reflection_count": len(recent_reflections),
+            "timestamp": datetime.now().isoformat(),
+            "llm_summary": True
+        }
+        
+        return intelligence_summary
+    
+    def _generate_intelligence_with_rules(self, recent_reflections: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """使用规则生成情报摘要（回退模式）
+        
+        Args:
+            recent_reflections: 最近的反思结果
+            
+        Returns:
+            Dict[str, Any]: 情报摘要
+        """
         # 汇总关键发现
         all_findings = []
         for reflection in recent_reflections:
@@ -577,8 +932,25 @@ class PERReflector:
                 break
         
         # 构建情报摘要
+        # 聚合硬规则触发的 pending actions
+        pending_validations = []
+        payload_mutations = []
+        tool_failures = []
+        for reflection in recent_reflections:
+            hard_action = reflection.get("hard_action")
+            if hard_action == "trigger_validation":
+                ex_summary = reflection.get("execution_summary", {})
+                pending_validations.append({
+                    "subtask_id": reflection.get("subtask_id"),
+                    "vuln_info": ex_summary.get("vulnerabilities", reflection.get("key_findings", [])),
+                })
+            elif hard_action == "mutate_payload":
+                payload_mutations.append(reflection.get("subtask_id"))
+            elif hard_action == "switch_tool":
+                tool_failures.append(reflection.get("subtask_id"))
+
         intelligence_summary = {
-            "findings": all_findings[:20],  # 最多20个发现
+            "findings": all_findings[:20],
             "audit_result": {
                 "status": "goal_achieved" if goal_achieved else "AGGREGATED",
                 "completion_check": completion_check,
@@ -588,8 +960,14 @@ class PERReflector:
                 "failure_patterns": {k: v["count"] for k, v in self.failure_patterns.items()},
                 "success_patterns": {k: v["count"] for k, v in self.success_patterns.items()}
             },
+            "strategic_recommendations": [],
             "reflection_count": len(recent_reflections),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "llm_summary": False,
+            # 硬规则聚合信息，供 Planner.dynamic_replan() 使用
+            "pending_validations": pending_validations,
+            "payload_mutations": payload_mutations,
+            "tool_failures": tool_failures,
         }
         
         return intelligence_summary
@@ -617,15 +995,22 @@ class PERReflector:
                 "insight": insight.key_insight[:100] + "..." if len(insight.key_insight) > 100 else insight.key_insight
             })
         
-        return {
+        summary = {
             "total_reflections": total_reflections,
             "status_distribution": status_counts,
             "failure_patterns_count": len(self.failure_patterns),
             "success_patterns_count": len(self.success_patterns),
             "compression_count": self.compression_count,
             "needs_compression": self._needs_compression,
-            "recent_insights": recent_insights
+            "recent_insights": recent_insights,
+            "use_llm": self.use_llm
         }
+        
+        # 添加LLM统计
+        if self.llm_integration:
+            summary["llm_stats"] = self.llm_integration.get_stats()
+        
+        return summary
     
     def needs_compression(self) -> bool:
         """检查是否需要压缩
@@ -659,7 +1044,7 @@ def test_reflector():
     print("=" * 80)
     
     # 创建反思器实例
-    reflector = PERReflector()
+    reflector = PERReflector(use_llm=False)  # 测试时使用规则模式
     
     # 测试1: 成功任务反思
     print("\n测试1: 成功任务反思")
@@ -688,6 +1073,7 @@ def test_reflector():
     print(f"反思结果状态: {reflection1['audit_result']['status']}")
     print(f"关键发现数: {len(reflection1['key_findings'])}")
     print(f"洞察: {reflection1['insight']}")
+    print(f"使用LLM: {reflection1.get('llm_analysis', False)}")
     
     # 测试2: 失败任务反思
     print("\n测试2: 失败任务反思")
@@ -718,6 +1104,7 @@ def test_reflector():
     print(f"总发现数: {len(intelligence['findings'])}")
     print(f"审计状态: {intelligence['audit_result']['status']}")
     print(f"失败模式: {intelligence['patterns_summary']['failure_patterns']}")
+    print(f"使用LLM: {intelligence.get('llm_summary', False)}")
     
     # 测试4: 获取反思摘要
     print("\n测试4: 反思摘要")
@@ -725,6 +1112,7 @@ def test_reflector():
     print(f"总反思数: {summary['total_reflections']}")
     print(f"状态分布: {summary['status_distribution']}")
     print(f"失败模式数: {summary['failure_patterns_count']}")
+    print(f"使用LLM: {summary['use_llm']}")
     
     print("\n" + "=" * 80)
     print("[PASS] 反思器测试完成")

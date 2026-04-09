@@ -137,7 +137,7 @@ class BaseImporter(abc.ABC):
                 else:
                     # 添加默认时间
                     return f"{timestamp}T00:00:00Z"
-            except:
+            except Exception as e:
                 return datetime.now().isoformat()
         else:
             return datetime.now().isoformat()

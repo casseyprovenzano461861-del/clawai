@@ -4,11 +4,14 @@
 实现会议纪要要求的量化数据呈现
 """
 
+import logging
 import json
 import math
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class VulnerabilityMetrics:
@@ -144,8 +147,8 @@ class QuantitativeMetricsCalculator:
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error: {e}")
         
         # 默认配置（基于DVWA已知漏洞）
         return {

@@ -6,6 +6,7 @@
 ⚠️ 技术诚信说明：本模块使用规则引擎解释而非真正的AI系统
 """
 
+import logging
 import json
 import re
 from typing import Dict, List, Any, Optional, Tuple
@@ -15,6 +16,8 @@ import time
 from datetime import datetime
 
 from .multi_model_decision import DecisionResult, ModelDecision
+
+logger = logging.getLogger(__name__)
 
 
 class ExplanationType(Enum):
@@ -616,7 +619,7 @@ class RuleEngineExplanationSystem:
         import statistics
         try:
             return statistics.stdev(confidence_scores)
-        except:
+        except Exception as e:
             return 0.0
     
     def _calculate_model_consistency(self, model_decisions: List[ModelDecision]) -> float:

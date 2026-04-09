@@ -14,7 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 
-DEEPSEEK_API_KEY = "sk-a4503ae9180f4c0cae86d2aaa62621e9"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 
 async def run_attack_test():

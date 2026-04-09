@@ -2,6 +2,7 @@
  * 用户管理API服务
  */
 import { request, getCurrentUser, setCurrentUser } from './apiClient';
+import { USE_MOCK_DATA } from './config';
 
 // 用户状态枚举
 export const UserStatus = {
@@ -54,11 +55,12 @@ export const login = async (credentials) => {
 
     return response;
   } catch (error) {
-    // API失败时使用模拟登录（仅用于开发）
-    console.warn('API登录失败，使用模拟用户:', error.message);
+    if (USE_MOCK_DATA) {
+      // API失败时使用模拟登录（仅用于开发）
+      console.warn('API登录失败，使用模拟用户:', error.message);
 
-    // 模拟登录逻辑
-    if (credentials.username === 'admin' && credentials.password === 'admin123') {
+      // 模拟登录逻辑
+      if (credentials.username === 'admin' && credentials.password === 'admin123') {
       const mockUser = {
         id: '1',
         username: 'admin',
@@ -121,6 +123,9 @@ export const login = async (credentials) => {
     } else {
       throw new Error('用户名或密码错误');
     }
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -133,10 +138,11 @@ export const register = async (userData) => {
   try {
     return await request.post('/auth/register', userData);
   } catch (error) {
-    console.warn('API注册失败，使用模拟注册:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('API注册失败，使用模拟注册:', error.message);
 
-    // 模拟注册逻辑
-    const mockUser = {
+      // 模拟注册逻辑
+      const mockUser = {
       id: Date.now().toString(),
       username: userData.username,
       email: userData.email,
@@ -157,6 +163,9 @@ export const register = async (userData) => {
       ...mockUser,
       message: '注册成功'
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -168,15 +177,16 @@ export const getMe = async () => {
   try {
     return await request.get('/auth/me');
   } catch (error) {
-    console.warn('API获取用户信息失败，使用本地存储:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('API获取用户信息失败，使用本地存储:', error.message);
 
-    // 返回本地存储的用户信息
-    const user = getCurrentUser();
-    if (user) {
-      return user;
+      // 返回本地存储的用户信息
+      const user = getCurrentUser();
+      if (user) {
+        return user;
+      }
     }
 
-    // 如果没有用户信息，抛出错误
     throw new Error('用户未登录');
   }
 };
@@ -190,19 +200,23 @@ export const updateMe = async (userData) => {
   try {
     return await request.put('/auth/me', userData);
   } catch (error) {
-    console.warn('API更新用户信息失败，更新本地存储:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('API更新用户信息失败，更新本地存储:', error.message);
 
-    // 更新本地存储的用户信息
-    const currentUser = getCurrentUser();
-    const updatedUser = {
-      ...currentUser,
-      ...userData,
-      updated_at: new Date().toISOString()
-    };
+      // 更新本地存储的用户信息
+      const currentUser = getCurrentUser();
+      const updatedUser = {
+        ...currentUser,
+        ...userData,
+        updated_at: new Date().toISOString()
+      };
 
-    setCurrentUser(updatedUser);
+      setCurrentUser(updatedUser);
 
-    return updatedUser;
+      return updatedUser;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -216,10 +230,11 @@ export const getUsers = async (params = {}) => {
     // 尝试调用用户管理API
     return await request.get('/auth/users', { params });
   } catch (error) {
-    console.warn('用户列表API不可用，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('用户列表API不可用，使用模拟数据:', error.message);
 
-    // 模拟用户数据
-    const mockUsers = [
+      // 模拟用户数据
+      const mockUsers = [
       {
         id: '1',
         username: 'admin',
@@ -317,6 +332,9 @@ export const getUsers = async (params = {}) => {
       page_size: pageSize,
       total_pages: Math.ceil(filteredUsers.length / pageSize)
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -329,14 +347,16 @@ export const getUser = async (userId) => {
   try {
     return await request.get(`/auth/users/${userId}`);
   } catch (error) {
-    console.warn('用户详情API不可用，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('用户详情API不可用，使用模拟数据:', error.message);
 
-    // 从模拟用户列表中查找
-    const mockUsers = await getUsers();
-    const user = mockUsers.users.find(u => u.id === userId);
+      // 从模拟用户列表中查找
+      const mockUsers = await getUsers();
+      const user = mockUsers.users.find(u => u.id === userId);
 
-    if (user) {
-      return user;
+      if (user) {
+        return user;
+      }
     }
 
     throw new Error('用户不存在');
@@ -352,10 +372,11 @@ export const createUser = async (userData) => {
   try {
     return await request.post('/auth/users', userData);
   } catch (error) {
-    console.warn('创建用户API不可用，使用模拟创建:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('创建用户API不可用，使用模拟创建:', error.message);
 
-    // 模拟创建用户
-    const newUser = {
+      // 模拟创建用户
+      const newUser = {
       id: Date.now().toString(),
       ...userData,
       status: UserStatus.ACTIVE,
@@ -368,6 +389,9 @@ export const createUser = async (userData) => {
     };
 
     return newUser;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -381,10 +405,11 @@ export const updateUser = async (userId, userData) => {
   try {
     return await request.put(`/auth/users/${userId}`, userData);
   } catch (error) {
-    console.warn('更新用户API不可用，使用模拟更新:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('更新用户API不可用，使用模拟更新:', error.message);
 
-    // 模拟更新用户
-    const existingUser = await getUser(userId);
+      // 模拟更新用户
+      const existingUser = await getUser(userId);
     const updatedUser = {
       ...existingUser,
       ...userData,
@@ -392,6 +417,9 @@ export const updateUser = async (userId, userData) => {
     };
 
     return updatedUser;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -404,14 +432,18 @@ export const deleteUser = async (userId) => {
   try {
     return await request.delete(`/auth/users/${userId}`);
   } catch (error) {
-    console.warn('删除用户API不可用，使用模拟删除:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('删除用户API不可用，使用模拟删除:', error.message);
 
-    // 模拟删除
-    return {
-      success: true,
-      message: `用户 ${userId} 已删除`,
-      deleted_at: new Date().toISOString()
-    };
+      // 模拟删除
+      return {
+        success: true,
+        message: `用户 ${userId} 已删除`,
+        deleted_at: new Date().toISOString()
+      };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -423,10 +455,11 @@ export const getPermissions = async () => {
   try {
     return await request.get('/rbac/permissions');
   } catch (error) {
-    console.warn('权限API不可用，使用模拟权限数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('权限API不可用，使用模拟权限数据:', error.message);
 
-    // 模拟权限数据
-    return [
+      // 模拟权限数据
+      return [
       // 系统管理权限
       { id: 'system:*', name: '系统完全控制', category: PermissionCategory.SYSTEM, description: '所有系统管理权限' },
       { id: 'system:settings', name: '系统设置', category: PermissionCategory.SYSTEM, description: '管理系统设置' },
@@ -457,6 +490,9 @@ export const getPermissions = async () => {
       { id: 'data:write', name: '写入数据', category: PermissionCategory.DATA, description: '写入系统数据' },
       { id: 'data:delete', name: '删除数据', category: PermissionCategory.DATA, description: '删除系统数据' }
     ];
+    } else {
+      throw error;
+    }
   }
 };
 

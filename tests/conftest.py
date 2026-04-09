@@ -106,33 +106,43 @@ def sample_target_info():
 
 
 @pytest.fixture
-async def test_client():
-    """Async test client for FastAPI."""
-    # Note: This needs to be implemented when we have the FastAPI app
-    # For now, return a simple mock
-    class MockTestClient:
-        def __init__(self):
-            self.base_url = "http://testserver"
+def fastapi_app():
+    """Create a minimal FastAPI app for testing API endpoints."""
+    from fastapi import FastAPI
+    app = FastAPI()
+    return app
 
-        async def get(self, url: str, **kwargs):
-            return MockResponse(200, {"message": "OK"})
 
-        async def post(self, url: str, json: Any = None, **kwargs):
-            return MockResponse(201, {"message": "Created", "data": json})
+@pytest.fixture
+def fastapi_client(fastapi_app):
+    """Synchronous FastAPI test client."""
+    from fastapi.testclient import TestClient
+    return TestClient(fastapi_app)
 
-    class MockResponse:
-        def __init__(self, status_code: int, json_data: Any):
-            self.status_code = status_code
-            self._json_data = json_data
 
-        def json(self):
-            return self._json_data
+@pytest.fixture
+def mock_llm_backend():
+    """Mock LLMBackend for testing without real API calls."""
+    from unittest.mock import MagicMock
+    backend = MagicMock()
+    backend.chat.return_value = MagicMock(
+        content="Mock LLM response for testing",
+        tool_calls=[],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+        cost=0.001,
+    )
+    backend.stream_chat.return_value = iter([
+        MagicMock(content="Mock", tool_calls=None, finish_reason=None),
+        MagicMock(content=" response", tool_calls=None, finish_reason="stop"),
+    ])
+    backend.name = "mock"
+    return backend
 
-        def raise_for_status(self):
-            if self.status_code >= 400:
-                raise Exception(f"HTTP Error: {self.status_code}")
 
-    return MockTestClient()
+@pytest.fixture
+def temp_dir(tmp_path):
+    """Temporary directory for file-based tests."""
+    return tmp_path
 
 
 # Configure pytest

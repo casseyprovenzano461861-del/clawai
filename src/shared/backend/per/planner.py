@@ -11,6 +11,27 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 
+try:
+    from .prompts import (
+        get_planner_system_prompt,
+        get_planner_initial_plan_prompt,
+        get_planner_replan_prompt,
+    )
+except ImportError:
+    from prompts import (
+        get_planner_system_prompt,
+        get_planner_initial_plan_prompt,
+        get_planner_replan_prompt,
+    )
+
+try:
+    from ..events import EventBus
+except ImportError:
+    try:
+        from events import EventBus
+    except ImportError:
+        EventBus = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,15 +57,17 @@ class PERPlanner:
     4. 整合历史规划和反思信息
     """
     
-    def __init__(self, llm_client=None, output_mode: str = "default"):
+    def __init__(self, llm_client=None, output_mode: str = "default", use_llm: bool = True):
         """初始化规划器
         
         Args:
             llm_client: LLM客户端实例（可选）
             output_mode: 输出模式（default/simple/debug）
+            use_llm: 是否使用LLM进行规划（默认True）
         """
         self.llm_client = llm_client
         self.output_mode = output_mode
+        self.use_llm = use_llm and llm_client is not None
         
         # 规划历史
         self.planning_history: List[PlanningAttempt] = []
@@ -61,7 +84,24 @@ class PERPlanner:
         # 需要压缩标志
         self._needs_compression: bool = False
         
-        logger.info("PERPlanner初始化完成")
+        # 初始化LLM集成
+        self._init_llm_integration()
+        
+        logger.info(f"PERPlanner初始化完成 (use_llm={self.use_llm})")
+    
+    def _init_llm_integration(self):
+        """初始化LLM集成"""
+        if self.use_llm:
+            try:
+                from .llm_integration import create_llm_integration
+                self.llm_integration = create_llm_integration(llm_client=self.llm_client)
+                logger.info("LLM集成初始化成功")
+            except Exception as e:
+                logger.warning(f"LLM集成初始化失败: {e}，将使用回退模式")
+                self.use_llm = False
+                self.llm_integration = None
+        else:
+            self.llm_integration = None
     
     def set_environment_context(self, context: Dict[str, Any]) -> None:
         """设置环境上下文
@@ -151,6 +191,114 @@ class PERPlanner:
         """
         logger.info(f"生成初始规划: {goal}")
         
+        _bus = EventBus.get() if EventBus else None
+        if _bus:
+            _bus.emit_state("running", details=f"规划中: {goal}", task=goal)
+        
+        # 如果使用LLM，尝试智能规划
+        if self.use_llm and self.llm_integration:
+            try:
+                operations = self._generate_plan_with_llm(goal, target_info)
+                if operations:
+                    logger.info(f"LLM生成规划: {len(operations)}个操作")
+                    if _bus:
+                        _bus.emit_message(f"规划完成：生成 {len(operations)} 个子任务", msg_type="success")
+                    return operations
+            except Exception as e:
+                logger.warning(f"LLM规划失败: {e}，使用回退模式")
+        
+        # 回退到基于规则的规划
+        operations = self._generate_plan_with_rules(goal, target_info)
+        if _bus and operations:
+            _bus.emit_message(f"规划完成（规则模式）：生成 {len(operations)} 个子任务", msg_type="info")
+        return operations
+    
+    def _generate_plan_with_llm(self, goal: str, target_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用LLM生成规划
+        
+        Args:
+            goal: 目标
+            target_info: 目标信息
+            
+        Returns:
+            List[Dict[str, Any]]: 图操作指令
+        """
+        # 使用优化后的提示词
+        system_prompt = get_planner_system_prompt()
+
+        user_prompt = get_planner_initial_plan_prompt(
+            goal=goal,
+            target_info=json.dumps(target_info, ensure_ascii=False, indent=2),
+            context=json.dumps(self.environment_context, ensure_ascii=False) if self.environment_context else "无",
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # 直接同步调用 LLM（call_llm 已改为同步方法）
+        try:
+            from ..llm_integration import TaskType as _TT
+            _task_type = _TT.PLANNING if _TT else None
+        except Exception:
+            _task_type = None
+        response = self.llm_integration.call_llm(messages, temperature=0.7, max_tokens=4096, task_type=_task_type)
+        
+        if not response.success:
+            logger.warning(f"LLM调用失败: {response.error}")
+            return []
+        
+        # 解析JSON响应
+        parsed = self.llm_integration.parse_json_response(response.content)
+        
+        if isinstance(parsed, list):
+            # 验证操作格式
+            valid_operations = []
+            for op in parsed:
+                if isinstance(op, dict) and "command" in op:
+                    valid_operations.append(op)
+            
+            # 记录规划尝试
+            if valid_operations:
+                self.record_planning_attempt(
+                    strategy="LLM智能规划",
+                    goal=goal,
+                    outcome_summary=f"LLM生成{len(valid_operations)}个操作",
+                    graph_operations=valid_operations,
+                    llm_prompt=user_prompt,
+                    llm_response=response.content
+                )
+            
+            return valid_operations
+        
+        elif isinstance(parsed, dict) and "parse_error" not in parsed:
+            # 可能是单个操作对象，包装成列表
+            if "command" in parsed:
+                operations = [parsed]
+                self.record_planning_attempt(
+                    strategy="LLM智能规划",
+                    goal=goal,
+                    outcome_summary="LLM生成1个操作",
+                    graph_operations=operations,
+                    llm_prompt=user_prompt,
+                    llm_response=response.content
+                )
+                return operations
+        
+        logger.warning(f"LLM响应格式不正确: {response.content[:200]}")
+        return []
+    
+    def _generate_plan_with_rules(self, goal: str, target_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用规则生成规划（回退模式）
+        
+        Args:
+            goal: 目标
+            target_info: 目标信息
+            
+        Returns:
+            List[Dict[str, Any]]: 图操作指令
+        """
         # 基于目标类型生成基础任务图
         if "渗透测试" in goal or "安全测试" in goal:
             return self._generate_pentest_plan(goal, target_info)
@@ -229,7 +377,7 @@ class PERPlanner:
         
         # 记录规划尝试
         self.record_planning_attempt(
-            strategy="渗透测试标准流程",
+            strategy="渗透测试标准流程(规则模式)",
             goal=goal,
             outcome_summary="生成4阶段渗透测试计划",
             graph_operations=operations
@@ -292,7 +440,7 @@ class PERPlanner:
         
         # 记录规划尝试
         self.record_planning_attempt(
-            strategy="漏洞扫描标准流程",
+            strategy="漏洞扫描标准流程(规则模式)",
             goal=goal,
             outcome_summary="生成3阶段漏洞扫描计划",
             graph_operations=operations
@@ -355,7 +503,7 @@ class PERPlanner:
         
         # 记录规划尝试
         self.record_planning_attempt(
-            strategy="信息收集标准流程",
+            strategy="信息收集标准流程(规则模式)",
             goal=goal,
             outcome_summary="生成3阶段信息收集计划",
             graph_operations=operations
@@ -418,7 +566,7 @@ class PERPlanner:
         
         # 记录规划尝试
         self.record_planning_attempt(
-            strategy="通用任务流程",
+            strategy="通用任务流程(规则模式)",
             goal=goal,
             outcome_summary="生成3阶段通用任务计划",
             graph_operations=operations
@@ -442,6 +590,108 @@ class PERPlanner:
         """
         logger.info("执行动态重规划")
         
+        # 如果使用LLM，尝试智能重规划
+        if self.use_llm and self.llm_integration:
+            try:
+                operations = self._dynamic_replan_with_llm(goal, current_graph_state, intelligence_summary)
+                if operations:
+                    logger.info(f"LLM动态重规划: {len(operations)}个操作")
+                    return operations
+            except Exception as e:
+                logger.warning(f"LLM动态重规划失败: {e}，使用回退模式")
+        
+        # 回退到基于规则的重规划
+        return self._dynamic_replan_with_rules(goal, current_graph_state, intelligence_summary)
+    
+    def _dynamic_replan_with_llm(self, goal: str, current_graph_state: Dict[str, Any], 
+                                  intelligence_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用LLM进行动态重规划
+        
+        Args:
+            goal: 目标
+            current_graph_state: 当前图谱状态
+            intelligence_summary: 情报摘要
+            
+        Returns:
+            List[Dict[str, Any]]: 图操作指令
+        """
+        # 分析当前状态
+        completed_nodes = []
+        failed_nodes = []
+        pending_nodes = []
+        
+        for node_id, node_data in current_graph_state.get("nodes", {}).items():
+            status = node_data.get("status", "unknown")
+            if status == "completed":
+                completed_nodes.append(node_id)
+            elif status == "failed":
+                failed_nodes.append(node_id)
+            elif status in ["pending", "in_progress"]:
+                pending_nodes.append(node_id)
+        
+        # 获取最近规划历史（最近3次）
+        recent_history = "无"
+        if self.planning_history:
+            recent = self.planning_history[-3:]
+            recent_history = "\n".join(
+                f"- [{a.strategy}] {a.outcome_summary}" for a in recent
+            )
+
+        # 使用优化后的提示词
+        system_prompt = get_planner_system_prompt()
+
+        user_prompt = get_planner_replan_prompt(
+            goal=goal,
+            completed_nodes=completed_nodes,
+            failed_nodes=failed_nodes,
+            pending_nodes=pending_nodes,
+            intelligence_summary=json.dumps(intelligence_summary, ensure_ascii=False, indent=2),
+            recent_history=recent_history,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # 直接同步调用 LLM
+        response = self.llm_integration.call_llm(messages, temperature=0.7, max_tokens=4096)
+        
+        if not response.success:
+            return []
+        
+        # 解析JSON响应
+        parsed = self.llm_integration.parse_json_response(response.content)
+        
+        if isinstance(parsed, list):
+            valid_operations = [op for op in parsed if isinstance(op, dict) and "command" in op]
+            
+            if valid_operations:
+                self.record_planning_attempt(
+                    strategy="LLM动态重规划",
+                    goal=goal,
+                    outcome_summary=f"LLM重规划生成{len(valid_operations)}个操作",
+                    graph_operations=valid_operations,
+                    llm_prompt=user_prompt,
+                    llm_response=response.content
+                )
+            
+            return valid_operations
+        
+        return []
+    
+    def _dynamic_replan_with_rules(self, goal: str, current_graph_state: Dict[str, Any],
+                                    intelligence_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用规则进行动态重规划（回退模式）
+        
+        Args:
+            goal: 目标
+            current_graph_state: 当前图谱状态
+            intelligence_summary: 情报摘要
+            
+        Returns:
+            List[Dict[str, Any]]: 图操作指令
+        """
         # 分析当前状态
         completed_nodes = []
         failed_nodes = []
@@ -489,7 +739,7 @@ class PERPlanner:
                 operations.append({
                     "command": "ADD_NODE",
                     "node_data": {
-                        "id": f"followup_{i}",
+                        "id": f"followup_{i}_{datetime.now().strftime('%H%M%S')}",
                         "description": f"跟进发现: {finding[:50]}...",
                         "type": "subtask",
                         "status": "pending",
@@ -507,7 +757,7 @@ class PERPlanner:
         
         # 记录规划尝试
         self.record_planning_attempt(
-            strategy="动态重规划",
+            strategy="动态重规划(规则模式)",
             goal=goal,
             outcome_summary=f"处理{len(failed_nodes)}个失败节点，添加{len(findings[:3])}个跟进任务",
             graph_operations=operations
@@ -521,15 +771,22 @@ class PERPlanner:
         Returns:
             Dict[str, Any]: 规划摘要信息
         """
-        return {
+        summary = {
             "total_attempts": len(self.planning_history),
             "recent_strategies": [attempt.strategy for attempt in self.planning_history[-5:]],
             "rejected_strategies_count": len(self.rejected_strategies),
             "long_term_objectives": self.long_term_objectives,
             "compression_count": self.compression_count,
             "needs_compression": self._needs_compression,
-            "environment_context_keys": list(self.environment_context.keys())
+            "environment_context_keys": list(self.environment_context.keys()),
+            "use_llm": self.use_llm
         }
+        
+        # 添加LLM统计
+        if self.llm_integration:
+            summary["llm_stats"] = self.llm_integration.get_stats()
+        
+        return summary
     
     def needs_compression(self) -> bool:
         """检查是否需要压缩
@@ -562,7 +819,7 @@ def test_planner():
     print("=" * 80)
     
     # 创建规划器实例
-    planner = PERPlanner()
+    planner = PERPlanner(use_llm=False)  # 测试时使用规则模式
     
     # 测试1: 渗透测试规划
     print("\n测试1: 渗透测试规划")
@@ -604,6 +861,7 @@ def test_planner():
     print(f"总尝试次数: {summary['total_attempts']}")
     print(f"最近策略: {summary['recent_strategies']}")
     print(f"被拒策略数: {summary['rejected_strategies_count']}")
+    print(f"使用LLM: {summary['use_llm']}")
     
     print("\n" + "=" * 80)
     print("[PASS] 规划器测试完成")
@@ -612,5 +870,6 @@ def test_planner():
 
 
 if __name__ == "__main__":
+    import sys
     success = test_planner()
     sys.exit(0 if success else 1)

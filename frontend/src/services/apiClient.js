@@ -4,7 +4,7 @@
 import axios from 'axios';
 
 // API基础URL
-const API_BASE_URL = 'http://localhost:8888/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8001/api/v1';
 
 // 创建axios实例
 const apiClient = axios.create({
@@ -143,6 +143,107 @@ export const getCurrentUser = () => {
 // 设置当前用户信息
 export const setCurrentUser = (user) => {
   localStorage.setItem('current_user', JSON.stringify(user));
+};
+
+// 向后兼容：单数形式别名
+export const setAuthToken = (token) => setAuthTokens(token);
+export const clearAuthToken = () => clearAuthTokens();
+export const getAuthToken = () => localStorage.getItem('access_token');
+
+/**
+ * API服务对象 - 提供命名空间的API方法
+ */
+export const api = {
+  // 基础请求方法
+  get: (endpoint, options = {}) => request.get(endpoint, options),
+  post: (endpoint, data, options = {}) => request.post(endpoint, data, options),
+  put: (endpoint, data, options = {}) => request.put(endpoint, data, options),
+  delete: (endpoint, options = {}) => request.delete(endpoint, options),
+  patch: (endpoint, data, options = {}) => request.patch(endpoint, data, options),
+
+  // 认证相关API
+  auth: {
+    login: (credentials) => api.post('/auth/login', credentials),
+    register: (userData) => api.post('/auth/register', userData),
+    logout: () => api.post('/auth/logout'),
+    getCurrentUser: () => api.get('/auth/me'),
+    refreshToken: (refreshToken) => api.post('/auth/refresh', { refresh_token: refreshToken }),
+  },
+
+  // 用户管理API
+  users: {
+    list: (params = {}) => api.get('/users', { params }),
+    get: (userId) => api.get(`/users/${userId}`),
+    create: (userData) => api.post('/users', userData),
+    update: (userId, userData) => api.put(`/users/${userId}`, userData),
+    delete: (userId) => api.delete(`/users/${userId}`),
+    resetPassword: (userId, passwordData) => api.post(`/users/${userId}/reset-password`, passwordData),
+  },
+
+  // 知识图谱API
+  knowledgeGraph: {
+    getGraph: () => api.get('/knowledge-graph/graph'),
+    getStats: () => api.get('/knowledge-graph/stats'),
+    getNodeDetails: (nodeId) => api.get(`/knowledge-graph/node/${nodeId}`),
+    getEdgeDetails: (edgeId) => api.get(`/knowledge-graph/edge/${edgeId}`),
+    search: (query, filters = {}) => api.get('/knowledge-graph/search', { params: { query, ...filters } }),
+    getConfig: () => api.get('/knowledge-graph/config'),
+    health: () => api.get('/knowledge-graph/health'),
+  },
+
+  // 报告管理API
+  reports: {
+    list: (params = {}) => api.get('/reports', { params }),
+    get: (reportId) => api.get(`/reports/${reportId}`),
+    generate: (reportData) => api.post('/reports/generate', reportData),
+    download: (reportId, format = 'html') => api.get(`/reports/${reportId}/download?format=${format}`),
+    delete: (reportId) => api.delete(`/reports/${reportId}`),
+  },
+
+  // RBAC管理API
+  rbac: {
+    getRoles: () => api.get('/rbac/roles'),
+    createRole: (roleData) => api.post('/rbac/roles', roleData),
+    deleteRole: (roleName) => api.delete(`/rbac/roles/${roleName}`),
+    getUserRoles: (username) => api.get(`/rbac/users/${username}/roles`),
+    assignRole: (username, roleName) => api.post(`/rbac/users/${username}/roles`, { role: roleName }),
+    removeRole: (username, roleName) => api.delete(`/rbac/users/${username}/roles/${roleName}`),
+    getUserPermissions: (username) => api.get(`/rbac/users/${username}/permissions`),
+    checkPermission: (permission) => api.post('/rbac/check-permission', { permission }),
+    getStats: () => api.get('/rbac/stats'),
+  },
+
+  // 工具管理API
+  tools: {
+    list: () => api.get('/tools'),
+    execute: (toolData) => api.post('/tools/execute', toolData),
+  },
+
+  // 扫描管理API
+  scans: {
+    list: (params = {}) => api.get('/scans', { params }),
+    get: (scanId) => api.get(`/scans/${scanId}`),
+    create: (scanData) => api.post('/scans', scanData),
+    update: (scanId, scanData) => api.put(`/scans/${scanId}`, scanData),
+    delete: (scanId) => api.delete(`/scans/${scanId}`),
+    execute: (scanId) => api.post(`/scans/${scanId}/execute`),
+  },
+
+  // 插件管理API
+  plugins: {
+    list: (params = {}) => api.get('/plugins', { params }),
+    install: (pluginData) => api.post('/plugins/install', pluginData),
+    uninstall: (pluginId) => api.post(`/plugins/${pluginId}/uninstall`),
+    enable: (pluginId) => api.post(`/plugins/${pluginId}/enable`),
+    disable: (pluginId) => api.post(`/plugins/${pluginId}/disable`),
+  },
+
+  // 系统健康检查
+  health: {
+    auth: () => api.get('/auth/health'),
+    main: () => api.get('/health'),
+    knowledgeGraph: () => api.knowledgeGraph.health(),
+  },
 };
 
 // 导出axios实例

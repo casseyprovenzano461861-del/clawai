@@ -42,12 +42,18 @@ Thumbs.db
 
 # Project specific
 .env
+.env.production
+.env.staging
+.env.local
+# .env.development 可以提交（仅含示例密钥）
+# .env.*.example 可以提交（模板文件）
 node_modules/
 *.log
 logs/
 data/  # 注意：如果data目录包含数据库文件，可能需要提交部分数据
 !data/README.md
 clawai.db  # SQLite数据库文件，通常不提交
+*.db
 
 # Aider
 .aider*
@@ -57,4 +63,4 @@ clawai.db  # SQLite数据库文件，通常不提交
 .coverage
 htmlcov/
 .tox/
-.mypy_cache/
+.mypy_cache/references/PentestGPT

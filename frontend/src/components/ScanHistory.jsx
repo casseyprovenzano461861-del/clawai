@@ -6,11 +6,13 @@ import {
 } from 'lucide-react';
 import scanHistoryService from '../services/scanHistoryService';
 import { Skeleton, TextSkeleton } from './Skeleton';
+import { useScan } from '../context/ScanContext';
 
 /**
  * 扫描历史组件
  */
 const ScanHistory = ({ onLoadScan, darkMode = true }) => {
+  const { scanHistory, refreshHistory, selectScan } = useScan();
   const [history, setHistory] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,15 +35,17 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
     }
   };
 
+  // ScanContext 历史变化时自动刷新
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [scanHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 删除记录
   const handleDelete = (id, e) => {
     e.stopPropagation();
     if (confirm('确定要删除这条记录吗？')) {
       scanHistoryService.delete(id);
+      refreshHistory();
       loadHistory();
     }
   };
@@ -50,6 +54,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
   const handleClearAll = () => {
     if (confirm('确定要清空所有历史记录吗？此操作不可恢复。')) {
       scanHistoryService.clear();
+      refreshHistory();
       loadHistory();
     }
   };
@@ -90,6 +95,8 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
   // 加载历史扫描结果
   const handleLoadScan = (record) => {
     setSelectedRecord(record);
+    // 通知 ScanContext（全局联动）
+    selectScan(record);
     if (onLoadScan && record.result) {
       onLoadScan(record.result);
     }
@@ -138,8 +145,8 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
     return icons[type];
   };
 
-  const baseClass = darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900';
-  const borderClass = darkMode ? 'border-gray-700' : 'border-gray-200';
+  const baseClass = darkMode ? 'bg-[#0a0e17] text-white' : 'bg-[#0a0e17] text-gray-900';
+  const borderClass = darkMode ? 'border-white/10' : 'border-gray-200';
 
   return (
     <div className={`${baseClass} rounded-2xl shadow-xl overflow-hidden`}>
@@ -153,21 +160,21 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
           <div className="flex items-center space-x-2">
             <button
               onClick={handleImport}
-              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-[#111827]' : 'hover:bg-gray-100'}`}
               title="导入"
             >
               <Upload className="w-5 h-5" />
             </button>
             <button
               onClick={handleExport}
-              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-[#111827]' : 'hover:bg-gray-100'}`}
               title="导出"
             >
               <Download className="w-5 h-5" />
             </button>
             <button
               onClick={loadHistory}
-              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg ${darkMode ? 'hover:bg-[#111827]' : 'hover:bg-gray-100'}`}
               title="刷新"
             >
               <RefreshCw className="w-5 h-5" />
@@ -184,7 +191,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="搜索目标..."
-              className={`w-full pl-10 pr-4 py-2 rounded-lg ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              className={`w-full pl-10 pr-4 py-2 rounded-lg ${darkMode ? 'bg-[#111827] border-white/15' : 'bg-gray-100 border-gray-300'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
             />
             {searchTerm && (
               <button
@@ -198,7 +205,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
           <select
             value={filterSuccess}
             onChange={(e) => setFilterSuccess(e.target.value)}
-            className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-100 border-gray-300'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
+            className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-[#111827] border-white/15' : 'bg-gray-100 border-gray-300'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
           >
             <option value="all">全部</option>
             <option value="success">成功</option>
@@ -209,7 +216,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
 
       {/* 统计卡片 */}
       {stats && (
-        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 border-b ${borderClass} ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'}`}>
+        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 border-b ${borderClass} ${darkMode ? 'bg-[#060910]/50' : 'bg-[#111827]'}`}>
           <div className="text-center">
             <div className="text-2xl font-bold">{stats.total}</div>
             <div className="text-sm opacity-70">总扫描次数</div>
@@ -230,7 +237,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
       )}
 
       {/* 历史列表 */}
-      <div className="divide-y divide-gray-700">
+      <div className="divide-y divide-white/10">
         {loading ? (
           <div className="p-6 space-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -261,10 +268,10 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
             <div
               key={item.id}
               onClick={() => handleLoadScan(item)}
-              className={`p-4 flex items-center cursor-pointer transition-colors ${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'}`}
+              className={`p-4 flex items-center cursor-pointer transition-colors ${darkMode ? 'hover:bg-[#111827]/50' : 'hover:bg-[#111827]'}`}
             >
               {/* 状态图标 */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.success ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.success ? 'bg-green-500/100/20' : 'bg-red-500/100/20'}`}>
                 {item.success ? (
                   <CheckCircle className="w-5 h-5 text-green-500" />
                 ) : (
@@ -291,15 +298,15 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               {/* 漏洞统计 */}
               <div className="hidden sm:flex items-center space-x-2 mr-4">
                 {item.vulnerabilities?.critical > 0 && (
-                  <div className="flex items-center px-2 py-1 rounded bg-red-500/20">
+                  <div className="flex items-center px-2 py-1 rounded bg-red-500/100/20">
                     <AlertTriangle className="w-3 h-3 text-red-500 mr-1" />
-                    <span className="text-xs text-red-500">{item.vulnerabilities.critical}</span>
+                    <span className="text-xs text-red-500">{item.vulnerabilities?.critical}</span>
                   </div>
                 )}
                 {item.vulnerabilities?.high > 0 && (
                   <div className="flex items-center px-2 py-1 rounded bg-orange-500/20">
                     <AlertCircle className="w-3 h-3 text-orange-500 mr-1" />
-                    <span className="text-xs text-orange-500">{item.vulnerabilities.high}</span>
+                    <span className="text-xs text-orange-500">{item.vulnerabilities?.high}</span>
                   </div>
                 )}
               </div>
@@ -308,7 +315,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={(e) => handleDelete(item.id, e)}
-                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-200'} text-red-500`}
+                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-[#1a2035]' : 'hover:bg-gray-200'} text-red-500`}
                   title="删除"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -322,7 +329,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
 
       {/* 底部 */}
       {history.length > 0 && (
-        <div className={`p-4 border-t ${borderClass} ${darkMode ? 'bg-gray-900/50' : 'bg-gray-50'} flex justify-between items-center`}>
+        <div className={`p-4 border-t ${borderClass} ${darkMode ? 'bg-[#060910]/50' : 'bg-[#111827]'} flex justify-between items-center`}>
           <span className="text-sm opacity-70">
             共 {history.length} 条记录
           </span>
@@ -348,7 +355,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               </div>
               <button
                 onClick={() => setSelectedRecord(null)}
-                className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                className={`p-2 rounded-lg ${darkMode ? 'hover:bg-[#111827]' : 'hover:bg-gray-100'}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -387,7 +394,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               <div className="mt-6 flex justify-end space-x-3">
                 <button
                   onClick={() => setSelectedRecord(null)}
-                  className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'}`}
+                  className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-[#111827] hover:bg-[#1a2035]' : 'bg-gray-200 hover:bg-gray-300'}`}
                 >
                   关闭
                 </button>

@@ -133,8 +133,8 @@ class MetricsManager:
                             # 返回虚拟指标，因为无法直接获取已注册的指标实例
                             logger.info(f"使用虚拟Counter指标: {name}")
                             return DummyCounter(name, documentation, labelnames, **kwargs)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error: {e}")
 
             # 返回虚拟指标作为后备
             logger.info(f"使用虚拟Counter指标作为后备: {name}")

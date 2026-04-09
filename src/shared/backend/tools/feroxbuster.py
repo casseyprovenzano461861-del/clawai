@@ -5,6 +5,7 @@ Feroxbuster目录爆破工具（基于BaseTool的新版本）
 封装feroxbuster目录爆破功能，支持真实/模拟执行自动切换
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -17,9 +18,11 @@ from typing import Dict, List, Any, Optional
 # 导入工具基类
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from backend.tools.base_tool import (
-    BaseTool, ToolExecutionMode, ToolCategory, 
+    BaseTool, ToolExecutionMode, ToolCategory,
     ToolPriority, ToolExecutionResult, register_tool
 )
+
+logger = logging.getLogger(__name__)
 
 
 @register_tool
@@ -266,8 +269,8 @@ class FeroxbusterTool(BaseTool):
             if temp_output_file and os.path.exists(temp_output_file):
                 try:
                     os.unlink(temp_output_file)
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
     
     def _simulate_execution(self, target: str, options: Optional[Dict] = None) -> Dict[str, Any]:
         """模拟feroxbuster执行（当工具不可用时）"""

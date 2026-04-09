@@ -9,6 +9,7 @@ Skills 是可被 AI 自动调用的渗透测试技能单元
 import json
 import os
 import re
+import shlex
 import subprocess
 import logging
 from typing import Dict, List, Any, Optional, Callable
@@ -203,22 +204,40 @@ class SkillExecutor:
         
         return validated
     
+    # 危险字符模式，用于检测参数中的命令注入尝试
+    _DANGEROUS_PATTERNS = re.compile(r'[;|`$]', re.IGNORECASE)
+
+    def _sanitize_param(self, value: Any) -> str:
+        """清理参数值，防止命令注入"""
+        str_val = str(value)
+        if self._DANGEROUS_PATTERNS.search(str_val):
+            raise ValueError(
+                f"参数包含潜在危险字符（;|`$），拒绝执行: {str_val[:50]}"
+            )
+        return str_val
+
     def _execute_python(self, skill: Skill, params: Dict[str, Any]) -> str:
         """执行 Python 脚本"""
+        # 清理参数，防止代码注入
+        safe_params = {}
+        for key, value in params.items():
+            safe_params[key] = self._sanitize_param(value)
+
         # 替换参数
         code = skill.code
-        for key, value in params.items():
+        for key, value in safe_params.items():
             code = code.replace(f"{{{{{key}}}}}", str(value))
-        
+
         # 写入临时文件
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write(code)
             temp_path = f.name
-        
+
         try:
             result = subprocess.run(
                 ['python', temp_path],
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -228,15 +247,23 @@ class SkillExecutor:
             os.unlink(temp_path)
     
     def _execute_bash(self, skill: Skill, params: Dict[str, Any]) -> str:
-        """执行 Bash 脚本"""
-        # 替换参数
-        cmd = skill.command_template
+        """执行 Bash 脚本（安全模式：参数转义 + shell=False）"""
+        # 清理参数，防止命令注入
+        safe_params = {}
         for key, value in params.items():
+            safe_params[key] = self._sanitize_param(value)
+
+        # 替换参数到模板
+        cmd = skill.command_template
+        for key, value in safe_params.items():
             cmd = cmd.replace(f"{{{{{key}}}}}", str(value))
-        
+
+        # 使用 shlex 分割命令为列表，避免 shell=True
+        cmd_list = shlex.split(cmd)
+
         result = subprocess.run(
-            cmd,
-            shell=True,
+            cmd_list,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=60
@@ -244,14 +271,23 @@ class SkillExecutor:
         return result.stdout + result.stderr
     
     def _execute_curl(self, skill: Skill, params: Dict[str, Any]) -> str:
-        """执行 curl 命令"""
-        cmd = skill.command_template
+        """执行 curl 命令（安全模式：参数转义 + shell=False）"""
+        # 清理参数，防止命令注入
+        safe_params = {}
         for key, value in params.items():
+            safe_params[key] = self._sanitize_param(value)
+
+        # 替换参数到模板
+        cmd = skill.command_template
+        for key, value in safe_params.items():
             cmd = cmd.replace(f"{{{{{key}}}}}", str(value))
-        
+
+        # 使用 shlex 分割命令为列表，避免 shell=True
+        cmd_list = shlex.split(cmd)
+
         result = subprocess.run(
-            cmd,
-            shell=True,
+            cmd_list,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=30

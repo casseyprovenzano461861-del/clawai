@@ -451,7 +451,8 @@ class FileAuditStorage(AuditStorageBackend):
                         # 字符串
                         try:
                             date_str = str(timestamp).split("T")[0]
-                        except:
+                        except Exception as e:
+                            logger.debug(f"Error parsing timestamp: {e}")
                             date_str = str(timestamp)[:10]  # 取前10个字符
                     date_stats[date_str] = date_stats.get(date_str, 0) + 1
             stats["events_by_date"] = date_stats

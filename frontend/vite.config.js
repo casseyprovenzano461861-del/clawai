@@ -13,19 +13,19 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/attack': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8001',
         changeOrigin: true
       },
       '/api': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8001',
         changeOrigin: true
       },
       '/health': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8001',
         changeOrigin: true
       },
       '/tools': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8001',
         changeOrigin: true
       }
     }

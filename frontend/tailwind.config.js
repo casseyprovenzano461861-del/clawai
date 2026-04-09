@@ -87,7 +87,7 @@ export default {
           900: '#111827',
         },
         
-        // 原有赛博朋克风格颜色（保持兼容）
+        // Cyberpunk 颜色体系
         'cyber-dark': '#0a0e17',
         'cyber-darker': '#060910',
         'cyber-blue': '#00d4ff',
@@ -96,6 +96,15 @@ export default {
         'cyber-green': '#10b981',
         'cyber-red': '#ef4444',
         'cyber-yellow': '#f59e0b',
+        // Neon 高亮色（发光效果用）
+        neon: {
+          cyan:   '#00d4ff',
+          blue:   '#3b82f6',
+          purple: '#8b5cf6',
+          pink:   '#ec4899',
+          green:  '#10b981',
+          red:    '#ef4444',
+        },
       },
       
       // 设计系统间距（基于4px）
@@ -148,15 +157,22 @@ export default {
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
+        'glow-cyan': 'glowCyan 2s ease-in-out infinite alternate',
         'slide-up': 'slideUp 0.5s ease-out',
         'fade-in': 'fadeIn 0.3s ease-out',
         'spin-slow': 'spin 3s linear infinite',
         'bounce-slow': 'bounce 2s infinite',
+        'scanline': 'scanline 8s linear infinite',
+        'flicker': 'flicker 4s linear infinite',
       },
       keyframes: {
         glow: {
           '0%': { boxShadow: '0 0 5px rgba(0, 212, 255, 0.5)' },
           '100%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.8)' },
+        },
+        glowCyan: {
+          '0%': { boxShadow: '0 0 8px rgba(0,212,255,0.3), 0 0 16px rgba(0,212,255,0.1)' },
+          '100%': { boxShadow: '0 0 20px rgba(0,212,255,0.7), 0 0 40px rgba(0,212,255,0.3)' },
         },
         slideUp: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
@@ -165,6 +181,16 @@ export default {
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
+        },
+        scanline: {
+          '0%': { transform: 'translateY(-100%)' },
+          '100%': { transform: 'translateY(100vh)' },
+        },
+        flicker: {
+          '0%, 95%, 100%': { opacity: '1' },
+          '96%': { opacity: '0.85' },
+          '97%': { opacity: '1' },
+          '98%': { opacity: '0.9' },
         },
       },
       

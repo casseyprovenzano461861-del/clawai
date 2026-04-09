@@ -73,7 +73,7 @@ services:
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=clawai2024
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-change-me-in-production}
       - GF_USERS_ALLOW_SIGN_UP=false
     profiles:
       - monitoring

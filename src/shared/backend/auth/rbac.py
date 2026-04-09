@@ -390,18 +390,21 @@ def require_permission(permission: Permission):
             # 检查权限
             if not rbac_manager.has_permission(username, permission):
                 # 记录审计日志
-                from backend.auth.advanced_auth import auth_system
-                auth_system.audit_logger.log_event(
-                    "PERMISSION_DENIED",
-                    username,
-                    request.endpoint or "unknown",
-                    {
-                        "required_permission": permission.value,
-                        "path": request.path,
-                        "method": request.method
-                    },
-                    success=False
-                )
+                try:
+                    from backend.auth.advanced_auth import auth_system
+                    auth_system.audit_logger.log_event(
+                        "PERMISSION_DENIED",
+                        username,
+                        request.endpoint or "unknown",
+                        {
+                            "required_permission": permission.value,
+                            "path": request.path,
+                            "method": request.method
+                        },
+                        success=False
+                    )
+                except ImportError:
+                    pass
                 
                 return jsonify({"error": "权限不足"}), 403
             
@@ -424,19 +427,22 @@ def require_any_permission(permissions: List[Permission]):
             # 检查权限
             if not rbac_manager.has_any_permission(username, permissions):
                 # 记录审计日志
-                from backend.auth.advanced_auth import auth_system
-                permission_values = [p.value for p in permissions]
-                auth_system.audit_logger.log_event(
-                    "PERMISSION_DENIED",
-                    username,
-                    request.endpoint or "unknown",
-                    {
-                        "required_permissions": permission_values,
-                        "path": request.path,
-                        "method": request.method
-                    },
-                    success=False
-                )
+                try:
+                    from backend.auth.advanced_auth import auth_system
+                    permission_values = [p.value for p in permissions]
+                    auth_system.audit_logger.log_event(
+                        "PERMISSION_DENIED",
+                        username,
+                        request.endpoint or "unknown",
+                        {
+                            "required_permissions": permission_values,
+                            "path": request.path,
+                            "method": request.method
+                        },
+                        success=False
+                    )
+                except ImportError:
+                    pass
                 
                 return jsonify({"error": "权限不足"}), 403
             
@@ -459,19 +465,22 @@ def require_all_permissions(permissions: List[Permission]):
             # 检查权限
             if not rbac_manager.has_all_permissions(username, permissions):
                 # 记录审计日志
-                from backend.auth.advanced_auth import auth_system
-                permission_values = [p.value for p in permissions]
-                auth_system.audit_logger.log_event(
-                    "PERMISSION_DENIED",
-                    username,
-                    request.endpoint or "unknown",
-                    {
-                        "required_permissions": permission_values,
-                        "path": request.path,
-                        "method": request.method
-                    },
-                    success=False
-                )
+                try:
+                    from backend.auth.advanced_auth import auth_system
+                    permission_values = [p.value for p in permissions]
+                    auth_system.audit_logger.log_event(
+                        "PERMISSION_DENIED",
+                        username,
+                        request.endpoint or "unknown",
+                        {
+                            "required_permissions": permission_values,
+                            "path": request.path,
+                            "method": request.method
+                        },
+                        success=False
+                    )
+                except ImportError:
+                    pass
                 
                 return jsonify({"error": "权限不足"}), 403
             

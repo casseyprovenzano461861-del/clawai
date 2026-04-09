@@ -1,0 +1,14 @@
+# ClawAI ML/RAG 扩展依赖
+# 用于 RAG 向量搜索和嵌入模型
+# 安装: pip install -r requirements-ml.txt
+# 或: pip install ".[ml]"
+
+# 嵌入模型（用于 RAG）
+sentence-transformers>=2.2.0
+
+# RAG 向量数据库
+qdrant-client>=1.6.0
+
+# 数据处理（sentence-transformers 依赖）
+numpy>=1.24.4
+pandas>=2.1.4

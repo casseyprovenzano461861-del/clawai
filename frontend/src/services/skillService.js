@@ -2,6 +2,7 @@
  * 技能库API服务
  */
 import { request } from './apiClient';
+import { USE_MOCK_DATA } from './config';
 
 // 技能类型枚举
 export const SkillType = {
@@ -30,10 +31,11 @@ export const getSkills = async (params = {}) => {
   try {
     return await request.get('/skills', { params });
   } catch (error) {
-    console.warn('获取技能列表API失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取技能列表API失败，使用模拟数据:', error.message);
 
-    // 模拟技能数据
-    const mockSkills = [
+      // 模拟技能数据
+      const mockSkills = [
       {
         id: 'port-scanning',
         name: '端口扫描',
@@ -236,6 +238,9 @@ export const getSkills = async (params = {}) => {
       page_size: pageSize,
       total_pages: Math.ceil(filteredSkills.length / pageSize)
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -248,14 +253,16 @@ export const getSkill = async (skillId) => {
   try {
     return await request.get(`/skills/${skillId}`);
   } catch (error) {
-    console.warn('获取技能详情API失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取技能详情API失败，使用模拟数据:', error.message);
 
-    // 从模拟技能列表中查找
-    const mockSkills = await getSkills();
-    const skill = mockSkills.skills.find(s => s.id === skillId);
+      // 从模拟技能列表中查找
+      const mockSkills = await getSkills();
+      const skill = mockSkills.skills.find(s => s.id === skillId);
 
-    if (skill) {
-      return skill;
+      if (skill) {
+        return skill;
+      }
     }
 
     throw new Error(`技能 ${skillId} 未找到`);
@@ -270,10 +277,11 @@ export const getSkillStats = async () => {
   try {
     return await request.get('/skills/stats');
   } catch (error) {
-    console.warn('获取技能统计API失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取技能统计API失败，使用模拟数据:', error.message);
 
-    // 模拟技能统计
-    return {
+      // 模拟技能统计
+      return {
       total_skills: 7,
       total_usage: 2757,
       avg_success_rate: 77.4,
@@ -294,6 +302,9 @@ export const getSkillStats = async () => {
         [SkillDifficulty.EXPERT]: 0
       }
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -307,10 +318,11 @@ export const executeSkill = async (skillId, parameters = {}) => {
   try {
     return await request.post(`/skills/${skillId}/execute`, parameters);
   } catch (error) {
-    console.warn('执行技能API失败，使用模拟响应:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('执行技能API失败，使用模拟响应:', error.message);
 
-    // 模拟执行响应
-    return {
+      // 模拟执行响应
+      return {
       success: true,
       skill_id: skillId,
       execution_id: `exec_${Date.now()}`,
@@ -319,6 +331,9 @@ export const executeSkill = async (skillId, parameters = {}) => {
       estimated_completion: new Date(Date.now() + 300000).toISOString(), // 5分钟后
       parameters: parameters
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -331,10 +346,11 @@ export const getExecutionStatus = async (executionId) => {
   try {
     return await request.get(`/skills/executions/${executionId}`);
   } catch (error) {
-    console.warn('获取执行状态API失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取执行状态API失败，使用模拟数据:', error.message);
 
-    // 模拟执行状态
-    const progress = Math.min(100, Math.floor((Date.now() % 300000) / 3000)); // 模拟进度
+      // 模拟执行状态
+      const progress = Math.min(100, Math.floor((Date.now() % 300000) / 3000)); // 模拟进度
 
     return {
       execution_id: executionId,
@@ -348,6 +364,9 @@ export const getExecutionStatus = async (executionId) => {
         { type: 'warning', count: 5 }
       ] : []
     };
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -359,10 +378,11 @@ export const getLearningPaths = async () => {
   try {
     return await request.get('/skills/learning-paths');
   } catch (error) {
-    console.warn('获取学习路径API失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取学习路径API失败，使用模拟数据:', error.message);
 
-    // 模拟学习路径
-    return [
+      // 模拟学习路径
+      return [
       {
         id: 'web-penetration',
         name: 'Web渗透测试',
@@ -391,6 +411,9 @@ export const getLearningPaths = async () => {
         prerequisites: ['os-fundamentals', 'security-basics']
       }
     ];
+    } else {
+      throw error;
+    }
   }
 };
 

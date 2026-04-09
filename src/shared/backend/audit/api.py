@@ -5,8 +5,9 @@
 
 from typing import Optional, List
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from fastapi.responses import Response
+import logging
 
 from ..schemas import (
     AuditEvent,
@@ -19,6 +20,8 @@ from ..schemas import (
 )
 from .manager import get_audit_manager
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/audit",
     tags=["audit"],
@@ -30,11 +33,39 @@ router = APIRouter(
 )
 
 
-# 依赖函数 - 后续可以添加认证和权限检查
-async def get_current_user():
-    """获取当前用户（待实现）"""
-    # TODO: 实现JWT认证和用户提取
-    return {"user_id": "system", "username": "system"}
+async def get_current_user(request: Request):
+    """获取当前认证用户"""
+    try:
+        from ..auth.fastapi_permissions import get_current_user as auth_get_user
+        user = await auth_get_user(request)
+        if user:
+            return user
+    except Exception as e:
+        logger.debug(f"JWT认证失败: {e}")
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=APIError(
+            code="UNAUTHORIZED",
+            message="未认证，请提供有效的JWT令牌",
+            severity="error"
+        ).dict()
+    )
+
+
+def require_admin_role(current_user=Depends(get_current_user)):
+    """要求管理员角色"""
+    role = current_user.get("role", "guest")
+    if role not in ("admin", "administrator"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=APIError(
+                code="FORBIDDEN",
+                message=f"需要管理员权限，当前角色: {role}",
+                severity="error"
+            ).dict()
+        )
+    return current_user
 
 
 @router.get("/events", response_model=AuditEventPage)
@@ -141,7 +172,7 @@ async def get_event(
 @router.delete("/events")
 async def delete_events(
     event_ids: List[str],
-    _current_user=Depends(get_current_user)
+    _current_user=Depends(require_admin_role)
 ):
     """
     删除审计事件
@@ -149,7 +180,6 @@ async def delete_events(
     批量删除指定的审计事件。需要管理员权限。
     """
     try:
-        # TODO: 检查用户权限
         if not event_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -184,7 +214,7 @@ async def delete_events(
 @router.post("/cleanup")
 async def cleanup_events(
     days_to_keep: int = Query(90, ge=1, le=365, description="保留天数"),
-    _current_user=Depends(get_current_user)
+    _current_user=Depends(require_admin_role)
 ):
     """
     清理旧审计事件
@@ -192,7 +222,6 @@ async def cleanup_events(
     自动清理指定天数前的审计事件。需要管理员权限。
     """
     try:
-        # TODO: 检查用户权限
         audit_manager = get_audit_manager()
         deleted_count = audit_manager.cleanup_old_events(days_to_keep)
 
@@ -245,7 +274,7 @@ async def export_events(
     start_time: Optional[datetime] = Query(None, description="开始时间"),
     end_time: Optional[datetime] = Query(None, description="结束时间"),
     format: str = Query("json", description="导出格式（json或csv）"),
-    _current_user=Depends(get_current_user)
+    _current_user=Depends(require_admin_role)
 ):
     """
     导出审计事件
@@ -253,7 +282,6 @@ async def export_events(
     导出审计事件为JSON或CSV格式。需要管理员权限。
     """
     try:
-        # TODO: 检查用户权限
         filters = AuditEventFilters(
             event_types=event_types,
             start_time=start_time,
@@ -335,15 +363,14 @@ async def review_event(
     event_id: str,
     approved: bool = Query(..., description="审核结果（通过/拒绝）"),
     notes: Optional[str] = Query(None, description="审核备注"),
-    _current_user=Depends(get_current_user)
+    _current_user=Depends(require_admin_role)
 ):
     """
     审核审计事件
 
-    审核需要人工审核的审计事件。需要审核员权限。
+    审核需要人工审核的审计事件。需要管理员权限。
     """
     try:
-        # TODO: 检查用户权限
         audit_manager = get_audit_manager()
         event = audit_manager.get_event(event_id)
 

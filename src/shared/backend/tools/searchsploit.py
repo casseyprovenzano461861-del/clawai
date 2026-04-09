@@ -6,6 +6,7 @@ Exploit-DB本地搜索工具
 封装searchsploit命令，搜索本地Exploit-DB数据库中的漏洞利用代码
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -13,6 +14,8 @@ import sys
 import tempfile
 import os
 import random
+
+logger = logging.getLogger(__name__)
 
 class SearchSploitTool:
     """SearchSploit Exploit-DB本地搜索工具类"""
@@ -134,8 +137,8 @@ class SearchSploitTool:
             if result.stdout and "{" in result.stdout:
                 try:
                     return result.stdout
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
             
             # 如果JSON解析失败，返回原始输出
             return result.stdout + result.stderr

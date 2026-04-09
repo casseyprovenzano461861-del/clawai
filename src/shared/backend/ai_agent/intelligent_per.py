@@ -541,7 +541,7 @@ class IntelligentPERAgent:
                 if hasattr(tc, 'function') and hasattr(tc.function, 'arguments'):
                     try:
                         tool_args = json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else tc.function.arguments
-                    except:
+                    except Exception as e:
                         tool_args = {}
                 elif hasattr(tc, 'arguments'):
                     tool_args = tc.arguments if isinstance(tc.arguments, dict) else {}

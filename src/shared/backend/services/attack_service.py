@@ -10,8 +10,14 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from backend.shared.exceptions import ValidationError, ExecutionError, ToolUnavailableError
-from backend.tools.unified_executor import UnifiedToolExecutor
-from backend.attack_chain.unified_attack_generator import UnifiedAttackGenerator
+try:
+    from backend.tools.unified_executor import UnifiedToolExecutor
+except ImportError:
+    UnifiedToolExecutor = None
+try:
+    from backend.attack_chain.unified_attack_generator import UnifiedAttackGenerator
+except ImportError:
+    UnifiedAttackGenerator = None
 from backend.workflow.exploit_post_closure import run_exploit_post_closure
 
 
@@ -24,11 +30,11 @@ class AttackService:
     def __init__(self):
         """初始化攻击服务"""
         # 初始化工具执行器
-        self.tool_executor = UnifiedToolExecutor()
+        self.tool_executor = UnifiedToolExecutor() if UnifiedToolExecutor else None
         
         # 初始化攻击链生成器
         # 使用统一攻击链生成器，包含 exploit/post 阶段
-        self.attack_generator = UnifiedAttackGenerator(enable_evolution=True)
+        self.attack_generator = UnifiedAttackGenerator(enable_evolution=True) if UnifiedAttackGenerator else None
         
         # 任务存储（实际项目中应该使用数据库或缓存）
         self.tasks: Dict[str, Dict[str, Any]] = {}
@@ -158,10 +164,21 @@ class AttackService:
         
         try:
             # 执行综合扫描
+            if not self.tool_executor:
+                raise ExecutionError("工具执行器不可用")
             scan_result = self.tool_executor.execute_comprehensive_scan(target)
             
             # 生成攻击链
+            if not self.attack_generator:
+                raise ExecutionError("攻击链生成器不可用")
             attack_chain_result = self.attack_generator.generate_attack_chain(scan_result)
+
+            # 如果真实扫描 attack_chain 为空，降级到 mock 保证 UI 有数据展示
+            if not attack_chain_result.get("attack_chain"):
+                mock_result = self._execute_mock_attack(target)
+                mock_result["execution_mode"] = "real_fallback_mock"
+                mock_result["fallback_reason"] = "真实扫描未生成攻击链，降级到模拟数据"
+                return mock_result
 
             # exploit/post 闭环（安全验证，不发起真实 payload）
             closure = run_exploit_post_closure(
@@ -236,7 +253,10 @@ class AttackService:
         }
         
         # 生成攻击链
-        attack_chain_result = self.attack_generator.generate_attack_chain(mock_scan_results)
+        if self.attack_generator:
+            attack_chain_result = self.attack_generator.generate_attack_chain(mock_scan_results)
+        else:
+            attack_chain_result = {"attack_chain": [], "analysis": {}}
 
         # exploit/post 闭环（安全验证，不发起真实 payload）
         closure = run_exploit_post_closure(
@@ -290,7 +310,7 @@ class AttackService:
             tool_real = True
 
             # nmap
-            if self.tool_executor.available_tools.get("nmap", False):
+            if self.tool_executor and self.tool_executor.available_tools.get("nmap", False):
                 nmap_metrics = self.tool_executor.execute_tool(
                     "nmap",
                     target,
@@ -312,7 +332,7 @@ class AttackService:
                 p for p in nmap_result.get("ports", [])
                 if isinstance(p, dict) and str(p.get("state", "")).lower() == "open" and p.get("service") in ["http", "https"]
             ]
-            if web_services and self.tool_executor.available_tools.get("whatweb", False):
+            if web_services and self.tool_executor and self.tool_executor.available_tools.get("whatweb", False):
                 whatweb_metrics = self.tool_executor.execute_tool("whatweb", target)
                 whatweb_result = unwrap(whatweb_metrics)
                 tool_real = tool_real and (str(whatweb_metrics.get("execution_mode", "")).lower() == "real")
@@ -426,7 +446,7 @@ class AttackService:
             工具信息字典
         """
         try:
-            return self.tool_executor.get_available_tools()
+            return self.tool_executor.get_available_tools() if self.tool_executor else {}
         except Exception as e:
             # 如果获取失败，返回空字典
             return {}

@@ -19,14 +19,18 @@ from enum import Enum
 try:
     from .skills.skill_registry import SkillRegistry
     from .skills.base_skill import SkillContext
-    from .decision_engine import DecisionEngine
     from .reasoning_engine import PseudoReasoningEngine
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from backend.skills.skill_registry import SkillRegistry
     from backend.skills.base_skill import SkillContext
-    from backend.decision_engine import DecisionEngine
     from backend.reasoning_engine import PseudoReasoningEngine
+
+# decision_engine 已删除，使用兼容模式
+try:
+    from .decision_engine import DecisionEngine
+except ImportError:
+    DecisionEngine = None
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +142,7 @@ class AgentController:
         self.max_iterations = max_iterations
         
         self.skill_registry = SkillRegistry()
-        self.decision_engine = DecisionEngine()
+        self.decision_engine = DecisionEngine() if DecisionEngine else None
         self.reasoning_engine = PseudoReasoningEngine()  # 新增：伪推理引擎
         self.context = None  # 稍后在execute_attack_plan中初始化
         
@@ -438,7 +442,12 @@ class AgentController:
         
         # 决策引擎评分
         scan_summary = self.context.scan_results if hasattr(self.context, 'scan_results') else {}
-        decision_result = self.decision_engine.process_paths(skill_paths, scan_summary)
+        if self.decision_engine:
+            decision_result = self.decision_engine.process_paths(skill_paths, scan_summary)
+        else:
+            # 无决策引擎时，按成功率排序选择最佳技能
+            best_path = max(skill_paths, key=lambda p: p.get("success_rate", 0)) if skill_paths else None
+            decision_result = {"best_path": {"path_info": best_path} if best_path else None}
         
         thinking_log.append({"message": "决策引擎评分完成", "confidence": 0.85})
         

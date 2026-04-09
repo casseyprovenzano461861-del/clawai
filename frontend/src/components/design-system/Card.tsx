@@ -21,8 +21,8 @@ const Card: React.FC<CardProps> = ({
   
   // 变体样式
   const variantClasses = {
-    default: 'bg-white dark:bg-gray-800',
-    elevated: 'bg-white dark:bg-gray-800 shadow-lg',
+    default: 'bg-[#0a0e17] text-gray-100',
+    elevated: 'bg-[#0a0e17] text-gray-100 shadow-lg shadow-black/40',
     flat: 'bg-transparent',
     ghost: 'bg-transparent border-transparent',
   };
@@ -36,10 +36,10 @@ const Card: React.FC<CardProps> = ({
   };
   
   // 边框样式
-  const borderClass = bordered ? 'border border-gray-200 dark:border-gray-700' : '';
+  const borderClass = bordered ? 'border border-white/10' : '';
   
   // 悬停效果
-  const hoverClass = hoverable ? 'hover:shadow-md hover:-translate-y-1' : '';
+  const hoverClass = hoverable ? 'hover:shadow-lg hover:shadow-cyan-500/10 hover:border-cyan-500/20 hover:-translate-y-1' : '';
   
   // 组合所有样式
   const cardClasses = [
@@ -71,7 +71,7 @@ export const CardTitle: React.FC<CardTitleProps> = ({
 }) => {
   return (
     <Component
-      className={`text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 ${className}`}
+      className={`text-lg font-semibold text-gray-100 mb-2 ${className}`}
       {...props}
     >
       {children}
@@ -88,7 +88,7 @@ export const CardContent: React.FC<CardContentProps> = ({
   ...props
 }) => {
   return (
-    <div className={`text-gray-600 dark:text-gray-400 ${className}`} {...props}>
+    <div className={`text-gray-400 ${className}`} {...props}>
       {children}
     </div>
   );
@@ -113,7 +113,7 @@ export const CardFooter: React.FC<CardFooterProps> = ({
   
   return (
     <div
-      className={`flex items-center ${alignClasses[align]} mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 ${className}`}
+      className={`flex items-center ${alignClasses[align]} mt-4 pt-4 border-t border-white/10 ${className}`}
       {...props}
     >
       {children}

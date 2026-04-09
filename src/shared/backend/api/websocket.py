@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 WebSocket API 端点
-支持 P-E-R 实时事件推送
+支持 P-E-R 实时事件推送，并桥接后端 EventBus 到所有 WebSocket 客户端
 """
 
 import json
@@ -17,11 +17,13 @@ router = APIRouter(tags=["websocket"])
 
 
 class ConnectionManager:
-    """WebSocket 连接管理器"""
+    """WebSocket 连接管理器（含 EventBus 桥接）"""
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self._counter = 0
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._eventbus_attached = False
     
     async def connect(self, websocket: WebSocket, client_id: str = None) -> str:
         """接受 WebSocket 连接"""
@@ -55,6 +57,93 @@ class ConnectionManager:
         """广播消息到所有连接"""
         for client_id in list(self.active_connections.keys()):
             await self.send_json(client_id, data)
+
+    # ------------------------------------------------------------------
+    # EventBus 桥接
+    # ------------------------------------------------------------------
+
+    def attach_eventbus(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        """将 EventBus 事件桥接到 WebSocket 广播。
+
+        应在 FastAPI lifespan 启动时调用，传入当前事件循环。
+        EventBus 回调在同步线程中执行，通过 run_coroutine_threadsafe
+        安全调度到 asyncio 事件循环。
+
+        Args:
+            loop: asyncio 事件循环，默认使用当前运行中的循环
+        """
+        if self._eventbus_attached:
+            return
+
+        try:
+            from ..events import EventBus, EventType
+        except ImportError:
+            logger.warning("EventBus 模块未找到，跳过桥接")
+            return
+
+        self._loop = loop or asyncio.get_event_loop()
+        bus = EventBus.get()
+
+        def _make_handler(serializer):
+            """创建线程安全的同步回调"""
+            def handler(event):
+                if not self.active_connections:
+                    return  # 无客户端时静默丢弃
+                data = serializer(event)
+                try:
+                    asyncio.run_coroutine_threadsafe(self.broadcast(data), self._loop)
+                except Exception as exc:
+                    logger.debug(f"EventBus 广播调度失败: {exc}")
+            return handler
+
+        def _serialize_state(event):
+            d = {"type": "state_changed", "timestamp": datetime.now().isoformat()}
+            d.update(event.data)
+            return d
+
+        def _serialize_message(event):
+            return {
+                "type": "message",
+                "text": event.data.get("text", ""),
+                "msg_type": event.data.get("type", "info"),
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        def _serialize_tool(event):
+            return {
+                "type": "tool_event",
+                "status": event.data.get("status", ""),
+                "name": event.data.get("name", ""),
+                "args": event.data.get("args", {}),
+                "result": event.data.get("result"),
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        def _serialize_finding(event):
+            return {
+                "type": "finding",
+                "title": event.data.get("title", ""),
+                "severity": event.data.get("severity", "info"),
+                "detail": event.data.get("detail", ""),
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        def _serialize_progress(event):
+            return {
+                "type": "progress",
+                "percent": event.data.get("percent", 0.0),
+                "description": event.data.get("description", ""),
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        bus.subscribe(EventType.STATE_CHANGED, _make_handler(_serialize_state))
+        bus.subscribe(EventType.MESSAGE, _make_handler(_serialize_message))
+        bus.subscribe(EventType.TOOL, _make_handler(_serialize_tool))
+        bus.subscribe(EventType.FINDING, _make_handler(_serialize_finding))
+        bus.subscribe(EventType.PROGRESS, _make_handler(_serialize_progress))
+
+        self._eventbus_attached = True
+        logger.info("EventBus → WebSocket 桥接已建立（5 类事件）")
 
 
 # 全局连接管理器

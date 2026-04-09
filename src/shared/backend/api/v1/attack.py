@@ -3,6 +3,14 @@
 攻击API蓝图
 处理攻击链生成和扫描请求
 """
+# DEPRECATED: This Flask route module is deprecated.
+# Use FastAPI routes in src/shared/backend/ instead.
+import warnings
+warnings.warn(
+    "Flask API routes are deprecated. Use FastAPI routes instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from flask import Blueprint, request, jsonify, g
 import time

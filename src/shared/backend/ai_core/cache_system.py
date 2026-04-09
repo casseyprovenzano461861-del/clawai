@@ -123,7 +123,7 @@ class AICacheSystem:
             # 尝试使用pickle估算大小
             pickled = pickle.dumps(value)
             return len(pickled)
-        except:
+        except Exception as e:
             # 备用方法：字符串长度
             return len(str(value))
     

@@ -6,6 +6,7 @@ DNS侦查和信息收集工具
 封装DNSRecon功能，支持DNS枚举、记录查询、子域名爆破和区域传输检测
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -14,6 +15,8 @@ import tempfile
 import os
 import random
 import time
+
+logger = logging.getLogger(__name__)
 
 class DNSReconTool:
     """DNSRecon DNS侦查工具类"""
@@ -221,8 +224,8 @@ class DNSReconTool:
             if result.stdout and "{" in result.stdout:
                 try:
                     return result.stdout
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
             
             # 如果JSON解析失败，返回原始输出
             return result.stdout + result.stderr

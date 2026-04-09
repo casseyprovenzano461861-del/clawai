@@ -93,14 +93,14 @@ def _get_old_config_value(key: str, default: Any = None) -> Any:
 
 # 动态生成配置变量
 SERVER_HOST = _get_new_config_value('SERVER_HOST') or _get_old_config_value('SERVER_HOST', '0.0.0.0')
-BACKEND_PORT = _get_new_config_value('BACKEND_PORT') or _get_old_config_value('BACKEND_PORT', 5000)
+BACKEND_PORT = _get_new_config_value('BACKEND_PORT') or _get_old_config_value('BACKEND_PORT', 8000)
 FRONTEND_PORT = _get_old_config_value('FRONTEND_PORT', 3000)  # 仅旧版支持
 DEBUG = _get_new_config_value('DEBUG') or _get_old_config_value('DEBUG', False)
 
 # 安全配置
 ENABLE_REAL_ATTACK = _get_new_config_value('ENABLE_REAL_ATTACK') or _get_old_config_value('ENABLE_REAL_ATTACK', False)
-SECRET_KEY = _get_new_config_value('SECRET_KEY') or _get_old_config_value('SECRET_KEY', 'your-secret-key-here-change-in-production')
-JWT_SECRET = _get_new_config_value('JWT_SECRET') or _get_old_config_value('JWT_SECRET', 'clawai_jwt_secret_key_2025_change_in_production')
+SECRET_KEY = _get_new_config_value('SECRET_KEY') or _get_old_config_value('SECRET_KEY', '')
+JWT_SECRET = _get_new_config_value('JWT_SECRET') or _get_old_config_value('JWT_SECRET', '')
 JWT_ALGORITHM = _get_new_config_value('JWT_ALGORITHM') or _get_old_config_value('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRATION_HOURS = _get_new_config_value('JWT_EXPIRATION_HOURS') or _get_old_config_value('JWT_EXPIRATION_HOURS', 24)
 API_AUTH_ENABLED = _get_new_config_value('API_AUTH_ENABLED') or _get_old_config_value('API_AUTH_ENABLED', True)

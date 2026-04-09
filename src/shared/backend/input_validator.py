@@ -6,10 +6,13 @@
 """
 
 import re
+import logging
 import ipaddress
 from urllib.parse import urlparse
 from typing import Dict, Any, List, Tuple, Optional
 from config import config
+
+logger = logging.getLogger(__name__)
 
 
 class InputValidator:
@@ -115,8 +118,8 @@ class InputValidator:
                     # 简单清理查询参数
                     sanitized += "?" + self._sanitize_query(parsed.query)
                 return sanitized
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error parsing URL in sanitize_target: {e}")
         
         return target
     
@@ -172,7 +175,8 @@ class InputValidator:
         try:
             result = urlparse(url)
             return all([result.scheme, result.netloc]) and result.scheme in ["http", "https"]
-        except:
+        except Exception as e:
+            logger.debug(f"Error validating URL: {e}")
             return False
     
     def validate_port(self, port: int) -> bool:

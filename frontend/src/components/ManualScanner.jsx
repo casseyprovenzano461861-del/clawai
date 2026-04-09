@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, Button, Input, Alert } from '@/components/design-system';
-import api from '../services/api';
+import { api } from '../services/apiClient';
 
 const ManualScanner = () => {
   const [commands, setCommands] = useState([]);

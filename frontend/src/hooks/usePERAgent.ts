@@ -1,11 +1,37 @@
 /**
  * P-E-R Agent Hook
  * 管理 P-E-R 会话状态和 WebSocket 连接
+ * 支持后端 EventBus 桥接的扩展事件类型：
+ *   state_changed / message / tool_event / finding / progress
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-const WS_URL = process.env.REACT_APP_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/per-events`;
+const WS_URL = (import.meta.env.VITE_WS_URL as string) || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/per-events`;
+
+export type ToolEventStatus = 'start' | 'complete' | 'error';
+export type MessageType = 'info' | 'success' | 'error' | 'warning';
+export type AgentState = 'idle' | 'running' | 'paused' | 'completed' | 'error';
+
+export interface ToolEvent {
+  id: string;
+  name: string;
+  status: ToolEventStatus;
+  args: Record<string, unknown>;
+  result?: unknown;
+  timestamp: string;
+  /** 从 start 到 complete/error 的耗时（ms），仅 complete/error 时有值 */
+  durationMs?: number;
+}
+
+export interface LogEntry {
+  id: string;
+  text: string;
+  msgType: MessageType;
+  timestamp: string;
+  /** 来源：eventbus（后端 EventBus）或 per（P-E-R 生成器） */
+  source: 'eventbus' | 'per';
+}
 
 export const usePERAgent = (options = {}) => {
   const {
@@ -15,7 +41,7 @@ export const usePERAgent = (options = {}) => {
     onEvent,
     onError,
     onComplete
-  } = options;
+  } = options as any;
 
   const [status, setStatus] = useState('idle'); // idle, connecting, connected, running, error
   const [phase, setPhase] = useState('idle');
@@ -25,10 +51,22 @@ export const usePERAgent = (options = {}) => {
   const [findings, setFindings] = useState([]);
   const [budget, setBudget] = useState(null);
   const [report, setReport] = useState(null);
-  
+
+  // --- EventBus 桥接新增状态 ---
+  const [agentState, setAgentState] = useState<AgentState>('idle');
+  const [currentTask, setCurrentTask] = useState<string>('');
+  const [progress, setProgress] = useState<number>(0);
+  const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
   const wsRef = useRef(null);
   const retryCountRef = useRef(0);
   const sessionIdRef = useRef(null);
+  /** tool_event start 时间戳，key = tool name */
+  const toolStartRef = useRef<Record<string, number>>({});
+  const logCounterRef = useRef(0);
+
+  const _nextId = (prefix: string) => `${prefix}-${Date.now()}-${++logCounterRef.current}`;
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -96,6 +134,10 @@ export const usePERAgent = (options = {}) => {
         sessionIdRef.current = Date.now().toString();
         setFindings([]);
         setReport(null);
+        setToolEvents([]);
+        setLogs([]);
+        setProgress(0);
+        setCurrentTask('');
         break;
 
       case 'iteration':
@@ -131,12 +173,13 @@ export const usePERAgent = (options = {}) => {
         break;
 
       case 'reflection':
-        // 可以存储反思摘要
         break;
 
       case 'complete':
         setStatus('connected');
         setPhase('completed');
+        setAgentState('completed');
+        setProgress(1);
         setReport(event.report);
         setBudget(event.budget_summary);
         onComplete?.(event);
@@ -145,7 +188,92 @@ export const usePERAgent = (options = {}) => {
       case 'error':
         setStatus('error');
         setPhase('failed');
+        setAgentState('error');
         onError?.(new Error(event.message));
+        break;
+
+      // --- EventBus 桥接事件 ---
+
+      case 'state_changed': {
+        const s = event.state as AgentState;
+        setAgentState(s);
+        if (event.task) setCurrentTask(event.task);
+        // 同步 running/paused 到 status
+        if (s === 'running') setStatus('running');
+        else if (s === 'idle' || s === 'paused') {
+          setStatus(prev => (prev === 'running' ? 'connected' : prev));
+        }
+        setLogs(prev => [...prev.slice(-199), {
+          id: _nextId('log'),
+          text: event.details || `状态变更: ${s}`,
+          msgType: s === 'error' ? 'error' : 'info',
+          timestamp: event.timestamp || new Date().toISOString(),
+          source: 'eventbus',
+        }]);
+        break;
+      }
+
+      case 'message':
+        setLogs(prev => [...prev.slice(-199), {
+          id: _nextId('log'),
+          text: event.text || '',
+          msgType: (event.msg_type as MessageType) || 'info',
+          timestamp: event.timestamp || new Date().toISOString(),
+          source: 'eventbus',
+        }]);
+        break;
+
+      case 'tool_event': {
+        const ts = event.timestamp || new Date().toISOString();
+        if (event.status === 'start') {
+          toolStartRef.current[event.name] = Date.now();
+          setToolEvents(prev => [...prev.slice(-49), {
+            id: _nextId('tool'),
+            name: event.name,
+            status: 'start',
+            args: event.args || {},
+            result: null,
+            timestamp: ts,
+          }]);
+        } else {
+          const startTime = toolStartRef.current[event.name];
+          const durationMs = startTime ? Date.now() - startTime : undefined;
+          delete toolStartRef.current[event.name];
+          setToolEvents(prev => {
+            // 找到最后一个同名 start 条目，更新其状态
+            const idx = [...prev].reverse().findIndex(t => t.name === event.name && t.status === 'start');
+            if (idx === -1) return prev;
+            const realIdx = prev.length - 1 - idx;
+            const updated = [...prev];
+            updated[realIdx] = {
+              ...updated[realIdx],
+              status: event.status as ToolEventStatus,
+              result: event.result,
+              durationMs,
+            };
+            return updated;
+          });
+        }
+        break;
+      }
+
+      case 'finding':
+        // 合并进 findings，避免标题重复
+        setFindings(prev => {
+          const exists = prev.some(f => f.title === event.title);
+          if (exists) return prev;
+          return [...prev, {
+            title: event.title,
+            severity: event.severity,
+            detail: event.detail,
+            timestamp: event.timestamp,
+          }];
+        });
+        break;
+
+      case 'progress':
+        setProgress(Math.min(1, Math.max(0, event.percent ?? 0)));
+        if (event.description) setCurrentTask(event.description);
         break;
 
       default:
@@ -201,7 +329,7 @@ export const usePERAgent = (options = {}) => {
   }, [autoConnect, connect]);
 
   return {
-    // 状态
+    // 原有状态
     status,
     phase,
     iteration,
@@ -210,6 +338,13 @@ export const usePERAgent = (options = {}) => {
     findings,
     budget,
     report,
+    
+    // EventBus 桥接新增状态
+    agentState,
+    currentTask,
+    progress,
+    toolEvents,
+    logs,
     
     // 方法
     connect,
@@ -220,7 +355,8 @@ export const usePERAgent = (options = {}) => {
     // 工具方法
     isConnected: status === 'connected' || status === 'running',
     isRunning: status === 'running',
-    clearFindings: () => setFindings([])
+    clearFindings: () => setFindings([]),
+    clearLogs: () => setLogs([]),
   };
 };
 

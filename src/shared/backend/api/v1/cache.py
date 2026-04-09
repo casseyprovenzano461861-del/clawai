@@ -3,6 +3,14 @@
 缓存统计API蓝图
 提供缓存系统的统计信息和监控功能
 """
+# DEPRECATED: This Flask route module is deprecated.
+# Use FastAPI routes in src/shared/backend/ instead.
+import warnings
+warnings.warn(
+    "Flask API routes are deprecated. Use FastAPI routes instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from flask import Blueprint, jsonify, request
 import time

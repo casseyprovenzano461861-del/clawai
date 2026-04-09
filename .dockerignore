@@ -1,0 +1,60 @@
+# Version control
+.git/
+.gitignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+# 开发环境文件不进入生产镜像
+.env.development
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Large directories (download separately)
+tools/penetration/
+references/
+
+# Node
+frontend/node_modules/
+frontend/.vite/
+
+# Data directories
+data/
+logs/
+
+# Docker
+docker/
+
+# Aider
+.aider*
+
+# Misc
+*.log
+*.db

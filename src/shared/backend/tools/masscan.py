@@ -5,6 +5,7 @@ Masscan扫描工具模块（基于BaseTool的新版本）
 封装masscan高速端口扫描功能
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -16,9 +17,11 @@ from typing import Dict, List, Any, Optional
 # 导入工具基类
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from backend.tools.base_tool import (
-    BaseTool, ToolExecutionMode, ToolCategory, 
+    BaseTool, ToolExecutionMode, ToolCategory,
     ToolPriority, ToolExecutionResult, register_tool
 )
+
+logger = logging.getLogger(__name__)
 
 
 @register_tool
@@ -185,8 +188,8 @@ class MasscanTool(BaseTool):
             if temp_file and os.path.exists(temp_file):
                 try:
                     os.unlink(temp_file)
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
     
     def _simulate_execution(self, target: str, options: Optional[Dict] = None) -> Dict[str, Any]:
         """模拟masscan执行（当工具不可用时）"""

@@ -129,21 +129,30 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
     async def _extract_actor(self, request: Request) -> AuditActor:
         """从请求中提取操作者信息"""
-        # 尝试从请求中提取用户信息
-        # TODO: 根据实际的认证系统调整
         user_id = None
         username = None
         role = None
 
-        # 检查JWT令牌或其他认证信息
+        # 检查JWT令牌
         auth_header = request.headers.get("authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            # 这里可以解码JWT令牌获取用户信息
-            # 暂时使用占位符
-            pass
+            token = auth_header.split(" ", 1)[1]
+            try:
+                from ..data_service.auth.jwt_token import verify_token
+                payload = verify_token(token)
+                if payload:
+                    user_id = str(payload.user_id)
+                    username = payload.username
+                    role = payload.role
+            except Exception:
+                pass
 
-        # 从session或cookie获取用户信息
-        # ...
+        # 检查request.state中是否有用户信息（由权限中间件设置）
+        if not user_id and hasattr(request.state, 'user') and request.state.user:
+            user = request.state.user
+            user_id = str(user.get('user_id', ''))
+            username = user.get('username')
+            role = user.get('role')
 
         return AuditActor(
             user_id=user_id,

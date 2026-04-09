@@ -69,6 +69,13 @@ def parse_arguments() -> argparse.Namespace:
 
   # 查看状态
   clawai status
+
+  # 会话管理
+  clawai session list
+  clawai session load <session_id>
+  clawai session delete <session_id>
+  clawai session delete all
+  clawai session export <session_id> -f html
         """
     )
 
@@ -96,6 +103,29 @@ def parse_arguments() -> argparse.Namespace:
     # status 子命令
     status_parser = subparsers.add_parser("status", help="查看系统状态")
 
+    # session 子命令
+    session_parser = subparsers.add_parser("session", help="会话管理")
+    session_sub = session_parser.add_subparsers(dest="session_action", help="会话操作")
+
+    # session list
+    session_sub.add_parser("list", help="列出所有已保存会话")
+
+    # session load
+    load_p = session_sub.add_parser("load", help="加载会话并进入对话模式")
+    load_p.add_argument("session_id", type=str, help="会话 ID")
+    load_p.add_argument("-m", "--model", type=str, help="指定AI模型")
+
+    # session delete
+    del_p = session_sub.add_parser("delete", help="删除指定会话")
+    del_p.add_argument("session_id", type=str, help="会话 ID（或 'all' 删除全部）")
+
+    # session export
+    exp_p = session_sub.add_parser("export", help="导出会话报告")
+    exp_p.add_argument("session_id", type=str, help="会话 ID")
+    exp_p.add_argument("-f", "--format", choices=["markdown", "json", "html"],
+                       default="markdown", help="导出格式（默认 markdown）")
+    exp_p.add_argument("-o", "--output", type=str, help="输出文件路径（不含扩展名）")
+
     # 全局参数
     parser.add_argument("-t", "--target", type=str, help="设置目标地址（快捷方式）")
     parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
@@ -105,105 +135,190 @@ def parse_arguments() -> argparse.Namespace:
 
 
 async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = None,
-                        debug: bool = False):
+                        debug: bool = False, session_id: Optional[str] = None):
     """运行 AI 对话模式"""
     print_banner()
-    
+
     console.print("[dim]输入目标地址开始测试，或输入 'help' 查看帮助[/]")
+    console.print("[dim]提示: Tab 键补全命令，↑↓ 键浏览历史，Ctrl-R 搜索历史[/]")
     console.print()
-    
+
+    # 首次使用引导
+    from pathlib import Path as _P
+    _welcome_path = _P.home() / ".clawai" / ".welcomed"
+    if not _welcome_path.exists():
+        console.print(Panel(
+            "[bold green]欢迎使用 ClawAI![/]\n\n"
+            "快速开始:\n"
+            "  1. [cyan]扫描 192.168.1.1[/] — 对目标执行安全扫描\n"
+            "  2. [cyan]快速扫描 example.com[/] — 3轮快速扫描\n"
+            "  3. [cyan]help[/] — 查看所有命令\n"
+            "  4. [cyan]配置[/] — 查看当前 AI 配置\n\n"
+            "[dim]输入 Tab 键可自动补全命令[/]",
+            title="新手指南",
+            border_style="green",
+            expand=False,
+        ))
+        console.print()
+        _welcome_path.parent.mkdir(parents=True, exist_ok=True)
+        _welcome_path.touch()
+
     if target:
         console.print(f"[green]🎯 目标已设置: {target}[/]")
         console.print()
-    
+
     # 使用真正的 AI 对话系统
     from src.cli.chat_cli import ClawAIChatCLI
-    
+
     config = {}
     if model:
-        config["llm"] = {"model_id": model}
-    
+        # 根据 model 名称推断 provider
+        provider = "deepseek"
+        if model.startswith("gpt-") or model.startswith("o1") or model.startswith("o3"):
+            provider = "openai"
+        elif model.startswith("claude-"):
+            provider = "anthropic"
+        config["llm"] = {"model_id": model, "provider": provider}
+
     cli = ClawAIChatCLI(config)
-    
+
+    # 恢复历史会话
+    if session_id:
+        if cli.load_session(session_id):
+            s = cli.session
+            console.print(f"[green]✅ 已加载会话: [bold]{session_id}[/][/]")
+            console.print(f"[dim]   目标: {s.target or '未设置'}  阶段: {s.phase}  发现: {len(s.findings)} 条  消息: {len(s.messages)} 条[/]")
+            console.print()
+        else:
+            console.print(f"[red]⚠️ 未找到会话 {session_id}，已创建新会话。[/]")
+
     if target:
         cli.set_target(target)
-    
+
+    # 初始化 prompt_toolkit PromptSession（带补全+历史）
+    _prompt_session = None
+    try:
+        from src.cli.completer import get_prompt_session
+        _prompt_session = get_prompt_session()
+        logger.debug("命令补全已启用 (prompt_toolkit)")
+    except Exception as e:
+        logger.debug(f"命令补全初始化失败，使用基础输入: {e}")
+
+    async def _read_input() -> str:
+        """读取用户输入，优先使用 PromptSession，失败回退 console.input()"""
+        if _prompt_session is not None:
+            try:
+                return await _prompt_session.prompt_async("❯ ")
+            except (EOFError, KeyboardInterrupt):
+                raise
+            except Exception:
+                pass
+        # fallback
+        return console.input("[bold cyan]❯[/] ")
+
     while True:
         try:
-            user_input = console.input("[bold cyan]❯[/] ").strip()
-            
+            user_input = (await _read_input()).strip()
+
             if not user_input:
                 continue
-            
+
             if user_input.lower() in ["exit", "quit", "bye", "退出"]:
+                # 退出前自动保存
+                cli.save_session()
+                console.print(f"\n[dim]会话已保存: {cli.session.session_id}[/]")
                 console.print("\n[green]👋 再见！[/]")
                 break
-            
+
+            # ---- 内联 session 命令 ----
+            cmd_lower = user_input.lower().strip()
+
+            if cmd_lower in ("session list", "sessions"):
+                _session_list()
+                continue
+
+            if cmd_lower == "session save":
+                if cli.save_session():
+                    console.print(f"[green]✅ 会话已保存: {cli.session.session_id}[/]")
+                else:
+                    console.print("[red]保存失败[/]")
+                continue
+
+            if cmd_lower.startswith("session export"):
+                parts = cmd_lower.split()
+                fmt = parts[2] if len(parts) >= 3 and parts[2] in ("json", "html", "markdown") else "markdown"
+                _session_export(cli.session.session_id, fmt, None)
+                continue
+
+            if cmd_lower.startswith("session load "):
+                sid = user_input.split(None, 2)[2].strip()
+                if cli.load_session(sid):
+                    s = cli.session
+                    console.print(f"[green]✅ 已切换到会话: {sid}[/]")
+                    console.print(f"[dim]   目标: {s.target or '未设置'}  阶段: {s.phase}  发现: {len(s.findings)} 条[/]")
+                else:
+                    console.print(f"[red]未找到会话: {sid}[/]")
+                continue
+
+            # ---- 用户干预控制命令 ----
+            if cmd_lower in ("pause", "暂停"):
+                cli.record_intervention("command", "pause")
+                if getattr(cli, '_scan_state', None):
+                    cli._scan_state.pause()
+                    console.print("[yellow]已暂停扫描，输入 resume 继续[/]")
+                else:
+                    console.print("[dim]当前无活跃扫描[/]")
+                continue
+
+            if cmd_lower in ("resume", "继续", "恢复"):
+                cli.record_intervention("command", "resume")
+                if getattr(cli, '_scan_state', None):
+                    cli._scan_state.resume()
+                    console.print("[green]已恢复扫描[/]")
+                else:
+                    console.print("[dim]当前无活跃扫描[/]")
+                continue
+
+            if cmd_lower in ("stop", "停止", "中止"):
+                cli.record_intervention("command", "stop")
+                console.print("[red]⏹ 已发送停止指令[/]")
+                continue
+
+            if cmd_lower.startswith(("追加指令:", "追加:", "add instruction:", "instruct:")):
+                _, _, instruction = user_input.partition(":")
+                instruction = instruction.strip()
+                if instruction:
+                    cli.record_intervention("input", instruction)
+                    console.print(f"[cyan]📝 干预指令已记录: {instruction}[/]")
+                continue
+            # ---- end 内联命令 ----
+
             # 显示用户消息
             console.print(f"\n[yellow]👤 You[/]")
             console.print(Panel(user_input, border_style="yellow", expand=False))
-            
+
             # 处理并显示响应
             response = await cli.chat(user_input)
-            console.print(f"\n[cyan]🤖 ClawAI[/]")
-            console.print(Panel(response, border_style="cyan", expand=False))
-            
-        except KeyboardInterrupt:
-            console.print("\n[green]👋 再见！[/]")
+            if getattr(cli, '_streamed', False):
+                # 流式已渲染完毕，仅打印分隔线
+                console.print()
+            else:
+                console.print(f"\n[cyan]ClawAI[/]")
+                console.print(Panel(response, border_style="cyan", expand=False))
+
+        except EOFError:
             break
+        except KeyboardInterrupt:
+            cli.save_session()
+            console.print(f"\n[dim]会话已保存: {cli.session.session_id}[/]")
+            console.print("[green]再见！[/]")
+            break
+        except asyncio.CancelledError:
+            console.print("\n[yellow]操作已取消[/]\n")
+            continue
         except Exception as e:
             logger.error(f"处理失败: {e}")
             console.print(f"\n[red]错误: {e}[/]\n")
-
-
-async def run_simple_mode(target: Optional[str] = None, config: dict = None):
-    """炫酷对话模式"""
-    try:
-        # 尝试使用炫酷版 UI
-        from src.cli.cool_ui import CoolClawAIChat
-        chat = CoolClawAIChat(target=target)
-        chat.run()
-    except ImportError as e:
-        logger.warning(f"炫酷UI不可用: {e}，使用基础模式")
-        await _run_basic_mode(target, config)
-
-
-async def _run_basic_mode(target: Optional[str] = None, config: dict = None):
-    """基础REPL模式（回退用）"""
-    from src.cli.chat_cli import ClawAIChatCLI
-
-    cli = ClawAIChatCLI(config)
-    if target:
-        cli.set_target(target)
-
-    console.print("[dim]基础对话模式 - 输入 'exit' 退出，'help' 查看帮助[/]")
-    console.print()
-
-    while True:
-        try:
-            user_input = console.input("[bold cyan]❯[/] [bold]ClawAI[/] ").strip()
-
-            if not user_input:
-                continue
-
-            if user_input.lower() in ["exit", "quit", "bye"]:
-                console.print("[green]👋 再见！[/]")
-                break
-
-            if user_input.lower() in ["help", "帮助", "?"]:
-                console.print(cli._get_help_text())
-                continue
-
-            # 处理输入
-            response = await cli.chat(user_input)
-            console.print(f"\n[bold green]🤖 ClawAI:[/] {response}\n")
-
-        except KeyboardInterrupt:
-            console.print("\n[red]已取消[/]")
-            break
-        except Exception as e:
-            console.print(f"\n[red]错误: {e}[/]\n")
-            logger.error(f"处理失败: {e}")
 
 
 async def run_scan_mode(target: str, tools: str, output: Optional[str]):
@@ -243,7 +358,7 @@ def run_tools_action(action: str, tool: Optional[str]):
         console.print("[red]需要安装 requests 库[/]")
         return
 
-    base_url = "http://localhost:5000"
+    base_url = get_config().backend_url
 
     try:
         if action == "list":
@@ -292,7 +407,8 @@ def run_status():
         console.print("[red]需要安装 requests 库[/]")
         return
 
-    base_url = "http://localhost:5000"
+    from src.cli.config import get_config
+    base_url = get_config().backend_url
 
     try:
         # 检查后端
@@ -309,7 +425,7 @@ def run_status():
         try:
             requests.get("http://localhost:5173", timeout=5)
             console.print("[bold green]✅ 前端服务: 运行正常[/]")
-        except:
+        except Exception:
             console.print("[bold yellow]⚠️ 前端服务: 未运行[/]")
 
     except requests.exceptions.ConnectionError:
@@ -317,6 +433,122 @@ def run_status():
         console.print("[bold yellow]⚠️ 前端服务: 未运行[/]")
     except Exception as e:
         console.print(f"[red]错误: {e}[/]")
+
+
+def run_session_action(args):
+    """处理 session 子命令"""
+    from rich.table import Table
+    from src.cli.session_store import SessionStore
+
+    action = getattr(args, "session_action", None)
+
+    if action is None or action == "list":
+        _session_list()
+    elif action == "load":
+        asyncio.run(run_chat_mode(
+            target=None,
+            model=getattr(args, "model", None),
+            session_id=args.session_id,
+        ))
+    elif action == "delete":
+        _session_delete(args.session_id)
+    elif action == "export":
+        _session_export(args.session_id, args.format, getattr(args, "output", None))
+    else:
+        console.print(f"[red]未知操作: {action}[/]")
+        console.print("用法: clawai session <list|load|delete|export>")
+
+
+def _session_list():
+    """列出所有已保存会话"""
+    from rich.table import Table
+    from src.cli.session_store import SessionStore
+
+    sessions = SessionStore().list_sessions()
+    if not sessions:
+        console.print("[yellow]暂无保存的会话。[/]")
+        console.print("[dim]提示: 执行扫描后会话会自动保存到 ~/.clawai/sessions/[/]")
+        return
+
+    table = Table(title=f"已保存会话 ({len(sessions)} 个)", border_style="cyan")
+    table.add_column("会话 ID", style="bold cyan", no_wrap=True)
+    table.add_column("目标", style="white")
+    table.add_column("阶段", style="yellow")
+    table.add_column("发现数", style="bold red", justify="right")
+    table.add_column("消息数", justify="right")
+    table.add_column("干预数", style="magenta", justify="right")
+    table.add_column("更新时间", style="dim")
+
+    for s in sessions:
+        table.add_row(
+            s.get("session_id", ""),
+            s.get("target", "-") or "-",
+            s.get("phase", "-"),
+            str(s.get("findings_count", 0)),
+            str(s.get("messages_count", 0)),
+            str(s.get("interventions_count", 0)),
+            s.get("updated_at", "")[:19],
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+    console.print("[dim]clawai session load <session_id>   加载会话[/]")
+    console.print("[dim]clawai session export <session_id> 导出报告[/]")
+    console.print("[dim]clawai session delete <session_id> 删除会话[/]")
+
+
+def _session_delete(session_id: str):
+    """删除会话"""
+    from src.cli.session_store import SessionStore
+    from rich.prompt import Confirm
+
+    store = SessionStore()
+
+    if session_id.lower() == "all":
+        confirm = Confirm.ask("[bold red]确认删除所有会话？此操作不可撤销[/]")
+        if confirm:
+            count = store.delete_all()
+            console.print(f"[green]已删除 {count} 个会话。[/]")
+        else:
+            console.print("[yellow]已取消。[/]")
+        return
+
+    data = store.load(session_id)
+    if data is None:
+        console.print(f"[red]未找到会话: {session_id}[/]")
+        return
+
+    target = data.get("target") or "未知"
+    confirm = Confirm.ask(f"确认删除会话 [cyan]{session_id}[/] (目标: {target})")
+    if confirm:
+        if store.delete(session_id):
+            console.print(f"[green]已删除会话: {session_id}[/]")
+        else:
+            console.print(f"[red]删除失败: {session_id}[/]")
+    else:
+        console.print("[yellow]已取消。[/]")
+
+
+def _session_export(session_id: str, fmt: str, output: Optional[str]):
+    """导出会话报告"""
+    from src.cli.session_store import SessionStore
+    from src.cli.exporter import export_session
+    from pathlib import Path
+
+    data = SessionStore().load(session_id)
+    if data is None:
+        console.print(f"[red]未找到会话: {session_id}[/]")
+        return
+
+    export_dir = Path(output).parent if output else None
+    filename = Path(output).stem if output else None
+
+    try:
+        path = export_session(data, fmt=fmt, filename=filename, export_dir=export_dir)
+        console.print(f"[green]✅ 报告已导出:[/] {path}")
+    except Exception as e:
+        console.print(f"[red]导出失败: {e}[/]")
 
 
 def main():
@@ -347,6 +579,8 @@ def main():
         run_tools_action(args.action, getattr(args, 'tool', None))
     elif args.command == "status":
         run_status()
+    elif args.command == "session":
+        run_session_action(args)
     else:
         # 默认进入对话模式
         asyncio.run(run_chat_mode(target=target))

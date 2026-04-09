@@ -147,7 +147,7 @@ class ConfigManager:
         security_config = {}
         if secret_key := os.getenv('SECRET_KEY'):
             security_config['secret_key'] = secret_key
-        if jwt_secret := os.getenv('JWT_SECRET'):
+        if jwt_secret := os.getenv('JWT_SECRET') or os.getenv('JWT_SECRET_KEY'):
             security_config['jwt_secret'] = jwt_secret
         if cors_origins := os.getenv('CORS_ORIGINS'):
             security_config['cors_origins'] = cors_origins.split(',')

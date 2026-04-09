@@ -12,6 +12,7 @@ import Card from './design-system/Card';
 import Button from './design-system/Button';
 import Badge from './design-system/Badge';
 import Alert from './design-system/Alert';
+import { useScan } from '../context/ScanContext';
 
 // 导入监控服务
 import monitorService, {
@@ -21,6 +22,7 @@ import monitorService, {
 } from '../services/monitorService';
 
 const RealTimeMonitor = () => {
+  const { activeTarget, scanStatus } = useScan();
   const [isConnected, setIsConnected] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -312,11 +314,11 @@ const RealTimeMonitor = () => {
 
   const getLogLevelColor = (level) => {
     switch (level) {
-      case 'error': return 'text-red-500 bg-red-500/10';
-      case 'warning': return 'text-yellow-500 bg-yellow-500/10';
-      case 'success': return 'text-green-500 bg-green-500/10';
+      case 'error': return 'text-red-500 bg-red-500/100/10';
+      case 'warning': return 'text-yellow-500 bg-yellow-500/100/10';
+      case 'success': return 'text-green-500 bg-green-500/100/10';
       case 'info': 
-      default: return 'text-blue-500 bg-blue-500/10';
+      default: return 'text-blue-500 bg-blue-500/100/10';
     }
   };
 
@@ -361,9 +363,9 @@ const RealTimeMonitor = () => {
     return (
       <div className="flex items-center">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-          isCompleted ? 'bg-green-500 text-white' :
-          isActive ? 'bg-blue-500 text-white' :
-          'bg-gray-700 text-gray-400'
+          isCompleted ? 'bg-green-500/100 text-white' :
+          isActive ? 'bg-blue-500/100 text-white' :
+          'bg-[#111827] text-gray-400'
         }`}>
           {isCompleted ? <CheckCircle className="w-5 h-5" /> : step.id}
         </div>
@@ -379,21 +381,46 @@ const RealTimeMonitor = () => {
   };
 
   return (
-    <div className={`${fullScreen ? 'fixed inset-0 z-50 bg-gray-900' : ''}`}>
+    <div className={`${fullScreen ? 'fixed inset-0 z-50 bg-[#060910]' : ''}`}>
       <div className={`${fullScreen ? 'h-screen overflow-auto' : ''}`}>
+
+        {/* ScanContext 状态横幅 */}
+        {activeTarget && (
+          <div className={`mb-4 px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-mono border ${
+            scanStatus === 'scanning'
+              ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+              : scanStatus === 'done'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : scanStatus === 'error'
+              ? 'bg-red-500/10 border-red-500/30 text-red-300'
+              : 'bg-white/5 border-white/10 text-gray-400'
+          }`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${
+              scanStatus === 'scanning' ? 'bg-cyan-400 animate-pulse' :
+              scanStatus === 'done' ? 'bg-emerald-400' :
+              scanStatus === 'error' ? 'bg-red-400' : 'bg-gray-600'
+            }`} />
+            <span className="flex-1 truncate">
+              {scanStatus === 'scanning' ? `正在扫描: ${activeTarget}` :
+               scanStatus === 'done'     ? `最近扫描: ${activeTarget}` :
+               scanStatus === 'error'    ? `扫描失败: ${activeTarget}` :
+               `目标: ${activeTarget}`}
+            </span>
+          </div>
+        )}
         {/* 控制栏 */}
         <Card className="mb-6">
           <div className="flex flex-col md:flex-row items-center justify-between p-4">
             <div className="flex items-center space-x-4 mb-4 md:mb-0">
               <div className="flex items-center">
-                <div className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <div className={`w-3 h-3 rounded-full mr-2 ${isConnected ? 'bg-green-500/100' : 'bg-red-500/100'}`}></div>
                 <span className="text-sm">
                   {isConnected ? 'WebSocket已连接' : '连接中...'}
                 </span>
               </div>
               
               <div className="flex items-center">
-                <div className={`w-3 h-3 rounded-full mr-2 ${isMonitoring ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                <div className={`w-3 h-3 rounded-full mr-2 ${isMonitoring ? 'bg-green-500/100 animate-pulse' : 'bg-[#111827]0'}`}></div>
                 <span className="text-sm">
                   {isMonitoring ? '监控进行中' : '监控已停止'}
                 </span>
@@ -481,7 +508,7 @@ const RealTimeMonitor = () => {
                   <span>进度</span>
                   <span className="font-bold">{scanProgress}%</span>
                 </div>
-                <div className="w-full h-4 bg-gray-700 rounded-full overflow-hidden">
+                <div className="w-full h-4 bg-[#111827] rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-300"
                     style={{ width: `${scanProgress}%` }}
@@ -526,12 +553,12 @@ const RealTimeMonitor = () => {
 
               <div className="space-y-4">
                 {activeScans.map((scan) => (
-                  <div key={scan.id} className="p-4 rounded-lg bg-gray-800/50">
+                  <div key={scan.id} className="p-4 rounded-lg bg-[#0a0e17]/60">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center">
                         <div className={`w-3 h-3 rounded-full mr-2 ${
-                          scan.status === 'running' ? 'bg-green-500 animate-pulse' :
-                          scan.status === 'completed' ? 'bg-blue-500' : 'bg-gray-500'
+                          scan.status === 'running' ? 'bg-green-500/100 animate-pulse' :
+                          scan.status === 'completed' ? 'bg-blue-500/100' : 'bg-[#111827]0'
                         }`}></div>
                         <div>
                           <div className="font-medium">{scan.target}</div>
@@ -548,10 +575,10 @@ const RealTimeMonitor = () => {
                         <span>进度</span>
                         <span className="font-bold">{scan.progress}%</span>
                       </div>
-                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-[#111827] rounded-full overflow-hidden">
                         <div 
                           className={`h-full ${
-                            scan.status === 'running' ? 'bg-gradient-to-r from-yellow-500 to-green-500' : 'bg-blue-500'
+                            scan.status === 'running' ? 'bg-gradient-to-r from-yellow-500 to-green-500' : 'bg-blue-500/100'
                           }`}
                           style={{ width: `${scan.progress}%` }}
                         ></div>
@@ -718,7 +745,7 @@ const RealTimeMonitor = () => {
                     <span>CPU使用率趋势</span>
                     <span className="font-medium">{systemMetrics.cpuUsage?.toFixed(1) || '0.0'}%</span>
                   </div>
-                  <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-[#111827] rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-red-500 to-orange-500"
                       style={{ width: `${systemMetrics.cpuUsage || 0}%` }}
@@ -731,7 +758,7 @@ const RealTimeMonitor = () => {
                     <span>内存使用趋势</span>
                     <span className="font-medium">{systemMetrics.memoryUsage?.toFixed(1) || '0.0'}%</span>
                   </div>
-                  <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-[#111827] rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
                       style={{ width: `${systemMetrics.memoryUsage || 0}%` }}
@@ -746,13 +773,13 @@ const RealTimeMonitor = () => {
                       {(systemMetrics.networkIn / 1000).toFixed(1)} / {(systemMetrics.networkOut / 1000).toFixed(1)} KB/s
                     </span>
                   </div>
-                  <div className="w-full h-4 bg-gray-700 rounded-full overflow-hidden flex">
+                  <div className="w-full h-4 bg-[#111827] rounded-full overflow-hidden flex">
                     <div 
-                      className="h-full bg-blue-500"
+                      className="h-full bg-blue-500/100"
                       style={{ width: `${Math.min(100, (systemMetrics.networkIn / 2000) * 100)}%` }}
                     ></div>
                     <div 
-                      className="h-full bg-green-500"
+                      className="h-full bg-green-500/100"
                       style={{ width: `${Math.min(100, (systemMetrics.networkOut / 2000) * 100)}%` }}
                     ></div>
                   </div>
@@ -772,10 +799,10 @@ const RealTimeMonitor = () => {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0e17]/60">
                   <div className="flex items-center">
                     <div className={`w-2 h-2 rounded-full mr-3 ${
-                      isConnected ? 'bg-green-500' : 'bg-red-500'
+                      isConnected ? 'bg-green-500/100' : 'bg-red-500/100'
                     }`}></div>
                     <div>
                       <div className="font-medium">WebSocket连接</div>
@@ -787,9 +814,9 @@ const RealTimeMonitor = () => {
                   </Badge>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0e17]/60">
                   <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-green-500 mr-3"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500/100 mr-3"></div>
                     <div>
                       <div className="font-medium">API服务</div>
                       <div className="text-sm opacity-70">REST接口服务</div>
@@ -798,9 +825,9 @@ const RealTimeMonitor = () => {
                   <Badge variant="success" size="sm">正常</Badge>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0e17]/60">
                   <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-green-500 mr-3"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500/100 mr-3"></div>
                     <div>
                       <div className="font-medium">数据库</div>
                       <div className="text-sm opacity-70">扫描结果存储</div>
@@ -809,10 +836,10 @@ const RealTimeMonitor = () => {
                   <Badge variant="success" size="sm">正常</Badge>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#0a0e17]/60">
                   <div className="flex items-center">
                     <div className={`w-2 h-2 rounded-full mr-3 ${
-                      systemMetrics.errorRate < 1 ? 'bg-green-500' : 'bg-yellow-500'
+                      systemMetrics.errorRate < 1 ? 'bg-green-500/100' : 'bg-yellow-500/100'
                     }`}></div>
                     <div>
                       <div className="font-medium">错误率</div>
@@ -838,8 +865,8 @@ const RealTimeMonitor = () => {
                   <span className="text-sm">自动刷新</span>
                   <div className="relative inline-block w-12 h-6">
                     <input type="checkbox" className="sr-only" defaultChecked />
-                    <div className="block bg-gray-700 w-12 h-6 rounded-full"></div>
-                    <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+                    <div className="block bg-[#111827] w-12 h-6 rounded-full"></div>
+                    <div className="dot absolute left-1 top-1 bg-[#0a0e17] w-4 h-4 rounded-full transition"></div>
                   </div>
                 </div>
 
@@ -847,14 +874,14 @@ const RealTimeMonitor = () => {
                   <span className="text-sm">声音提醒</span>
                   <div className="relative inline-block w-12 h-6">
                     <input type="checkbox" className="sr-only" />
-                    <div className="block bg-gray-700 w-12 h-6 rounded-full"></div>
-                    <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition"></div>
+                    <div className="block bg-[#111827] w-12 h-6 rounded-full"></div>
+                    <div className="dot absolute left-1 top-1 bg-[#0a0e17] w-4 h-4 rounded-full transition"></div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="text-sm">日志保留</span>
-                  <select className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                  <select className="bg-[#0a0e17] border border-white/10 rounded px-2 py-1 text-sm">
                     <option>7天</option>
                     <option>30天</option>
                     <option>90天</option>
@@ -863,7 +890,7 @@ const RealTimeMonitor = () => {
 
                 <div className="flex items-center justify-between">
                   <span className="text-sm">更新频率</span>
-                  <select className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                  <select className="bg-[#0a0e17] border border-white/10 rounded px-2 py-1 text-sm">
                     <option>实时 (500ms)</option>
                     <option>快速 (1s)</option>
                     <option>标准 (5s)</option>

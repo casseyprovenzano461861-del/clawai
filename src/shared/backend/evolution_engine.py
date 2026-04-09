@@ -30,29 +30,30 @@ except ImportError:
         USE_CORE_MODELS = False
 
 # 动态导入现有模块
+# attack_generator 和 decision_engine 已被删除，使用兼容模式
 try:
-    # 相对导入（当作为模块导入时）
     from .attack_generator import (
         generate_attack_paths_from_scan,
         AttackPath as GeneratorAttackPath,
         AttackPathGenerator
     )
+    HAS_ATTACK_GENERATOR = True
+except ImportError:
+    HAS_ATTACK_GENERATOR = False
+    AttackPathGenerator = None
+    GeneratorAttackPath = None
+    generate_attack_paths_from_scan = None
+
+try:
     from .decision_engine import (
         DecisionEngine,
         PathScore
     )
+    HAS_DECISION_ENGINE = True
 except ImportError:
-    # 绝对导入（当直接运行时）
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from backend.attack_generator import (
-        generate_attack_paths_from_scan,
-        AttackPath as GeneratorAttackPath,
-        AttackPathGenerator
-    )
-    from backend.decision_engine import (
-        DecisionEngine,
-        PathScore
-    )
+    HAS_DECISION_ENGINE = False
+    DecisionEngine = None
+    PathScore = None
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +154,8 @@ class EvolutionEngine:
             max_evolution_rounds: 最大进化轮次
         """
         self.max_evolution_rounds = max_evolution_rounds
-        self.attack_generator = AttackPathGenerator()
-        self.decision_engine = DecisionEngine()
+        self.attack_generator = AttackPathGenerator() if AttackPathGenerator else None
+        self.decision_engine = DecisionEngine() if DecisionEngine else None
         
         # 防御检测概率配置
         self.defense_probabilities = {
@@ -378,7 +379,7 @@ class EvolutionEngine:
             try:
                 minutes = int(original_time.replace("分钟", ""))
                 improved_path["estimated_time"] = f"{int(minutes * 1.2)}分钟"
-            except:
+            except Exception as e:
                 improved_path["estimated_time"] = f"{int(10 * 1.2)}分钟"
         
         return improved_path
@@ -403,7 +404,10 @@ class EvolutionEngine:
         
         # 步骤1: 初始阶段 - 生成攻击路径
         logger.info(f"第{current_round}轮: 生成初始攻击路径")
-        initial_result = generate_attack_paths_from_scan(scan_results)
+        if generate_attack_paths_from_scan and HAS_ATTACK_GENERATOR:
+            initial_result = generate_attack_paths_from_scan(scan_results)
+        else:
+            initial_result = {"attack_paths_generated": 0}
         
         if initial_result.get("attack_paths_generated", 0) < 3:
             # 如果生成路径不足，使用模拟数据
@@ -416,7 +420,10 @@ class EvolutionEngine:
         
         # 步骤2: 第一轮决策
         logger.info(f"第{current_round}轮: 初始决策")
-        decision_result = self.decision_engine.process_paths(initial_paths, scan_summary)
+        if self.decision_engine and HAS_DECISION_ENGINE:
+            decision_result = self.decision_engine.process_paths(initial_paths, scan_summary)
+        else:
+            decision_result = {"best_path": None}
         
         if not decision_result.get("best_path"):
             # 如果无法选择最佳路径，使用第一条路径
@@ -465,7 +472,10 @@ class EvolutionEngine:
             current_paths.append(improved_path)
             
             # 重新决策（包含所有路径）
-            new_decision_result = self.decision_engine.process_paths(current_paths, scan_summary)
+            if self.decision_engine and HAS_DECISION_ENGINE:
+                new_decision_result = self.decision_engine.process_paths(current_paths, scan_summary)
+            else:
+                new_decision_result = {"best_path": None}
             
             if new_decision_result.get("best_path"):
                 new_best_path = new_decision_result["best_path"]["path_info"]
@@ -498,7 +508,10 @@ class EvolutionEngine:
             original_best_path = new_best_path.copy()
         
         # 步骤4: 生成最终结果
-        final_decision_result = self.decision_engine.process_paths(current_paths, scan_summary)
+        if self.decision_engine and HAS_DECISION_ENGINE:
+            final_decision_result = self.decision_engine.process_paths(current_paths, scan_summary)
+        else:
+            final_decision_result = {"best_path": None}
         
         if final_decision_result.get("best_path"):
             final_path_info = final_decision_result["best_path"]["path_info"]

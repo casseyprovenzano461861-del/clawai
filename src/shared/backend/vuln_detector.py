@@ -580,8 +580,8 @@ class PayloadMutator:
                 variant = mutator(payload)
                 if variant != payload and variant not in variants:
                     variants.append(variant)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error generating payload variant: {e}")
         
         return variants[:max_variants]
 
@@ -726,10 +726,10 @@ class EnhancedVulnerabilityDetector:
                                         "code": 500,
                                     })
                                     break
-                    except:
-                        pass
-            except:
-                pass
+                    except Exception as e:
+                        logger.debug(f"Error reading SQL error response: {e}")
+            except Exception as e:
+                logger.debug(f"Error in SQL error detection: {e}")
         
         if detected_errors:
             # 第二轮：时间盲注验证
@@ -751,8 +751,8 @@ class EnhancedVulnerabilityDetector:
                     if elapsed >= 3:
                         time_based = True
                         break
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error in time-based SQL injection test: {e}")
             
             # 创建漏洞对象
             vuln = DetectedVulnerability(
@@ -818,7 +818,7 @@ class EnhancedVulnerabilityDetector:
                                 return vulns  # 找到一个即可返回
                                 
                 except Exception as e:
-                    pass
+                    logger.debug(f"Error in XSS detection: {e}")
         
         return vulns
     
@@ -855,8 +855,8 @@ class EnhancedVulnerabilityDetector:
                         vulns.append(vuln)
                         return vulns
                         
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in RCE detection: {e}")
         
         return vulns
     
@@ -891,8 +891,8 @@ class EnhancedVulnerabilityDetector:
                         vulns.append(vuln)
                         return vulns
                         
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in LFI detection: {e}")
         
         return vulns
     
@@ -928,8 +928,8 @@ class EnhancedVulnerabilityDetector:
                         vulns.append(vuln)
                         return vulns
                         
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in SSRF detection: {e}")
         
         return vulns
     
@@ -977,8 +977,8 @@ class EnhancedVulnerabilityDetector:
                     vulns.append(vuln)
                     return vulns
                     
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in SSTI detection: {e}")
         
         return vulns
     
@@ -1012,8 +1012,8 @@ class EnhancedVulnerabilityDetector:
                         vulns.append(vuln)
                         return vulns
                         
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error in XXE detection: {e}")
         
         return vulns
     
@@ -1045,8 +1045,8 @@ class EnhancedVulnerabilityDetector:
                         ))
                         vulns.append(vuln)
                         
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Error in sensitive info detection: {e}")
         
         return vulns
     

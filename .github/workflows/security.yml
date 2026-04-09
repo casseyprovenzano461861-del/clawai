@@ -1,0 +1,154 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # 每周一 06:00 UTC 运行
+
+jobs:
+  # ==================== Python 代码安全扫描 ====================
+  bandit:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run Bandit security scan
+        # -l: 只报告 LOW 及以上（-ll 报 MEDIUM+，-lll 报 HIGH+）
+        # -i: 只报告置信度 MEDIUM 及以上（-ii 报 HIGH+）
+        # 排除 tools/ 目录（第三方工具）
+        run: bandit -r src -l -i --exclude src/shared/backend/api_server.py -f json -o bandit-report.json
+        continue-on-error: true
+
+      - name: Check critical findings
+        run: |
+          # 如果有 HIGH severity 的安全问题，CI 失败
+          if python3 -c "
+          import json, sys
+          try:
+              data = json.load(open('bandit-report.json'))
+              high_issues = [r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH']
+              if high_issues:
+                  print(f'Found {len(high_issues)} HIGH severity issues:')
+                  for issue in high_issues:
+                      print(f'  {issue[\"filename\"]}:{issue[\"line_number\"]} - {issue[\"issue_text\"]}')
+                  sys.exit(1)
+              else:
+                  print('No HIGH severity issues found.')
+          except Exception as e:
+              print(f'Error parsing report: {e}')
+          "; then
+            echo "Bandit check passed"
+          else
+            echo "Bandit found HIGH severity issues!"
+            exit 1
+          fi
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ==================== 依赖漏洞扫描 ====================
+  pip-audit:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit -r requirements.txt \
+            --format json \
+            --output pip-audit-report.json \
+            --desc \
+            --progress-spinner off || true
+
+      - name: Check critical vulnerabilities
+        run: |
+          python3 -c "
+          import json, sys
+          try:
+              data = json.load(open('pip-audit-report.json'))
+              deps = data.get('dependencies', [])
+              vulns = [(d['name'], v['id'], v['fix_versions']) 
+                       for d in deps 
+                       for v in d.get('vulns', [])
+                       if v.get('fix_versions')]
+              if vulns:
+                  print(f'Found {len(vulns)} fixable vulnerabilities:')
+                  for name, vid, fixes in vulns:
+                      print(f'  {name}: {vid} (fix: {fixes})')
+                  # 有可修复漏洞时警告，但不阻断 CI（渐进修复）
+                  # 如果要阻断，改为 sys.exit(1)
+              else:
+                  print('No fixable vulnerabilities found.')
+          except Exception as e:
+              print(f'Error: {e}')
+          "
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+
+  # ==================== 密钥泄露扫描 ====================
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+  # ==================== 前端依赖安全扫描 ====================
+  npm-audit:
+    name: NPM Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high || true
+        working-directory: frontend

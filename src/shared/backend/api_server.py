@@ -3,7 +3,17 @@
 """
 ClawFramework API 服务器 - 优化版本
 集成统一错误处理器，使用统一生成器，移除冗余代码
+
+DEPRECATED: This Flask-based API server is deprecated.
+Use the FastAPI-based main.py instead: python -m src.shared.backend.main
 """
+
+import warnings
+warnings.warn(
+    "Flask API server is deprecated. Use FastAPI main.py instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from flask import Flask, request, jsonify, g, make_response
 from flask_cors import CORS
@@ -20,7 +30,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import config
 
 # 导入缓存模块
-from backend.utils.cache import endpoint_cache_decorator
+try:
+    from backend.utils.cache import endpoint_cache_decorator
+except ImportError:
+    endpoint_cache_decorator = None
 
 # 导入统一错误处理器
 from backend.unified_error_handler import (
@@ -37,11 +50,19 @@ from backend.shared.exceptions import (
 )
 
 # 导入统一攻击链生成器
-from backend.attack_chain.unified_attack_generator import UnifiedAttackGenerator
+try:
+    from backend.attack_chain.unified_attack_generator import UnifiedAttackGenerator
+except ImportError:
+    UnifiedAttackGenerator = None
 # 导入统一工具执行器
 # 使用统一执行器最终版，整合了所有执行器功能
 from backend.tools.unified_executor_final import UnifiedExecutor, ExecutionStrategy
-from backend.auth.advanced_auth import setup_advanced_auth_routes, require_advanced_auth, require_role
+try:
+    from backend.auth.advanced_auth import setup_advanced_auth_routes, require_advanced_auth, require_role
+except ImportError:
+    setup_advanced_auth_routes = None
+    require_advanced_auth = None
+    require_role = None
 from backend.auth.rbac import setup_rbac_routes, require_permission, Permission
 from backend.input_validator import validate_target, sanitize_target, detect_malicious_input
 
@@ -62,7 +83,7 @@ CORS(app)  # 允许跨域请求
 # 初始化组件
 error_handler = get_error_handler(log_level="INFO", log_file="./logs/api_server.log")
 # 初始化统一攻击链生成器
-attack_generator = UnifiedAttackGenerator(enable_evolution=True)
+attack_generator = UnifiedAttackGenerator(enable_evolution=True) if UnifiedAttackGenerator else None
 # 初始化统一工具执行器（整合了所有执行器功能）
 executor = UnifiedExecutor(
     max_workers=3,

@@ -14,8 +14,10 @@ import Card from './design-system/Card';
 import Button from './design-system/Button';
 import Badge from './design-system/Badge';
 import Alert from './design-system/Alert';
+import { useScan } from '../context/ScanContext';
 
 const KnowledgeGraph = () => {
+  const { selectedScan, lastScan } = useScan();
   const [loading, setLoading] = useState(true);
   const [graphData, setGraphData] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -28,6 +30,13 @@ const KnowledgeGraph = () => {
   const [graphStats, setGraphStats] = useState({});
   const networkRef = useRef(null);
   const containerRef = useRef(null);
+
+  // ScanContext: lastScan 变化时自动重建图谱
+  useEffect(() => {
+    if (lastScan) {
+      fetchGraphData();
+    }
+  }, [lastScan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 节点类型配置
   const nodeTypes = {
@@ -310,6 +319,14 @@ const KnowledgeGraph = () => {
     fetchGraphData();
   }, []);
 
+  // ScanContext：selectedScan / lastScan 变化时自动刷新图谱
+  useEffect(() => {
+    const scanData = selectedScan || lastScan;
+    if (!scanData) return;
+    // 尝试从扫描结果构建图谱，失败时回退到 API
+    fetchGraphData();
+  }, [selectedScan, lastScan]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 处理搜索
   const handleSearch = () => {
     if (!networkRef.current || !searchTerm.trim()) return;
@@ -368,7 +385,7 @@ const KnowledgeGraph = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-900 text-gray-100 min-h-screen">
+    <div className="p-6 bg-[#060910] text-gray-100 min-h-screen">
       <div className="mb-6">
         <h1 className="text-3xl font-bold flex items-center gap-3">
           <NetworkIcon className="w-8 h-8" />
@@ -382,7 +399,7 @@ const KnowledgeGraph = () => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* 左侧控制面板 */}
         <div className="lg:col-span-1 space-y-6">
-          <Card title="控制面板" className="bg-gray-800">
+          <Card title="控制面板" className="bg-[#0a0e17]">
             <div className="space-y-4">
               {/* 搜索 */}
               <div>
@@ -393,7 +410,7 @@ const KnowledgeGraph = () => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="输入节点名称或类型..."
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 px-3 py-2 bg-[#111827] border border-white/15 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <Button onClick={handleSearch} icon={Search}>
                     搜索
@@ -407,7 +424,7 @@ const KnowledgeGraph = () => {
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-[#111827] border border-white/15 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">所有类型</option>
                   {Object.entries(nodeTypes).map(([key, config]) => (
@@ -459,17 +476,17 @@ const KnowledgeGraph = () => {
           </Card>
 
           {/* 统计信息 */}
-          <Card title="统计信息" className="bg-gray-800">
+          <Card title="统计信息" className="bg-[#0a0e17]">
             {loading ? (
               <div className="text-center py-4">加载中...</div>
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-700 p-3 rounded-lg">
+                  <div className="bg-[#111827] p-3 rounded-lg">
                     <div className="text-2xl font-bold">{graphStats.totalNodes || 0}</div>
                     <div className="text-sm text-gray-400">总节点数</div>
                   </div>
-                  <div className="bg-gray-700 p-3 rounded-lg">
+                  <div className="bg-[#111827] p-3 rounded-lg">
                     <div className="text-2xl font-bold">{graphStats.totalEdges || 0}</div>
                     <div className="text-sm text-gray-400">总边数</div>
                   </div>
@@ -517,7 +534,7 @@ const KnowledgeGraph = () => {
 
         {/* 主图区域 */}
         <div className="lg:col-span-3">
-          <Card className="bg-gray-800 h-full">
+          <Card className="bg-[#0a0e17] h-full">
             {loading ? (
               <div className="flex items-center justify-center h-96">
                 <div className="text-center">
@@ -534,7 +551,7 @@ const KnowledgeGraph = () => {
 
                 {/* 选中的节点/边详情 */}
                 {(selectedNode || selectedEdge) && (
-                  <div className="absolute top-4 right-4 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl">
+                  <div className="absolute top-4 right-4 w-80 bg-[#060910] border border-white/10 rounded-lg shadow-xl">
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h3 className="font-bold">

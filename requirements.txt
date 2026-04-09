@@ -14,6 +14,7 @@ uvicorn[standard]==0.24.0
 textual>=0.40.0
 rich>=13.0.0
 click>=8.0.0
+prompt_toolkit>=3.0.0
 
 # 认证和安全
 passlib[bcrypt]==1.7.4
@@ -59,26 +60,16 @@ jsonschema==4.19.2
 # AI和机器学习
 openai>=1.0.0
 
-# 数据处理和分析
-numpy==1.24.4
-pandas==2.1.4
-
 # 监控和指标
 prometheus-client==0.19.0
-
-# 日志处理
-structlog
 
 # 系统工具
 python-dotenv==1.0.0
 psutil==5.9.6
 
 # ==================== 新增依赖（P-E-R 增强）====================
-# RAG 向量数据库
+# RAG 向量数据库（嵌入模型见 requirements-ml.txt）
 qdrant-client>=1.6.0
-
-# 嵌入模型（用于 RAG）
-sentence-transformers>=2.2.0
 
 # 加密（API Key 安全存储）
 cryptography>=41.0.0

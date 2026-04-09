@@ -6,7 +6,8 @@ import {
   PieChart, TrendingUp, Filter, Settings, Copy,
   ChevronDown, ChevronRight, ExternalLink, BookOpen,
   FileCode, FileJson, FileSpreadsheet,
-  RefreshCw, Save, Trash2, Star, History, Clock
+  RefreshCw, Save, Trash2, Star, History, Clock,
+  ShieldCheck, Play, Target
 } from 'lucide-react';
 
 // 导入设计系统组件
@@ -15,10 +16,16 @@ import Button from './design-system/Button';
 import Badge from './design-system/Badge';
 import Alert from './design-system/Alert';
 
+// 导入验证结果组件
+import ValidationResults from './ValidationResults';
+
 // 导入API服务
 import reportService from '../services/reportService';
+import attackService from '../services/attackService';
+import { useScan } from '../context/ScanContext';
 
 const ReportGenerator = () => {
+  const { lastScan, selectedScan, activeTarget, scanHistory } = useScan();
   const [reportData, setReportData] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState('detailed');
   const [reportTitle, setReportTitle] = useState('');
@@ -40,6 +47,12 @@ const ReportGenerator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [generatedReportId, setGeneratedReportId] = useState(null);
+
+  // 扫描目标（从 context 预填）
+  const [scanTarget, setScanTarget] = useState(activeTarget || '');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
+  const [dataSource, setDataSource] = useState('mock'); // 'mock' | 'live'
 
   // 模拟报告数据
   const mockReportData = {
@@ -201,6 +214,32 @@ const ReportGenerator = () => {
     { id: 'csv', name: 'CSV', icon: <FileSpreadsheet className="w-4 h-4" />, description: '表格数据' }
   ];
 
+  // 执行真实攻击扫描，获取报告数据
+  const runLiveScan = async () => {
+    if (!scanTarget.trim()) {
+      setScanError('请输入目标 IP 或域名');
+      return;
+    }
+    setIsScanning(true);
+    setScanError(null);
+    try {
+      const result = await attackService.runAttack(scanTarget, {
+        useReal: false,
+        ruleEngineMode: true,
+      });
+      // 与 mock 数据合并，确保缺失字段不崩溃
+      const mock = reportService.getMockReportData();
+      setReportData({ ...mock, ...result });
+      setReportTitle(result.title || mock.title);
+      setDataSource('live');
+    } catch (err) {
+      console.error('扫描失败:', err);
+      setScanError(`扫描失败: ${err.message}`);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   // 获取报告列表
   const fetchReports = async () => {
     setIsLoading(true);
@@ -230,6 +269,20 @@ const ReportGenerator = () => {
       setIsLoading(false);
     }
   };
+
+  // ScanContext：selectedScan / lastScan 变化时自动用真实数据填充报告
+  useEffect(() => {
+    const source = selectedScan || lastScan;
+    if (source) {
+      const mock = reportService.getMockReportData();
+      setReportData({ ...mock, ...source });
+      setReportTitle(
+        source.title ||
+        `安全评估报告 - ${activeTarget || source.target || mock.target}`
+      );
+      setDataSource('live');
+    }
+  }, [selectedScan, lastScan, activeTarget]);
 
   useEffect(() => {
     fetchReports();
@@ -308,13 +361,13 @@ const ReportGenerator = () => {
 
   const getSeverityColor = (severity) => {
     const colors = {
-      critical: 'bg-red-500 text-white',
+      critical: 'bg-red-500/100 text-white',
       high: 'bg-orange-500 text-white',
-      medium: 'bg-yellow-500 text-gray-900',
-      low: 'bg-green-500 text-white',
-      informational: 'bg-blue-500 text-white'
+      medium: 'bg-yellow-500/100 text-gray-100',
+      low: 'bg-green-500/100 text-white',
+      informational: 'bg-blue-500/100 text-white'
     };
-    return colors[severity] || 'bg-gray-500 text-white';
+    return colors[severity] || 'bg-[#111827]0 text-white';
   };
 
   const getSeverityIcon = (severity) => {
@@ -342,14 +395,14 @@ const ReportGenerator = () => {
       <div 
         className={`p-4 rounded-xl border cursor-pointer transition-all ${
           isSelected 
-            ? 'border-blue-500 bg-blue-500/10' 
-            : 'border-gray-700 hover:border-gray-600 hover:bg-gray-800/30'
+            ? 'border-blue-500 bg-blue-500/100/10' 
+            : 'border-white/10 hover:border-white/15 hover:bg-[#0a0e17]/40'
         }`}
         onClick={() => setSelectedTemplate(template.id)}
       >
         <div className="flex items-start mb-3">
           <div className={`p-2 rounded-lg mr-3 ${
-            isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-gray-400'
+            isSelected ? 'bg-blue-500/100/20 text-blue-400' : 'bg-[#111827] text-gray-400'
           }`}>
             {template.icon}
           </div>
@@ -376,13 +429,13 @@ const ReportGenerator = () => {
       <div 
         className={`p-3 rounded-lg border cursor-pointer flex items-center ${
           isSelected 
-            ? 'border-blue-500 bg-blue-500/10' 
-            : 'border-gray-700 hover:border-gray-600'
+            ? 'border-blue-500 bg-blue-500/100/10' 
+            : 'border-white/10 hover:border-white/15'
         }`}
         onClick={() => setExportFormat(format.id)}
       >
         <div className={`p-2 rounded mr-3 ${
-          isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-gray-400'
+          isSelected ? 'bg-blue-500/100/20 text-blue-400' : 'bg-[#111827] text-gray-400'
         }`}>
           {format.icon}
         </div>
@@ -405,8 +458,8 @@ const ReportGenerator = () => {
         onClick={() => setActiveSection(id)}
         className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
           isActive 
-            ? 'bg-blue-500 text-white' 
-            : 'hover:bg-gray-700/50 text-gray-400'
+            ? 'bg-blue-500/100 text-white' 
+            : 'hover:bg-[#111827]/50 text-gray-400'
         }`}
       >
         <Icon className="w-5 h-5 mr-3" />
@@ -426,10 +479,59 @@ const ReportGenerator = () => {
     );
   }
 
+  // 实时扫描输入面板（渲染在报告配置卡上方）
+  const LiveScanPanel = () => (
+    <div className="bg-[#0a0e17]/70 border border-blue-700/40 rounded-xl p-5 mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Target className="w-5 h-5 text-blue-400" />
+        <h3 className="font-semibold text-blue-300">接入真实攻击 API</h3>
+        {dataSource === 'live' && (
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-700 text-green-100">实时数据</span>
+        )}
+        {dataSource === 'mock' && (
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-[#1a2035] text-gray-300">演示数据</span>
+        )}
+      </div>
+      <div className="flex gap-3">
+        <input
+          type="text"
+          value={scanTarget}
+          onChange={e => setScanTarget(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && runLiveScan()}
+          placeholder="例如: example.com 或 192.168.1.100"
+          className="flex-1 px-4 py-2.5 bg-[#060910] border border-white/15 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-500"
+          disabled={isScanning}
+        />
+        <Button
+          variant="primary"
+          onClick={runLiveScan}
+          loading={isScanning}
+          disabled={isScanning}
+          className="flex items-center whitespace-nowrap"
+        >
+          <Play className="w-4 h-4 mr-1.5" />
+          {isScanning ? '扫描中...' : '开始扫描'}
+        </Button>
+      </div>
+      {isScanning && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-blue-400">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          正在执行安全评估，请稍候（可能需要 1-3 分钟）…
+        </div>
+      )}
+      {scanError && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-red-400 bg-red-900/20 px-3 py-2 rounded-lg">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {scanError}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#060910] text-white">
       {/* 报告生成器头部 */}
-      <div className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-50">
+      <div className="bg-[#0a0e17]/85 backdrop-blur-sm border-b border-white/10 sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
             <div>
@@ -465,6 +567,7 @@ const ReportGenerator = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 左侧：报告配置 */}
           <div className="lg:col-span-2">
+            <LiveScanPanel />
             {/* 报告基本信息 */}
             <Card className="mb-8">
               <div className="flex items-center mb-6">
@@ -479,7 +582,7 @@ const ReportGenerator = () => {
                     type="text"
                     value={reportTitle}
                     onChange={(e) => setReportTitle(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 bg-[#0a0e17] border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="输入报告标题"
                   />
                 </div>
@@ -510,12 +613,12 @@ const ReportGenerator = () => {
                         <div 
                           key={key}
                           className={`p-3 rounded-lg border cursor-pointer flex items-center ${
-                            value ? 'border-green-500 bg-green-500/10' : 'border-gray-700 hover:border-gray-600'
+                            value ? 'border-green-500 bg-green-500/100/10' : 'border-white/10 hover:border-white/15'
                           }`}
                           onClick={() => toggleCustomization(key)}
                         >
                           <div className={`w-5 h-5 rounded border mr-3 flex items-center justify-center ${
-                            value ? 'bg-green-500 border-green-500' : 'border-gray-600'
+                            value ? 'bg-green-500/100 border-green-500' : 'border-white/15'
                           }`}>
                             {value && <CheckCircle className="w-3 h-3 text-white" />}
                           </div>
@@ -569,13 +672,13 @@ const ReportGenerator = () => {
                 </div>
 
                 {/* 报告预览内容 */}
-                <div className="bg-white text-gray-900 rounded-lg p-8">
+                <div className="bg-[#0d1117] text-gray-100 rounded-lg p-8">
                   {/* 报告头部 */}
                   <div className="border-b pb-6 mb-6">
                     <div className="flex justify-between items-start">
                       <div>
                         <h1 className="text-3xl font-bold mb-2">{reportTitle}</h1>
-                        <div className="flex items-center space-x-4 text-gray-600">
+                        <div className="flex items-center space-x-4 text-gray-400">
                           <div className="flex items-center">
                             <Calendar className="w-4 h-4 mr-2" />
                             <span>{reportData.date}</span>
@@ -601,21 +704,21 @@ const ReportGenerator = () => {
                   {/* 执行摘要 */}
                   <div className="mb-8">
                     <h2 className="text-2xl font-bold mb-4 border-b pb-2">执行摘要</h2>
-                    <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                    <div className="bg-blue-500/10 p-4 rounded-lg mb-4">
                       <p className="text-lg">{reportData.executiveSummary.overview}</p>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">风险等级</div>
+                      <div className="bg-[#111827] p-4 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">风险等级</div>
                         <div className="text-2xl font-bold text-red-600">{reportData.executiveSummary.riskLevel}</div>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">置信度</div>
+                      <div className="bg-[#111827] p-4 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">置信度</div>
                         <div className="text-2xl font-bold text-blue-600">{reportData.executiveSummary.confidence}</div>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="text-sm text-gray-600 mb-1">建议数量</div>
+                      <div className="bg-[#111827] p-4 rounded-lg">
+                        <div className="text-sm text-gray-400 mb-1">建议数量</div>
                         <div className="text-2xl font-bold text-green-600">{reportData.executiveSummary.recommendationsCount}</div>
                       </div>
                     </div>
@@ -626,29 +729,29 @@ const ReportGenerator = () => {
                     <div className="mb-8">
                       <h2 className="text-2xl font-bold mb-4 border-b pb-2">发现统计</h2>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-                        <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <div className="text-center p-4 bg-red-500/10 rounded-lg">
                           <div className="text-3xl font-bold text-red-600">{reportData.findings.critical}</div>
-                          <div className="text-sm text-gray-600">严重</div>
+                          <div className="text-sm text-gray-400">严重</div>
                         </div>
                         <div className="text-center p-4 bg-orange-50 rounded-lg">
                           <div className="text-3xl font-bold text-orange-600">{reportData.findings.high}</div>
-                          <div className="text-sm text-gray-600">高危</div>
+                          <div className="text-sm text-gray-400">高危</div>
                         </div>
-                        <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <div className="text-center p-4 bg-yellow-500/10 rounded-lg">
                           <div className="text-3xl font-bold text-yellow-600">{reportData.findings.medium}</div>
-                          <div className="text-sm text-gray-600">中危</div>
+                          <div className="text-sm text-gray-400">中危</div>
                         </div>
-                        <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-center p-4 bg-green-500/10 rounded-lg">
                           <div className="text-3xl font-bold text-green-600">{reportData.findings.low}</div>
-                          <div className="text-sm text-gray-600">低危</div>
+                          <div className="text-sm text-gray-400">低危</div>
                         </div>
-                        <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-center p-4 bg-blue-500/10 rounded-lg">
                           <div className="text-3xl font-bold text-blue-600">{reportData.findings.informational}</div>
-                          <div className="text-sm text-gray-600">信息</div>
+                          <div className="text-sm text-gray-400">信息</div>
                         </div>
-                        <div className="text-center p-4 bg-gray-50 rounded-lg">
-                          <div className="text-3xl font-bold text-gray-600">{reportData.findings.total}</div>
-                          <div className="text-sm text-gray-600">总计</div>
+                        <div className="text-center p-4 bg-[#111827] rounded-lg">
+                          <div className="text-3xl font-bold text-gray-400">{reportData.findings.total}</div>
+                          <div className="text-sm text-gray-400">总计</div>
                         </div>
                       </div>
                     </div>
@@ -659,7 +762,7 @@ const ReportGenerator = () => {
                     <div className="mb-8">
                       <h2 className="text-2xl font-bold mb-4 border-b pb-2">漏洞详情</h2>
                       <div className="space-y-4">
-                        {reportData.vulnerabilities.map((vuln, index) => (
+                        {(reportData.vulnerabilities || []).map((vuln, index) => (
                           <div key={vuln.id} className="border rounded-lg p-4">
                             <div className="flex justify-between items-start mb-3">
                               <div>
@@ -669,7 +772,7 @@ const ReportGenerator = () => {
                                   </span>
                                   <h3 className="text-lg font-semibold">{vuln.title}</h3>
                                 </div>
-                                <div className="text-sm text-gray-600 mb-2">CVSS评分: <span className="font-bold">{vuln.cvssScore}</span></div>
+                                <div className="text-sm text-gray-400 mb-2">CVSS评分: <span className="font-bold">{vuln.cvssScore}</span></div>
                               </div>
                               <Badge variant="info">ID: {vuln.id}</Badge>
                             </div>
@@ -687,13 +790,13 @@ const ReportGenerator = () => {
                             
                             <div className="mb-4">
                               <h4 className="font-medium mb-1">修复建议</h4>
-                              <p className="text-sm bg-green-50 p-3 rounded">{vuln.remediation}</p>
+                              <p className="text-sm bg-green-500/10 p-3 rounded">{vuln.remediation}</p>
                             </div>
                             
                             <div className="flex flex-wrap gap-2">
                               <div className="text-xs">
                                 <span className="font-medium">受影响组件: </span>
-                                {vuln.affectedComponents.join(', ')}
+                                {(vuln.affectedComponents || []).join(', ')}
                               </div>
                             </div>
                           </div>
@@ -707,13 +810,57 @@ const ReportGenerator = () => {
                     <div className="mb-8">
                       <h2 className="text-2xl font-bold mb-4 border-b pb-2">安全建议</h2>
                       <div className="space-y-3">
-                        {reportData.recommendations.map((rec, index) => (
-                          <div key={index} className="flex items-start p-3 bg-blue-50 rounded-lg">
-                            <CheckCircle className="w-5 h-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" />
-                            <span>{rec}</span>
-                          </div>
-                        ))}
+                        {(reportData.recommendations || []).map((rec, index) => {
+                          // rec 可能是字符串或对象
+                          const isObj = rec && typeof rec === 'object';
+                          const title = isObj ? (rec.title || rec.description || JSON.stringify(rec)) : rec;
+                          const description = isObj ? rec.description : null;
+                          const steps = isObj && Array.isArray(rec.steps) ? rec.steps : [];
+                          const priority = isObj ? rec.priority : null;
+                          const priorityColor = { critical: 'text-red-600', high: 'text-orange-500', medium: 'text-yellow-600', low: 'text-green-600' }[priority] || 'text-gray-400';
+                          return (
+                            <div key={index} className="p-3 bg-blue-500/10 rounded-lg">
+                              <div className="flex items-start">
+                                <CheckCircle className="w-5 h-5 text-green-600 mr-3 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium">{title}</span>
+                                    {priority && <span className={`text-xs font-semibold uppercase ${priorityColor}`}>[{priority}]</span>}
+                                  </div>
+                                  {description && title !== description && (
+                                    <p className="text-sm text-gray-400 mt-1">{description}</p>
+                                  )}
+                                  {steps.length > 0 && (
+                                    <ol className="mt-2 space-y-0.5 list-decimal list-inside text-sm text-gray-400">
+                                      {steps.map((step, i) => <li key={i}>{step}</li>)}
+                                    </ol>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    </div>
+                  )}
+
+                  {/* 验证结果 */}
+                  {(reportData.verified_findings?.length > 0 || reportData.unverified_findings?.length > 0) && (
+                    <div className="mb-8">
+                      <div className="flex items-center gap-2 mb-4 border-b pb-2">
+                        <ShieldCheck className="w-6 h-6 text-green-600" />
+                        <h2 className="text-2xl font-bold">漏洞验证结果</h2>
+                        <span className="ml-2 px-2.5 py-0.5 text-xs font-bold rounded-full bg-green-600 text-white">
+                          AI 实际验证
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mb-4">
+                        以下结果由 VulnValidatorAgent 通过真实 Payload 注入验证，区分确认漏洞与疑似漏洞。
+                      </p>
+                      <ValidationResults
+                        verifiedFindings={reportData.verified_findings || []}
+                        unverifiedFindings={reportData.unverified_findings || []}
+                      />
                     </div>
                   )}
 
@@ -721,11 +868,11 @@ const ReportGenerator = () => {
                   <div className="border-t pt-6 mt-8">
                     <div className="flex justify-between items-center">
                       <div>
-                        <div className="text-sm text-gray-600">生成时间</div>
+                        <div className="text-sm text-gray-400">生成时间</div>
                         <div className="font-medium">{new Date().toLocaleString('zh-CN')}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-gray-600">ClawAI Security Platform</div>
+                        <div className="text-sm text-gray-400">ClawAI Security Platform</div>
                         <div className="font-medium">企业级安全评估工具</div>
                       </div>
                     </div>
@@ -785,24 +932,24 @@ const ReportGenerator = () => {
                   </Button>
                 </div>
 
-                <div className="pt-4 border-t border-gray-700">
+                <div className="pt-4 border-t border-white/10">
                   <h3 className="font-medium mb-3">快速操作</h3>
                   <div className="space-y-2">
-                    <button className="w-full text-left p-3 rounded-lg hover:bg-gray-700/50 flex items-center justify-between">
+                    <button className="w-full text-left p-3 rounded-lg hover:bg-[#111827]/50 flex items-center justify-between">
                       <div className="flex items-center">
                         <History className="w-4 h-4 mr-3 opacity-70" />
                         <span>查看历史报告</span>
                       </div>
                       <ChevronRight className="w-4 h-4 opacity-50" />
                     </button>
-                    <button className="w-full text-left p-3 rounded-lg hover:bg-gray-700/50 flex items-center justify-between">
+                    <button className="w-full text-left p-3 rounded-lg hover:bg-[#111827]/50 flex items-center justify-between">
                       <div className="flex items-center">
                         <Star className="w-4 h-4 mr-3 opacity-70" />
                         <span>保存为模板</span>
                       </div>
                       <ChevronRight className="w-4 h-4 opacity-50" />
                     </button>
-                    <button className="w-full text-left p-3 rounded-lg hover:bg-gray-700/50 flex items-center justify-between">
+                    <button className="w-full text-left p-3 rounded-lg hover:bg-[#111827]/50 flex items-center justify-between">
                       <div className="flex items-center">
                         <Trash2 className="w-4 h-4 mr-3 opacity-70" />
                         <span>删除草稿</span>
@@ -829,13 +976,13 @@ const ReportGenerator = () => {
                 
                 <div>
                   <div className="text-sm text-gray-400 mb-1">扫描时间</div>
-                  <div className="font-medium">{reportData.scanDetails.startTime} - {reportData.scanDetails.endTime}</div>
+                  <div className="font-medium">{reportData.scanDetails?.startTime} - {reportData.scanDetails?.endTime}</div>
                 </div>
                 
                 <div>
                   <div className="text-sm text-gray-400 mb-1">使用工具</div>
                   <div className="flex flex-wrap gap-1">
-                    {reportData.scanDetails.toolsUsed.map((tool, index) => (
+                    {(reportData.scanDetails?.toolsUsed || []).map((tool, index) => (
                       <Badge key={index} variant="info" size="sm">{tool}</Badge>
                     ))}
                   </div>
@@ -844,7 +991,7 @@ const ReportGenerator = () => {
                 <div>
                   <div className="text-sm text-gray-400 mb-1">开放端口</div>
                   <div className="flex flex-wrap gap-1">
-                    {reportData.scanDetails.portsOpen.map((port, index) => (
+                    {(reportData.scanDetails?.portsOpen || []).map((port, index) => (
                       <Badge key={index} variant="outline" size="sm">{port}</Badge>
                     ))}
                   </div>
@@ -852,7 +999,7 @@ const ReportGenerator = () => {
                 
                 <div>
                   <div className="text-sm text-gray-400 mb-1">操作系统</div>
-                  <div className="font-medium">{reportData.scanDetails.networkInfo.os}</div>
+                  <div className="font-medium">{reportData.scanDetails?.networkInfo?.os}</div>
                 </div>
               </div>
             </Card>
@@ -873,7 +1020,7 @@ const ReportGenerator = () => {
                   { id: 'REP-2026-04-04-001', title: '渗透测试报告', date: '2026-04-04', findings: 28, severity: 'high' },
                   { id: 'REP-2026-04-03-001', title: '漏洞验证报告', date: '2026-04-03', findings: 5, severity: 'low' }
                 ].map((report) => (
-                  <div key={report.id} className="p-3 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 cursor-pointer">
+                  <div key={report.id} className="p-3 rounded-lg bg-[#0a0e17]/40 hover:bg-[#0a0e17]/60 cursor-pointer">
                     <div className="flex justify-between items-start mb-2">
                       <div className="font-medium text-sm">{report.title}</div>
                       <Badge variant={report.severity === 'high' ? 'danger' : report.severity === 'medium' ? 'warning' : 'success'} size="sm">
@@ -893,7 +1040,7 @@ const ReportGenerator = () => {
       </div>
 
       {/* 底部信息栏 */}
-      <div className="mt-12 py-6 border-t border-gray-800">
+      <div className="mt-12 py-6 border-t border-white/8">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="mb-4 md:mb-0">

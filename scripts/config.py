@@ -24,7 +24,7 @@ class Config:
     
     # ========== 服务器配置 ==========
     SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
-    BACKEND_PORT = int(os.getenv("BACKEND_PORT", "5000"))
+    BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
     FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "3000"))
     
     # ========== API 配置 ==========
@@ -127,7 +127,7 @@ class Config:
     TASK_QUEUE_SIZE = 100
     
     # ========== 功能开关 ==========
-    ENABLE_REAL_ATTACK = True
+    ENABLE_REAL_ATTACK = os.getenv("ENABLE_REAL_ATTACK", "false").lower() == "true"
     ENABLE_CVE_DETECTION = True
     ENABLE_AI_ANALYSIS = True
     ENABLE_ATTACK_VISUALIZATION = True

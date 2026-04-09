@@ -13,7 +13,6 @@ from .tool_registry import (
     MockNucleiAdapter,
     create_default_registry
 )
-from .unified_executor import UnifiedToolExecutor
 
 __all__ = [
     'ToolResult',
@@ -23,5 +22,4 @@ __all__ = [
     'WhatWebAdapter',
     'MockNucleiAdapter',
     'create_default_registry',
-    'UnifiedToolExecutor'
 ]

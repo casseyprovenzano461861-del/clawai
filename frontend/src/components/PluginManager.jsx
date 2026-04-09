@@ -30,181 +30,76 @@ const PluginManager = () => {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [activeTab, setActiveTab] = useState('installed');
 
-  // 模拟插件数据
+  // 本地兜底数据（API 不可用时显示）
   const mockPlugins = [
-    {
-      id: 'nmap-scanner',
-      name: 'NMAP 扫描器',
-      version: '2.1.0',
-      author: 'ClawAI Team',
-      description: '高级网络扫描和端口检测插件',
-      category: 'scanner',
-      status: 'active',
-      installed: true,
-      enabled: true,
-      rating: 4.8,
-      downloads: 1245,
-      lastUpdated: '2026-04-01',
-      size: '2.4 MB',
-      dependencies: ['python-nmap', 'networkx'],
-      permissions: ['network:scan', 'port:detect', 'service:identify'],
-      icon: 'shield',
-      homepage: 'https://github.com/clawai/nmap-scanner',
-      license: 'MIT'
-    },
-    {
-      id: 'vulnerability-db',
-      name: '漏洞数据库',
-      version: '1.3.2',
-      author: 'Security Research Team',
-      description: '集成CVE/NVD漏洞数据库，提供实时漏洞信息',
-      category: 'database',
-      status: 'active',
-      installed: true,
-      enabled: true,
-      rating: 4.9,
-      downloads: 892,
-      lastUpdated: '2026-03-28',
-      size: '15.7 MB',
-      dependencies: ['requests', 'sqlite3'],
-      permissions: ['vuln:read', 'cve:query', 'db:update'],
-      icon: 'database',
-      homepage: 'https://github.com/clawai/vulnerability-db',
-      license: 'Apache-2.0'
-    },
-    {
-      id: 'report-exporter',
-      name: '报告导出器',
-      version: '1.2.1',
-      author: 'ClawAI Team',
-      description: '支持多种格式的报告导出（PDF、HTML、JSON、CSV）',
-      category: 'export',
-      status: 'active',
-      installed: true,
-      enabled: true,
-      rating: 4.7,
-      downloads: 756,
-      lastUpdated: '2026-03-25',
-      size: '1.8 MB',
-      dependencies: ['reportlab', 'pandas'],
-      permissions: ['report:export', 'file:write'],
-      icon: 'file-text',
-      homepage: 'https://github.com/clawai/report-exporter',
-      license: 'MIT'
-    },
-    {
-      id: 'web-crawler',
-      name: 'Web爬虫',
-      version: '1.0.3',
-      author: 'Web Security Team',
-      description: '高级Web爬虫，支持JavaScript渲染和表单发现',
-      category: 'crawler',
-      status: 'inactive',
-      installed: true,
-      enabled: false,
-      rating: 4.5,
-      downloads: 432,
-      lastUpdated: '2026-03-20',
-      size: '3.2 MB',
-      dependencies: ['selenium', 'beautifulsoup4'],
-      permissions: ['web:crawl', 'js:execute', 'form:detect'],
-      icon: 'globe',
-      homepage: 'https://github.com/clawai/web-crawler',
-      license: 'GPL-3.0'
-    },
-    {
-      id: 'ai-threat-detector',
-      name: 'AI威胁检测器',
-      version: '0.9.1',
-      author: 'AI Research Lab',
-      description: '基于机器学习的异常检测和威胁识别',
-      category: 'ai',
-      status: 'available',
-      installed: false,
-      enabled: false,
-      rating: 4.6,
-      downloads: 321,
-      lastUpdated: '2026-04-05',
-      size: '8.5 MB',
-      dependencies: ['tensorflow', 'scikit-learn', 'numpy'],
-      permissions: ['ai:analyze', 'threat:detect', 'anomaly:identify'],
-      icon: 'brain',
-      homepage: 'https://github.com/clawai/ai-threat-detector',
-      license: 'MIT'
-    },
-    {
-      id: 'api-security',
-      name: 'API安全测试',
-      version: '1.1.0',
-      author: 'API Security Team',
-      description: 'REST API安全测试和漏洞扫描',
-      category: 'api',
-      status: 'available',
-      installed: false,
-      enabled: false,
-      rating: 4.4,
-      downloads: 287,
-      lastUpdated: '2026-03-30',
-      size: '2.1 MB',
-      dependencies: ['requests', 'jsonschema'],
-      permissions: ['api:test', 'endpoint:scan', 'auth:test'],
-      icon: 'network',
-      homepage: 'https://github.com/clawai/api-security',
-      license: 'MIT'
-    },
-    {
-      id: 'compliance-checker',
-      name: '合规性检查器',
-      version: '1.0.2',
-      author: 'Compliance Team',
-      description: 'GDPR、HIPAA、PCI-DSS等合规性检查',
-      category: 'compliance',
-      status: 'available',
-      installed: false,
-      enabled: false,
-      rating: 4.3,
-      downloads: 198,
-      lastUpdated: '2026-03-22',
-      size: '4.3 MB',
-      dependencies: ['yaml', 'json'],
-      permissions: ['compliance:check', 'regulation:validate'],
-      icon: 'shield-check',
-      homepage: 'https://github.com/clawai/compliance-checker',
-      license: 'Apache-2.0'
-    },
-    {
-      id: 'dashboard-widgets',
-      name: '仪表盘小部件',
-      version: '1.2.0',
-      author: 'UI Team',
-      description: '额外的仪表盘小部件和可视化组件',
-      category: 'ui',
-      status: 'available',
-      installed: false,
-      enabled: false,
-      rating: 4.7,
-      downloads: 543,
-      lastUpdated: '2026-04-02',
-      size: '1.2 MB',
-      dependencies: ['react-chartjs-2', 'recharts'],
-      permissions: ['ui:widget', 'dashboard:customize'],
-      icon: 'layout',
-      homepage: 'https://github.com/clawai/dashboard-widgets',
-      license: 'MIT'
-    }
+    // 端口扫描
+    { id:'nmap',            name:'Nmap 网络扫描器',       version:'7.94.0', author:'Gordon Lyon',        description:'业界标准网络探测与安全审计工具，支持端口扫描、服务识别、OS检测', category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.9, downloads:125000, size:'8.2 MB',   permissions:['network:scan','port:detect'], icon:'🔍', license:'GPL-2.0' },
+    { id:'masscan',         name:'Masscan 高速扫描',       version:'1.3.2',  author:'Robert Graham',      description:'互联网级别高速端口扫描器，速度可达每秒千万数据包',              category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.6, downloads:52000,  size:'1.8 MB',   permissions:['network:scan'],               icon:'⚡', license:'AGPL' },
+    { id:'rustscan',        name:'RustScan 快速扫描',      version:'2.2.2',  author:'RustScan Team',      description:'Rust编写的超快端口扫描器，与Nmap无缝集成',                     category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:38000,  size:'5.4 MB',   permissions:['network:scan'],               icon:'🦀', license:'GPL-3.0' },
+    { id:'httpx',           name:'HTTPX HTTP探测',         version:'1.6.5',  author:'ProjectDiscovery',   description:'快速多功能HTTP工具包，支持批量探测状态、技术指纹',               category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.8, downloads:61000,  size:'12.3 MB',  permissions:['http:probe'],                 icon:'🌐', license:'MIT' },
+    // Web扫描
+    { id:'nuclei',          name:'Nuclei 漏洞扫描',        version:'3.2.1',  author:'ProjectDiscovery',   description:'基于模板的漏洞扫描器，7000+个CVE模板库',                       category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.8, downloads:67000,  size:'45 MB',    permissions:['vulnerability:scan'],         icon:'☢️', license:'MIT' },
+    { id:'nikto',           name:'Nikto Web扫描',          version:'2.1.6',  author:'CIRT.net',           description:'Web服务器扫描器，检测6700+危险文件及配置问题',                category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.4, downloads:78000,  size:'2.1 MB',   permissions:['web:scan'],                   icon:'🕵️', license:'GPL-2.0' },
+    { id:'whatweb',         name:'WhatWeb 指纹识别',        version:'0.5.5',  author:'Andrew Horton',      description:'Web应用指纹识别，支持1800+插件',                               category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.5, downloads:41000,  size:'4.2 MB',   permissions:['fingerprint:web'],            icon:'🏷️', license:'GPL-2.0' },
+    { id:'wafw00f',         name:'WAFW00F WAF检测',         version:'2.2.0',  author:'Enablesecurity',     description:'自动检测WAF，支持170+种WAF指纹',                               category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.4, downloads:33000,  size:'1.5 MB',   permissions:['waf:detect'],                 icon:'🛡️', license:'BSD' },
+    // 目录枚举
+    { id:'gobuster',        name:'Gobuster 目录枚举',       version:'3.6.0',  author:'OJ Reeves',          description:'Go编写的目录/DNS/VHost暴力破解工具',                           category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.6, downloads:58000,  size:'7.8 MB',   permissions:['directory:fuzz'],             icon:'📂', license:'Apache-2.0' },
+    { id:'dirsearch',       name:'Dirsearch 目录扫描',      version:'0.4.3',  author:'maurosoria',         description:'高速Web路径暴力破解工具，内置庞大字典库',                       category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.4, downloads:45000,  size:'3.8 MB',   permissions:['directory:fuzz'],             icon:'📁', license:'GPL-2.0' },
+    { id:'ffuf',            name:'FFUF 模糊测试',           version:'2.1.0',  author:'joohoi',             description:'Go编写的高速Web模糊测试工具',                                  category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:49000,  size:'9.1 MB',   permissions:['web:fuzz'],                   icon:'🎯', license:'MIT' },
+    { id:'feroxbuster',     name:'Feroxbuster 递归枚举',    version:'2.10.4', author:'epi052',             description:'Rust编写的快速递归内容发现工具',                               category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.6, downloads:29000,  size:'11.2 MB',  permissions:['directory:fuzz'],             icon:'🔄', license:'MIT' },
+    // SQL注入/Web攻击
+    { id:'sqlmap',          name:'SQLMap 注入检测',         version:'1.8.3',  author:'sqlmapproject',      description:'自动化SQL注入漏洞检测与利用',                                  category:'exploit',     status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:89000,  size:'5.1 MB',   permissions:['sql:inject'],                 icon:'💉', license:'GPL-2.0' },
+    { id:'xsstrike',        name:'XSStrike XSS检测',        version:'3.1.5',  author:'s0md3v',             description:'高级XSS检测套件，内置爬虫和模糊测试引擎',                       category:'exploit',     status:'active',    installed:true,  enabled:true,  rating:4.5, downloads:31000,  size:'2.3 MB',   permissions:['xss:test'],                   icon:'🎭', license:'GPL-3.0' },
+    { id:'commix',          name:'Commix 命令注入',         version:'3.9',    author:'commixproject',      description:'自动化命令注入漏洞检测和利用工具',                              category:'exploit',     status:'active',    installed:true,  enabled:true,  rating:4.3, downloads:22000,  size:'4.7 MB',   permissions:['rce:test'],                   icon:'💻', license:'GPL-3.0' },
+    { id:'tplmap',          name:'Tplmap SSTI检测',         version:'0.5',    author:'epinna',             description:'服务器端模板注入漏洞自动检测与利用',                            category:'exploit',     status:'available', installed:false, enabled:false, rating:4.3, downloads:18000,  size:'3.1 MB',   permissions:['ssti:test'],                  icon:'🧪', license:'MIT' },
+    // 信息收集
+    { id:'amass',           name:'Amass 资产枚举',          version:'4.2.0',  author:'OWASP',              description:'深度攻击面映射工具，整合50+数据源',                             category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:54000,  size:'18.6 MB',  permissions:['subdomain:enum'],             icon:'🗺️', license:'Apache-2.0' },
+    { id:'subfinder',       name:'Subfinder 子域名发现',    version:'2.6.6',  author:'ProjectDiscovery',   description:'被动子域名发现，聚合47+数据源',                                 category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.8, downloads:48000,  size:'8.9 MB',   permissions:['subdomain:enum'],             icon:'🔭', license:'MIT' },
+    { id:'sublist3r',       name:'Sublist3r 子域名枚举',    version:'1.1',    author:'aboul3la',           description:'OSINT子域名枚举，整合多搜索引擎',                              category:'recon',       status:'available', installed:false, enabled:false, rating:4.2, downloads:36000,  size:'1.4 MB',   permissions:['subdomain:enum'],             icon:'📡', license:'GPL-2.0' },
+    { id:'theharvester',    name:'theHarvester 信息收集',   version:'4.4.0',  author:'laramies',           description:'收集邮件地址、子域名、IP等OSINT信息',                          category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.4, downloads:42000,  size:'3.2 MB',   permissions:['osint:collect'],              icon:'🌾', license:'GPL-2.0' },
+    { id:'dnsrecon',        name:'DNSRecon DNS侦察',        version:'1.1.4',  author:'darkoperator',       description:'全面DNS枚举：区域传送、暴力枚举、反向查询',                    category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.3, downloads:29000,  size:'2.8 MB',   permissions:['dns:recon'],                  icon:'🔎', license:'GPL-2.0' },
+    { id:'whois-tool',      name:'WHOIS 查询工具',          version:'5.5.22', author:'IANA',               description:'查询域名/IP注册信息',                                         category:'recon',       status:'active',    installed:true,  enabled:true,  rating:4.1, downloads:65000,  size:'0.5 MB',   permissions:['whois:query'],                icon:'📋', license:'MIT' },
+    // SSL/TLS
+    { id:'sslscan',         name:'SSLScan SSL扫描',         version:'2.1.3',  author:'rbsec',              description:'检测弱密码套件、协议版本、心脏滴血等SSL漏洞',                  category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.5, downloads:27000,  size:'1.9 MB',   permissions:['ssl:scan'],                   icon:'🔒', license:'GPL-3.0' },
+    { id:'testssl',         name:'TestSSL.sh TLS测试',      version:'3.2',    author:'testssl.sh',         description:'全面SSL/TLS测试工具',                                         category:'scanner',     status:'available', installed:false, enabled:false, rating:4.4, downloads:21000,  size:'2.7 MB',   permissions:['ssl:test'],                   icon:'🧩', license:'GPL-2.0' },
+    // CMS扫描
+    { id:'wpscan',          name:'WPScan WordPress扫描',    version:'3.8.25', author:'WPScan Team',        description:'WordPress安全扫描器，枚举用户/插件/主题并检测漏洞',             category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.6, downloads:56000,  size:'4.3 MB',   permissions:['wordpress:scan'],             icon:'📰', license:'WPScan' },
+    { id:'enhanced-wpscan', name:'增强版 WPScan',           version:'3.8.25+',author:'ClawAI Team',        description:'集成AI分析的WordPress扫描器，自动关联CVE',                     category:'scanner',     status:'active',    installed:true,  enabled:true,  rating:4.8, downloads:8000,   size:'4.5 MB',   permissions:['wordpress:scan','ai:analyze'],icon:'🚀', license:'MIT' },
+    { id:'joomscan',        name:'JoomScan Joomla扫描',     version:'0.0.7',  author:'OWASP',              description:'OWASP维护的Joomla CMS漏洞扫描器',                             category:'scanner',     status:'available', installed:false, enabled:false, rating:4.1, downloads:18000,  size:'1.1 MB',   permissions:['joomla:scan'],                icon:'🔩', license:'GPL-3.0' },
+    { id:'droopescan',      name:'Droopescan CMS扫描',      version:'1.45.1', author:'droope',             description:'支持Drupal/WordPress/Joomla多CMS扫描',                        category:'scanner',     status:'available', installed:false, enabled:false, rating:4.0, downloads:14000,  size:'1.3 MB',   permissions:['cms:scan'],                   icon:'🕸️', license:'GPL-3.0' },
+    { id:'cmsmap',          name:'CMSMap CMS漏洞扫描',      version:'1.0',    author:'Dionach',            description:'自动检测主流CMS漏洞',                                         category:'scanner',     status:'available', installed:false, enabled:false, rating:4.0, downloads:11000,  size:'0.9 MB',   permissions:['cms:scan'],                   icon:'🗂️', license:'GPL-3.0' },
+    // 密码破解
+    { id:'hydra',           name:'Hydra 在线爆破',          version:'9.5',    author:'vanhauser-thc',      description:'支持50+协议的快速在线密码破解工具',                             category:'brute-force', status:'active',    installed:true,  enabled:true,  rating:4.3, downloads:78000,  size:'1.2 MB',   permissions:['brute:force'],                icon:'🔓', license:'AGPL' },
+    { id:'medusa',          name:'Medusa 并行爆破',         version:'2.2',    author:'foofus.net',         description:'高速并行网络登录密码破解工具',                                 category:'brute-force', status:'available', installed:false, enabled:false, rating:4.1, downloads:25000,  size:'0.8 MB',   permissions:['brute:force'],                icon:'🐍', license:'GPL-2.0' },
+    { id:'hashcat',         name:'Hashcat GPU破解',         version:'6.2.6',  author:'hashcat.net',        description:'世界最快GPU密码恢复工具，支持350+哈希算法',                     category:'brute-force', status:'active',    installed:true,  enabled:true,  rating:4.9, downloads:92000,  size:'22 MB',    permissions:['hash:crack'],                 icon:'⚙️', license:'MIT' },
+    { id:'john',            name:'John the Ripper',         version:'1.9.0',  author:'openwall',           description:'经典密码破解工具，字典和暴力破解',                              category:'brute-force', status:'active',    installed:true,  enabled:true,  rating:4.5, downloads:105000, size:'3.1 MB',   permissions:['hash:crack'],                 icon:'🔑', license:'GPL-2.0' },
+    // 后渗透
+    { id:'metasploit',      name:'Metasploit 框架',         version:'6.4.0',  author:'Rapid7',             description:'世界最广泛使用的渗透测试框架，2000+漏洞利用模块',               category:'exploit',     status:'available', installed:false, enabled:false, rating:4.9, downloads:234000, size:'512 MB',   permissions:['exploit:run'],                icon:'💀', license:'BSD' },
+    { id:'impacket',        name:'Impacket 网络协议',       version:'0.12.0', author:'SecureAuth',         description:'Python网络协议工具集，SMB/NTLM/Kerberos',                     category:'post-exploit',status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:47000,  size:'8.4 MB',   permissions:['smb:attack','kerberos:attack'],icon:'🧰', license:'Apache-2.0' },
+    { id:'evil-winrm',      name:'Evil-WinRM 远程管理',     version:'3.5',    author:'Hackplayers',        description:'专为渗透测试设计的WinRM Shell',                                category:'post-exploit',status:'active',    installed:true,  enabled:true,  rating:4.6, downloads:32000,  size:'2.1 MB',   permissions:['winrm:shell'],                icon:'😈', license:'MIT' },
+    { id:'crackmapexec',    name:'CrackMapExec 内网渗透',   version:'5.4.0',  author:'byt3bl33d3r',        description:'内网评估瑞士军刀，SMB/LDAP/MSSQL批量认证',                    category:'post-exploit',status:'active',    installed:true,  enabled:true,  rating:4.7, downloads:38000,  size:'15.6 MB',  permissions:['smb:attack','lateral:move'],  icon:'🗡️', license:'BSD' },
+    { id:'searchsploit',    name:'SearchSploit 漏洞库',     version:'4.6.0',  author:'Offensive Security', description:'Exploit-DB离线查询，40000+公开漏洞利用代码',                   category:'exploit',     status:'active',    installed:true,  enabled:true,  rating:4.8, downloads:61000,  size:'1.1 GB',   permissions:['exploitdb:search'],           icon:'🔬', license:'GPL-2.0' },
+    // 报告/代理
+    { id:'ai-report-gen',   name:'AI 智能报告生成器',        version:'1.2.0',  author:'ClawAI Team',        description:'基于AI的渗透测试报告自动生成，支持多格式导出',                   category:'reporting',   status:'active',    installed:true,  enabled:true,  rating:4.5, downloads:15000,  size:'2.3 MB',   permissions:['report:generate'],            icon:'📊', license:'MIT' },
+    { id:'burpsuite-integration', name:'Burp Suite 集成',   version:'2024.1', author:'PortSwigger',        description:'Web应用安全测试平台集成，代理拦截和主动扫描',                   category:'proxy',       status:'available', installed:false, enabled:false, rating:4.6, downloads:98000,  size:'156 MB',   permissions:['proxy:intercept'],            icon:'🕷️', license:'商业' },
   ];
 
   // 插件类别
   const pluginCategories = [
-    { id: 'all', name: '所有类别', color: 'gray' },
-    { id: 'scanner', name: '扫描器', color: 'blue', icon: 'shield' },
-    { id: 'database', name: '数据库', color: 'green', icon: 'database' },
-    { id: 'export', name: '导出工具', color: 'purple', icon: 'file-text' },
-    { id: 'crawler', name: '爬虫', color: 'orange', icon: 'globe' },
-    { id: 'ai', name: '人工智能', color: 'red', icon: 'brain' },
-    { id: 'api', name: 'API工具', color: 'indigo', icon: 'network' },
-    { id: 'compliance', name: '合规性', color: 'yellow', icon: 'shield-check' },
-    { id: 'ui', name: '界面组件', color: 'pink', icon: 'layout' }
+    { id: 'all',          name: '所有类别',   color: 'gray' },
+    { id: 'scanner',      name: '扫描器',     color: 'blue',   icon: 'shield' },
+    { id: 'exploit',      name: '漏洞利用',   color: 'red',    icon: 'code' },
+    { id: 'recon',        name: '信息收集',   color: 'cyan',   icon: 'search' },
+    { id: 'post-exploit', name: '后渗透',     color: 'orange', icon: 'lock' },
+    { id: 'brute-force',  name: '密码破解',   color: 'yellow', icon: 'key' },
+    { id: 'proxy',        name: '代理工具',   color: 'purple', icon: 'network' },
+    { id: 'reporting',    name: '报告生成',   color: 'green',  icon: 'file-text' },
+    // 旧 mock 数据类别（向后兼容）
+    { id: 'database',     name: '数据库',     color: 'green',  icon: 'database' },
+    { id: 'export',       name: '导出工具',   color: 'purple', icon: 'file-text' },
+    { id: 'crawler',      name: '爬虫',       color: 'orange', icon: 'globe' },
+    { id: 'ai',           name: '人工智能',   color: 'pink',   icon: 'brain' },
+    { id: 'api',          name: 'API工具',    color: 'indigo', icon: 'network' },
   ];
 
   // 插件状态
@@ -225,18 +120,20 @@ const PluginManager = () => {
   const fetchPlugins = async () => {
     setLoading(true);
     try {
-      const data = await pluginService.getPlugins();
+      const res = await pluginService.getPlugins();
+      // API 返回 { success, data, total } 结构
+      const list = Array.isArray(res) ? res : (res?.data || res?.plugins || []);
       // 统一数据格式
-      const normalized = data.map(p => ({
+      const normalized = list.map(p => ({
         id: p.id,
         name: p.name,
         version: p.version,
         author: p.author,
         description: p.description,
-        category: p.type || p.category || 'other',
+        category: p.category || p.type || 'other',
         status: p.status,
-        installed: p.status !== PluginStatus.AVAILABLE,
-        enabled: p.status === PluginStatus.ACTIVE,
+        installed: p.installed ?? (p.status === 'active'),
+        enabled: p.enabled ?? (p.status === 'active'),
         rating: p.rating || 4.5,
         downloads: p.downloads || 0,
         lastUpdated: p.last_updated || p.lastUpdated || '',
@@ -247,7 +144,7 @@ const PluginManager = () => {
         homepage: p.homepage || '#',
         license: p.license || 'MIT'
       }));
-      setPlugins(normalized);
+      setPlugins(normalized.length > 0 ? normalized : mockPlugins);
     } catch (error) {
       console.error('获取插件列表失败，使用模拟数据:', error);
       setPlugins(mockPlugins);
@@ -464,7 +361,7 @@ const PluginManager = () => {
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row md:items-center justify-between pt-4 border-t border-gray-700/50">
+        <div className="flex flex-col md:flex-row md:items-center justify-between pt-4 border-t border-white/10/50">
           <div className="flex flex-wrap gap-2 mb-4 md:mb-0">
             {plugin.permissions.slice(0, 3).map(permission => (
               <Badge key={permission} variant="outline" size="xs">
@@ -589,9 +486,9 @@ const PluginManager = () => {
     .toFixed(1);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#060910] text-white">
       {/* 插件管理头部 */}
-      <div className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-50">
+      <div className="bg-[#0a0e17]/85 backdrop-blur-sm border-b border-white/10 sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
             <div>
@@ -662,7 +559,7 @@ const PluginManager = () => {
         </div>
 
         {/* 标签页导航 */}
-        <div className="flex border-b border-gray-700 mb-6">
+        <div className="flex border-b border-white/10 mb-6">
           {[
             { id: 'installed', name: '已安装', count: installedCount },
             { id: 'available', name: '可安装', count: availableCount },
@@ -680,7 +577,7 @@ const PluginManager = () => {
             >
               {tab.name}
               {tab.count > 0 && (
-                <span className="ml-2 px-2 py-1 text-xs rounded-full bg-gray-700">
+                <span className="ml-2 px-2 py-1 text-xs rounded-full bg-[#111827]">
                   {tab.count}
                 </span>
               )}
@@ -700,7 +597,7 @@ const PluginManager = () => {
                   placeholder="搜索插件..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                  className="pl-10 pr-4 py-2 bg-[#0a0e17] border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
                 />
               </div>
 
@@ -708,7 +605,7 @@ const PluginManager = () => {
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-4 py-2 bg-[#0a0e17] border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {pluginCategories.map(category => (
                   <option key={category.id} value={category.id}>
@@ -721,7 +618,7 @@ const PluginManager = () => {
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-4 py-2 bg-[#0a0e17] border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {pluginStatuses.map(status => (
                   <option key={status.id} value={status.id}>
@@ -806,7 +703,7 @@ const PluginManager = () => {
                   const percent = totalInstalled > 0 ? (count / totalInstalled) * 100 : 0;
                   
                   return (
-                    <div key={category.id} className="p-4 rounded-lg bg-gray-800/50">
+                    <div key={category.id} className="p-4 rounded-lg bg-[#0a0e17]/60">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center">
                           <Badge variant={category.color} size="sm" className="mr-3">
@@ -816,7 +713,7 @@ const PluginManager = () => {
                         </div>
                         <div className="text-sm font-medium">{percent.toFixed(1)}%</div>
                       </div>
-                      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-[#111827] rounded-full overflow-hidden">
                         <div 
                           className={`h-full bg-${category.color}-500`}
                           style={{ width: `${percent}%` }}
@@ -842,7 +739,7 @@ const PluginManager = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm">已安装插件</span>
                     <div className="flex items-center space-x-3">
-                      <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-32 h-2 bg-[#111827] rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-blue-500 to-green-500"
                           style={{ width: `${(installedCount / plugins.length) * 100}%` }}
@@ -854,7 +751,7 @@ const PluginManager = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm">存储空间</span>
                     <div className="flex items-center space-x-3">
-                      <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="w-32 h-2 bg-[#111827] rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-blue-500 to-green-500"
                           style={{ width: `${(totalSize / 50) * 100}%` }}
@@ -893,31 +790,31 @@ const PluginManager = () => {
               <div>
                 <h3 className="font-medium mb-3">系统状态</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-gray-800/50">
+                  <div className="p-3 rounded-lg bg-[#0a0e17]/60">
                     <div className="text-sm opacity-70 mb-1">插件API</div>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/100 mr-2"></div>
                       <span className="font-medium">运行正常</span>
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-gray-800/50">
+                  <div className="p-3 rounded-lg bg-[#0a0e17]/60">
                     <div className="text-sm opacity-70 mb-1">沙箱环境</div>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/100 mr-2"></div>
                       <span className="font-medium">已启用</span>
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-gray-800/50">
+                  <div className="p-3 rounded-lg bg-[#0a0e17]/60">
                     <div className="text-sm opacity-70 mb-1">安全扫描</div>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/100 mr-2"></div>
                       <span className="font-medium">已通过</span>
                     </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-gray-800/50">
+                  <div className="p-3 rounded-lg bg-[#0a0e17]/60">
                     <div className="text-sm opacity-70 mb-1">依赖检查</div>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/100 mr-2"></div>
                       <span className="font-medium">无冲突</span>
                     </div>
                   </div>
@@ -929,7 +826,7 @@ const PluginManager = () => {
       </div>
 
       {/* 底部信息栏 */}
-      <div className="mt-12 py-6 border-t border-gray-800">
+      <div className="mt-12 py-6 border-t border-white/8">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between">
             <div className="mb-4 md:mb-0">
@@ -955,7 +852,7 @@ const PluginManager = () => {
       {/* 插件详情模态框 */}
       {showPluginModal && selectedPlugin && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#0a0e17] rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-semibold">插件详情 - {selectedPlugin.name}</h3>
               <button 
@@ -970,32 +867,32 @@ const PluginManager = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">插件ID</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.id}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.id}</div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium mb-2">版本</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.version}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.version}</div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium mb-2">作者</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.author}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.author}</div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium mb-2">许可证</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.license}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.license}</div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium mb-2">大小</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.size}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.size}</div>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium mb-2">最后更新</label>
-                  <div className="px-4 py-2 bg-gray-700 rounded-lg">{selectedPlugin.lastUpdated}</div>
+                  <div className="px-4 py-2 bg-[#111827] rounded-lg">{selectedPlugin.lastUpdated}</div>
                 </div>
               </div>
               
@@ -1080,7 +977,7 @@ const PluginManager = () => {
       {/* 安装插件模态框（简化版） */}
       {showInstallModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl max-w-md w-full p-6">
+          <div className="bg-[#0a0e17] rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-semibold">从商店安装插件</h3>
               <button 
@@ -1096,14 +993,14 @@ const PluginManager = () => {
                 <label className="block text-sm font-medium mb-2">插件URL或ID</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-[#111827] border border-white/15 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="输入插件URL或GitHub仓库地址"
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium mb-2">版本</label>
-                <select className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select className="w-full px-4 py-2 bg-[#111827] border border-white/15 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="latest">最新版本</option>
                   <option value="stable">稳定版本</option>
                   <option value="beta">测试版本</option>

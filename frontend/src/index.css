@@ -478,4 +478,101 @@ li {
   }
 }
 
-@media (min-width:
+@media (min-width: 769px) {
+  .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ============================================
+   Cyberpunk 全局样式
+   ============================================ */
+
+body {
+  background-color: #060910;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.text-neon {
+  background: linear-gradient(90deg, #00d4ff, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.card-cyber {
+  background: rgba(10, 14, 23, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 0.75rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.card-cyber:hover {
+  border-color: rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08);
+}
+
+.btn-cyber {
+  background: linear-gradient(135deg, #00d4ff, #3b82f6);
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1.5rem;
+  cursor: pointer;
+  transition: opacity 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.25);
+}
+.btn-cyber:hover { opacity: 0.9; box-shadow: 0 0 28px rgba(0, 212, 255, 0.45); transform: translateY(-1px); }
+.btn-cyber:active { transform: translateY(0); }
+.btn-cyber:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-cyber-danger {
+  background: linear-gradient(135deg, #ef4444, #ec4899);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+}
+.btn-cyber-danger:hover { box-shadow: 0 0 28px rgba(239, 68, 68, 0.45); }
+
+.input-cyber {
+  background: rgba(6, 9, 16, 0.9);
+  border: 1px solid rgba(55, 65, 81, 0.8);
+  border-radius: 0.5rem;
+  color: #e2e8f0;
+  padding: 0.625rem 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.input-cyber::placeholder { color: #4b5563; }
+.input-cyber:focus { border-color: rgba(0, 212, 255, 0.6); box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.08); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0e17; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00d4ff44, #3b82f644); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #00d4ff88, #3b82f688); }
+
+.nav-active-indicator { position: relative; }
+.nav-active-indicator::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #00d4ff, #3b82f6);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+  border-radius: 1px;
+}
+
+.scanlines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 212, 255, 0.012) 2px,
+    rgba(0, 212, 255, 0.012) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}

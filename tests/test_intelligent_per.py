@@ -13,8 +13,8 @@ import json
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-# 默认 API Key
-DEFAULT_API_KEY = "sk-a4503ae9180f4c0cae86d2aaa62621e9"
+# API Key 从环境变量获取（不再硬编码）
+DEFAULT_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 
 async def demo_intelligent_per():
@@ -31,13 +31,14 @@ async def demo_intelligent_per():
     from src.shared.backend.ai_agent.budget_manager import BudgetManager
     from src.shared.backend.tools.unified_executor_final import UnifiedExecutor, ExecutionStrategy
     
-    # 检查 API Key
-    env_key = os.getenv("DEEPSEEK_API_KEY")
-    api_key = env_key if (env_key and env_key.startswith("sk-") and len(env_key) > 20) else DEFAULT_API_KEY
+    # 检查 API Key（必须通过环境变量设置）
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    
+    if not api_key or not api_key.startswith("sk-") or len(api_key) <= 20:
+        print("\n⚠️  未设置有效的 DEEPSEEK_API_KEY 环境变量，跳过测试")
+        return
     
     print(f"\n✓ 使用 API Key: {api_key[:10]}...{api_key[-4:]}")
-    
-    # 1. 创建 LLM 客户端
     print("\n[1/4] 初始化 AI 核心...")
     llm_config = LLMConfig(
         provider=LLMProvider.DEEPSEEK,
@@ -184,13 +185,14 @@ async def interactive_per():
     from src.shared.backend.ai_agent.intelligent_per import IntelligentPERAgent
     from src.shared.backend.tools.unified_executor_final import UnifiedExecutor, ExecutionStrategy
     
-    # 检查 API Key
-    env_key = os.getenv("DEEPSEEK_API_KEY")
-    api_key = env_key if (env_key and env_key.startswith("sk-") and len(env_key) > 20) else DEFAULT_API_KEY
+    # 检查 API Key（必须通过环境变量设置）
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    
+    if not api_key or not api_key.startswith("sk-") or len(api_key) <= 20:
+        print("\n⚠️  未设置有效的 DEEPSEEK_API_KEY 环境变量，跳过测试")
+        return
     
     print(f"\n✓ 使用 API Key: {api_key[:10]}...{api_key[-4:]}")
-    
-    # 初始化组件
     llm_config = LLMConfig(
         provider=LLMProvider.DEEPSEEK,
         model="deepseek-chat",

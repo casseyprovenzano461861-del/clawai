@@ -5,6 +5,7 @@ ClawAI 主应用
 
 import os
 import sys
+import asyncio
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from contextlib import asynccontextmanager
 import logging
 
@@ -24,6 +26,8 @@ from backend.core.vulnerability_validator import VulnerabilityValidator, AttackP
 from backend.services.attack_service import AttackService
 from backend.error.handler import setup_error_handlers
 from backend.log.manager import init_logging, get_logger
+from backend.log.request_id import RequestIdMiddleware
+from backend.security.rate_limit import RateLimitMiddleware, create_rate_limiter_from_env
 from backend.audit import init_audit_system, setup_audit_middleware
 from backend.auth.rbac import Permission, rbac_manager
 from backend.auth.fastapi_permissions import require_permission, require_authentication, get_current_user
@@ -38,16 +42,22 @@ except ImportError as e:
     MODULES_AVAILABLE = False
 
 # 初始化统一日志系统
+_env = os.getenv("ENVIRONMENT", "development")
+_log_level = os.getenv("LOG_LEVEL", "INFO")
+_log_file = os.getenv("LOG_FILE", "logs/clawai.log")
+# 生产环境默认使用 JSON 结构化日志，方便日志聚合工具（ELK/Splunk）解析
+_output_json = os.getenv("LOG_JSON", "true" if _env == "production" else "false").lower() == "true"
+
 log_config = {
-    "level": "INFO",
+    "level": _log_level,
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "datefmt": "%Y-%m-%d %H:%M:%S",
     "enable_console": True,
     "enable_file": True,
-    "file": "logs/clawai.log",
-    "max_size": 10 * 1024 * 1024,  # 10MB
-    "backup_count": 5,
-    "output_json": False,
+    "file": _log_file,
+    "max_size": int(os.getenv("LOG_MAX_SIZE", str(10 * 1024 * 1024))),  # 默认 10MB
+    "backup_count": int(os.getenv("LOG_BACKUP_COUNT", "5")),
+    "output_json": _output_json,
 }
 
 # 初始化日志管理器
@@ -83,24 +93,27 @@ async def lifespan(app: FastAPI):
 
         # 修正工具命令路径
         try:
-            # 获取实际的工具目录路径（如果TOOLS_DIR是相对路径）
+            # 获取实际的工具目录路径
+            tools_dir = os.getenv("TOOLS_DIR", os.path.join(
+                os.path.dirname(__file__), "..", "..", "tools", "penetration"
+            ))
             actual_tools_dir = os.path.abspath(tools_dir)
             if not os.path.exists(actual_tools_dir):
                 actual_tools_dir = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "penetration")
                 actual_tools_dir = os.path.abspath(actual_tools_dir)
 
-            # 更新sqlmap命令
+            # 更新sqlmap命令（使用列表形式避免命令注入）
             if "sqlmap" in tool_manager.tools:
                 sqlmap_path = os.path.join(actual_tools_dir, "sqlmap", "sqlmap.py")
                 if os.path.exists(sqlmap_path):
-                    tool_manager.tools["sqlmap"].command = f'python {sqlmap_path}'
+                    tool_manager.tools["sqlmap"].command = f'python "{sqlmap_path}"'
                     logger.info(f"更新sqlmap命令路径: {sqlmap_path}")
 
             # 更新dirsearch命令
             if "dirsearch" in tool_manager.tools:
                 dirsearch_path = os.path.join(actual_tools_dir, "dirsearch", "dirsearch.py")
                 if os.path.exists(dirsearch_path):
-                    tool_manager.tools["dirsearch"].command = f'python {dirsearch_path}'
+                    tool_manager.tools["dirsearch"].command = f'python "{dirsearch_path}"'
                     logger.info(f"更新dirsearch命令路径: {dirsearch_path}")
 
             # 更新其他工具命令（如果有特定路径需求）
@@ -119,8 +132,8 @@ async def lifespan(app: FastAPI):
             logger.info(f"审计系统初始化完成，存储目录: {audit_storage_dir}")
         except Exception as e:
             logger.error(f"审计系统初始化失败: {e}")
-            # 审计系统失败不应阻止应用启动
-            raise  # 但为了安全，暂时抛出异常
+            # 审计系统失败不阻止应用启动，但记录严重告警
+            logger.critical("审计系统未启动，安全合规性可能受影响")
 
         # 初始化模块系统
         logger.info(f"模块系统可用性: {MODULES_AVAILABLE}")
@@ -237,6 +250,13 @@ async def lifespan(app: FastAPI):
             # 继续使用内存中的默认配置
 
         logger.info("应用初始化完成")
+
+        # 桥接 EventBus → WebSocket（让后端事件实时推送到前端）
+        try:
+            from .api.websocket import manager as ws_manager
+            ws_manager.attach_eventbus(loop=asyncio.get_event_loop())
+        except Exception as _eb_err:
+            logger.warning(f"EventBus → WebSocket 桥接初始化失败（不影响启动）: {_eb_err}")
         
         yield
         
@@ -277,10 +297,21 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 配置CORS
+# 配置CORS - 从环境变量读取，生产环境不允许使用通配符
+_allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+if _allowed_origins_raw.strip() == "*":
+    # 生产环境警告
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        logger.warning("生产环境禁止使用 ALLOWED_ORIGINS=*，强制使用 http://localhost:3000")
+        _cors_origins = ["http://localhost:3000"]
+    else:
+        _cors_origins = ["*"]
+else:
+    _cors_origins = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应该限制来源
+    allow_origins=_cors_origins,  # 从 ALLOWED_ORIGINS 环境变量读取
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -289,17 +320,20 @@ app.add_middleware(
 # 设置统一错误处理器
 setup_error_handlers(app)
 
+# 添加请求 ID 追踪中间件（在所有业务中间件之前）
+app.add_middleware(RequestIdMiddleware)
+
+# 添加 API 速率限制中间件
+_rate_limit_config = create_rate_limiter_from_env()
+app.add_middleware(RateLimitMiddleware, config=_rate_limit_config)
+
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 设置审计中间件
 setup_audit_middleware(app)
 
-# 导入API路由
-from src.shared.backend.api.v1.tools import router as tools_router
-
-# 注册API路由
-app.include_router(tools_router, prefix="/api/v1/tools", tags=["tools"])
+# 注册API路由（统一在底部注册，避免重复）
 
 # 基础健康检查
 @app.get("/")
@@ -314,93 +348,47 @@ async def root():
     }
 
 
+def _health_check_impl():
+    """健康检查公共逻辑"""
+    db_health = db_manager.health_check() if db_manager else {"status": "unknown"}
+    tool_health = tool_manager.health_check() if tool_manager else {"status": "unknown"}
+    return {
+        "status": "healthy" if db_health.get("status") == "healthy" else "degraded",
+        "services": {
+            "database": db_health,
+            "tools": tool_health
+        },
+        "version": "2.0.0"
+    }
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""
     try:
-        # 检查数据库
-        db_health = db_manager.health_check() if db_manager else {"status": "unknown"}
-        
-        # 检查工具管理器
-        tool_health = tool_manager.health_check() if tool_manager else {"status": "unknown"}
-        
-        return {
-            "status": "healthy" if db_health.get("status") == "healthy" else "degraded",
-            "services": {
-                "database": db_health,
-                "tools": tool_health
-            },
-            "version": "2.0.0"
-        }
-    
+        return _health_check_impl()
     except Exception as e:
         logger.error(f"健康检查失败: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/api/health")
 async def api_health_check():
     """API健康检查（用于Docker Compose健康检查）"""
     try:
-        # 检查数据库
-        db_health = db_manager.health_check() if db_manager else {"status": "unknown"}
-        
-        # 检查工具管理器
-        tool_health = tool_manager.health_check() if tool_manager else {"status": "unknown"}
-        
-        return {
-            "status": "healthy" if db_health.get("status") == "healthy" else "degraded",
-            "services": {
-                "database": db_health,
-                "tools": tool_health
-            },
-            "version": "2.0.0"
-        }
-    
+        return _health_check_impl()
     except Exception as e:
         logger.error(f"API健康检查失败: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        return {"status": "unhealthy", "error": str(e)}
 
 
-# @app.get("/tools")
-# async def get_tools(
-#     # 暂时禁用认证检查以方便测试
-#     # _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
-# ):
-#     """获取可用工具列表"""
-#     if not tool_manager:
-#         raise HTTPException(
-#             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-#             detail="工具管理器未初始化"
-#         )
-#     
-#     tools = tool_manager.get_available_tools()
-#     categories = tool_manager.get_tool_categories()
-#     
-#     return {
-#         "tools": tools,
-#         "categories": categories,
-#         "count": len(tools)
-#     }
-
-
-# @app.get("/tools/health")
-# async def get_tools_health(
-#     _has_permission: bool = Depends(require_permission(Permission.TOOL_READ)) if os.getenv("DISABLE_AUTH", "0") == "0" else True
-# ):
-#     """获取工具健康状态"""
-#     if not tool_manager:
-#         raise HTTPException(
-#             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-#             detail="工具管理器未初始化"
-#         )
-
-#     return tool_manager.health_check()
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Prometheus指标端点"""
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except ImportError:
+        return {"error": "prometheus_client not installed"}
 
 
 @app.post("/attack", response_model=AttackResponse)
@@ -448,7 +436,7 @@ async def execute_attack(
             attack_chain=[],
             rule_engine_decision=None,
             target_analysis=TargetAnalysis(),
-            message=f"攻击执行失败: {str(e)}",
+            message="攻击执行失败，详情请查看服务端日志",
             timestamp=datetime.datetime.now(),
             success=False
         )
@@ -612,7 +600,7 @@ async def execute_tool(
         logger.error(f"执行工具时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"执行工具时出错: {str(e)}"
+            detail="执行工具时出错，请查看服务端日志"
         )
 
 
@@ -648,7 +636,7 @@ async def validate_vulnerability(
         logger.error(f"验证漏洞时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"验证漏洞时出错: {str(e)}"
+            detail="验证漏洞时出错，请查看服务端日志"
         )
 
 
@@ -669,7 +657,7 @@ async def analyze_attack_path(
         logger.error(f"分析攻击路径时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"分析攻击路径时出错: {str(e)}"
+            detail="分析攻击路径时出错，请查看服务端日志"
         )
 
 
@@ -698,7 +686,7 @@ async def assess_risk(
         logger.error(f"评估风险时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"评估风险时出错: {str(e)}"
+            detail="评估风险时出错，请查看服务端日志"
         )
 
 
@@ -720,7 +708,7 @@ async def check_compliance(
         logger.error(f"检查合规性时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"检查合规性时出错: {str(e)}"
+            detail="检查合规性时出错，请查看服务端日志"
         )
 
 
@@ -751,7 +739,7 @@ async def add_custom_tool(
         logger.error(f"添加自定义工具时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加自定义工具时出错: {str(e)}"
+            detail="添加自定义工具时出错，请查看服务端日志"
         )
 
 
@@ -787,7 +775,7 @@ async def execute_tool_chain(
         logger.error(f"执行工具链时出错: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"执行工具链时出错: {str(e)}"
+            detail="执行工具链时出错，请查看服务端日志"
         )
 
 
@@ -858,7 +846,7 @@ except ImportError as e:
 # 导入工具API路由
 try:
     from src.shared.backend.api.v1.tools import router as tools_router
-    app.include_router(tools_router, tags=["工具管理"])
+    app.include_router(tools_router, prefix="/api/v1/tools", tags=["工具管理"])
     logger.info("工具API路由已加载")
 except ImportError as e:
     logger.warning(f"工具API路由导入失败: {e}")
@@ -937,25 +925,80 @@ except ImportError as e:
     logger.info("知识图谱API路由已加载（回退到模拟数据）")
 
 
+def _validate_config():
+    """启动时验证配置，对生产环境中的不安全设置发出警告"""
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    is_production = environment == "production"
+
+    secret_key = os.getenv("SECRET_KEY", "")
+    jwt_secret = os.getenv("JWT_SECRET", "") or os.getenv("JWT_SECRET_KEY", "")
+    api_auth_enabled = os.getenv("API_AUTH_ENABLED", "true").lower() == "true"
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+
+    warnings_found = False
+
+    if is_production:
+        if not secret_key or secret_key.startswith("your-"):
+            raise RuntimeError(
+                "[CONFIG] FATAL: SECRET_KEY is empty or uses default value in production! "
+                "Generate a strong key: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        if not jwt_secret or jwt_secret.startswith("your-"):
+            raise RuntimeError(
+                "[CONFIG] FATAL: JWT_SECRET_KEY is empty or uses default value in production! "
+                "Generate a strong key: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        if not api_auth_enabled:
+            logger.warning("[CONFIG] SECURITY: API_AUTH_ENABLED is false in production - API endpoints are unprotected!")
+            warnings_found = True
+        if debug:
+            logger.warning("[CONFIG] SECURITY: DEBUG is true in production - disable for production use!")
+            warnings_found = True
+        # 检查 CORS
+        allowed_origins = os.getenv("ALLOWED_ORIGINS", "")
+        if allowed_origins.strip() == "*":
+            logger.warning("[CONFIG] SECURITY: ALLOWED_ORIGINS=* in production - CORS is open to all origins!")
+            warnings_found = True
+    else:
+        if not secret_key or secret_key.startswith("your-"):
+            logger.info("[CONFIG] SECRET_KEY uses default value (acceptable in development)")
+        if not jwt_secret or jwt_secret.startswith("your-"):
+            logger.info("[CONFIG] JWT_SECRET_KEY uses default value (acceptable in development)")
+
+    if not warnings_found:
+        logger.info("[CONFIG] Configuration validation passed")
+
+    # Log effective configuration (non-sensitive)
+    logger.info(f"[CONFIG] Environment: {environment}")
+    logger.info(f"[CONFIG] Debug: {debug}")
+    logger.info(f"[CONFIG] API Auth Enabled: {api_auth_enabled}")
+    logger.info(f"[CONFIG] Server: {os.getenv('SERVER_HOST', '0.0.0.0')}:{os.getenv('BACKEND_PORT', '8000')}")
+    logger.info(f"[CONFIG] Database: {os.getenv('DATABASE_URL', 'sqlite:///./clawai.db')}")
+
+
 if __name__ == "__main__":
     import uvicorn
     import argparse
-    
+
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="ClawAI 主应用")
     parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"), help="服务器主机地址")
-    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")), help="服务器端口")
+    parser.add_argument("--port", type=int, default=int(os.getenv("BACKEND_PORT", "8000")), help="服务器端口")
     args = parser.parse_args()
-    
+
     host = args.host
     port = args.port
-    
+
+    # 启动前验证配置
+    _validate_config()
+
     logger.info(f"启动服务器: http://{host}:{port}")
     logger.info(f"API文档: http://{host}:{port}/docs")
-    
+
+    _env = os.getenv("ENVIRONMENT", "development")
     uvicorn.run(
         "src.shared.backend.main:app",
         host=host,
         port=port,
-        reload=True  # 开发模式
+        reload=(_env == "development")  # 仅开发模式启用热重载
     )

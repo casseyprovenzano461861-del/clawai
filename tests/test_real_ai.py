@@ -13,8 +13,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 
-# 默认 API Key（方便测试，正式使用请使用环境变量）
-DEFAULT_API_KEY = "sk-a4503ae9180f4c0cae86d2aaa62621e9"
+# API Key 从环境变量获取（不再硬编码）
+DEFAULT_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 
 async def demo_real_ai_tool_call():
@@ -25,19 +25,14 @@ async def demo_real_ai_tool_call():
     
     from src.shared.backend.ai_agent.orchestrator import AIAgentOrchestrator, AgentConfig, AgentMode
     
-    # 检查 API Key（优先使用环境变量，其次使用默认值）
-    env_key = os.getenv("DEEPSEEK_API_KEY")
+    # 检查 API Key（必须通过环境变量设置）
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
     
-    # 检查环境变量是否有效（必须以 sk- 开头）
-    if env_key and env_key.startswith("sk-") and len(env_key) > 20:
-        api_key = env_key
-        source = "环境变量"
-    else:
-        api_key = DEFAULT_API_KEY
-        source = "默认配置"
+    if not api_key or not api_key.startswith("sk-") or len(api_key) <= 20:
+        print("\n⚠️  未设置有效的 DEEPSEEK_API_KEY 环境变量，跳过测试")
+        return False
     
     print(f"\n✓ 使用 API Key: {api_key[:10]}...{api_key[-4:]}")
-    print(f"  (来自{source})")
     
     # 创建配置
     config = AgentConfig(
@@ -150,18 +145,13 @@ async def interactive_demo():
     
     from src.shared.backend.ai_agent.orchestrator import AIAgentOrchestrator, AgentConfig, AgentMode
     
-    env_key = os.getenv("DEEPSEEK_API_KEY")
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
     
-    # 检查环境变量是否有效（必须以 sk- 开头）
-    if env_key and env_key.startswith("sk-") and len(env_key) > 20:
-        api_key = env_key
-        source = "环境变量"
-    else:
-        api_key = DEFAULT_API_KEY
-        source = "默认配置"
+    if not api_key or not api_key.startswith("sk-") or len(api_key) <= 20:
+        print("\n⚠️  未设置有效的 DEEPSEEK_API_KEY 环境变量，跳过测试")
+        return
     
     print(f"\n✓ 使用 API Key: {api_key[:10]}...{api_key[-4:]}")
-    print(f"  (来自{source})")
     
     config = AgentConfig(
         provider="deepseek",

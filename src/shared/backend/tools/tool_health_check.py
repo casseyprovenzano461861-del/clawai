@@ -414,8 +414,8 @@ class ToolHealthChecker:
                     if self._compare_versions(version, min_version) == 0:
                         health = "warning"
                         error_message = "版本刚好满足最低要求，建议升级"
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
         
         # 确定安装方法
         installation_method = None
@@ -566,8 +566,8 @@ class ToolHealthChecker:
                 try:
                     if self._compare_versions(version, min_version) == 0:
                         recommendations.append(f"⚠ {tool_info['tool_name']} 版本刚好满足最低要求，建议升级")
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
         
         # 平台特定建议
         if self.platform == "windows":

@@ -1,58 +1,56 @@
-# ClawAI 模块化单体应用 Dockerfile
-# 简化的Docker配置，用于生产环境部署
-# 生成时间: 2026-04-06
-# 版本: 2.0.0 (模块化单体架构)
+# ClawAI Multi-stage Production Dockerfile
+# Separates build dependencies from runtime for minimal attack surface
+# Version: 3.0.0 (Production Hardened)
 
-# 使用Python 3.11轻量级镜像
+# ============ Stage 1: Builder ============
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=1
+
+# Install build dependencies only
+COPY requirements.txt .
+RUN pip install --no-compile --prefix=/install -r requirements.txt
+
+# ============ Stage 2: Runtime ============
 FROM python:3.11-slim
 
-# 设置工作目录
+# Metadata
+LABEL maintainer="ClawAI Team"
+LABEL version="3.0.0"
+LABEL description="ClawAI - AI-powered Security Assessment System"
+
 WORKDIR /app
 
-# 设置环境变量
+# Minimal runtime environment
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/app/.local/bin:$PATH"
 
-# 安装系统依赖
-# 包括一些基本的安全工具和系统工具
+# Install only runtime system dependencies (no security tools in base image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    wget \
-    gnupg \
     ca-certificates \
-    # 基础网络工具
-    iputils-ping \
-    netcat-openbsd \
-    dnsutils \
-    # 安全工具（基础版本，生产环境建议使用专用容器）
-    nmap \
-    nikto \
-    whatweb \
-    # 清理缓存
     && rm -rf /var/lib/apt/lists/*
 
-# 安装Python依赖
-# 复制依赖文件
-COPY requirements.txt .
-COPY requirements-dev.txt .
+# Copy Python packages from builder
+COPY --from=builder /install /usr/local
 
-# 安装生产依赖
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# 复制项目文件
+# Copy application code
 COPY . .
 
-# 创建必要的目录结构
-RUN mkdir -p \
-    logs \
-    data/databases \
-    data/audit \
-    config \
-    tools/penetration
+# Create non-root user and required directories
+RUN groupadd -r clawai && \
+    useradd -r -g clawai -d /app -s /sbin/nologin clawai && \
+    mkdir -p logs data/databases data/audit config && \
+    chown -R clawai:clawai /app
 
-# 设置环境变量默认值
+USER clawai
+
+# Runtime defaults
 ENV ENVIRONMENT=production
 ENV SERVER_HOST=0.0.0.0
 ENV BACKEND_PORT=8000
@@ -61,21 +59,12 @@ ENV TOOLS_DIR=/app/tools/penetration
 ENV AUDIT_STORAGE_DIR=/app/data/audit
 ENV LOG_LEVEL=INFO
 ENV LOG_FILE=/app/logs/clawai.log
-ENV RBAC_CONFIG_PATH=/app/config/rbac.json
-ENV MODULES_CONFIG_PATH=/app/config/modules.yaml
+# 生产环境默认 JSON 结构化日志
+ENV LOG_JSON=true
 
-# 暴露端口
 EXPOSE 8000
 
-# 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# 启动命令
-# 使用run.py启动模块化单体应用
 CMD ["python", "run.py", "--host", "0.0.0.0", "--port", "8000"]
-
-# 构建标签
-LABEL maintainer="ClawAI Team"
-LABEL version="2.0.0"
-LABEL description="ClawAI - 智能安全评估系统 (模块化单体架构)"

@@ -2,6 +2,7 @@
  * 知识图谱API服务
  */
 import { request } from './apiClient';
+import { USE_MOCK_DATA } from './config';
 
 // 节点类型枚举
 export const NodeType = {
@@ -91,8 +92,12 @@ export const getNodes = async (params = {}) => {
     const response = await request.get('/knowledge-graph/nodes', { params });
     return response.data?.nodes || response.nodes || [];
   } catch (error) {
-    console.warn('获取节点列表失败，使用模拟数据:', error.message);
-    return getMockGraphData().nodes;
+    if (USE_MOCK_DATA) {
+      console.warn('获取节点列表失败，使用模拟数据:', error.message);
+      return getMockGraphData().nodes;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -106,8 +111,12 @@ export const getEdges = async (params = {}) => {
     const response = await request.get('/knowledge-graph/edges', { params });
     return response.data?.edges || response.edges || [];
   } catch (error) {
-    console.warn('获取边列表失败，使用模拟数据:', error.message);
-    return getMockGraphData().edges;
+    if (USE_MOCK_DATA) {
+      console.warn('获取边列表失败，使用模拟数据:', error.message);
+      return getMockGraphData().edges;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -120,10 +129,11 @@ export const getGraphStats = async () => {
     const response = await request.get('/knowledge-graph/stats');
     return response.data || response;
   } catch (error) {
-    console.warn('获取图谱统计失败，计算模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取图谱统计失败，计算模拟数据:', error.message);
 
-    const mockData = getMockGraphData();
-    const stats = {
+      const mockData = getMockGraphData();
+      const stats = {
       totalNodes: mockData.nodes.length,
       totalEdges: mockData.edges.length,
       nodeTypes: {},
@@ -144,6 +154,9 @@ export const getGraphStats = async () => {
     });
 
     return stats;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -165,10 +178,11 @@ export const findAttackPaths = async (params = {}) => {
     const response = await request.get(`/knowledge-graph/attack-paths?${queryParams.toString()}`);
     return response.data?.paths || [];
   } catch (error) {
-    console.warn('查找攻击路径失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('查找攻击路径失败，使用模拟数据:', error.message);
 
-    // 模拟攻击路径
-    return [
+      // 模拟攻击路径
+      return [
       {
         id: 'path-1',
         start_node: 'target-1',
@@ -188,6 +202,9 @@ export const findAttackPaths = async (params = {}) => {
         description: '用户通过服务器漏洞访问数据库'
       }
     ];
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -208,10 +225,11 @@ export const getRelatedNodes = async (nodeId, params = {}) => {
     const response = await request.get(`/knowledge-graph/node/${nodeId}/related?${queryParams.toString()}`);
     return response.data?.related_nodes || [];
   } catch (error) {
-    console.warn('获取相关节点失败，使用模拟数据:', error.message);
+    if (USE_MOCK_DATA) {
+      console.warn('获取相关节点失败，使用模拟数据:', error.message);
 
-    // 模拟相关节点
-    const mockData = getMockGraphData();
+      // 模拟相关节点
+      const mockData = getMockGraphData();
     const node = mockData.nodes.find(n => n.id === nodeId);
 
     if (!node) return [];
@@ -233,6 +251,9 @@ export const getRelatedNodes = async (nodeId, params = {}) => {
     }
 
     return relatedNodes;
+    } else {
+      throw error;
+    }
   }
 };
 
@@ -244,8 +265,9 @@ export const importMockData = async () => {
   try {
     return await request.post('/knowledge-graph/import/mock');
   } catch (error) {
-    console.warn('导入模拟数据API失败:', error.message);
-    return {
+    if (USE_MOCK_DATA) {
+      console.warn('导入模拟数据API失败:', error.message);
+      return {
       success: true,
       data: {
         imported_nodes: 10,
@@ -253,11 +275,11 @@ export const importMockData = async () => {
         message: '模拟数据导入完成'
       }
     };
+    } else {
+      throw error;
+    }
   }
 };
-
-/**
- * 导入NMAP扫描结果
  * @param {File} nmapFile - NMAP XML文件
  * @returns {Promise} 导入结果
  */
@@ -272,8 +294,9 @@ export const importNmapResults = async (nmapFile) => {
       }
     });
   } catch (error) {
-    console.warn('导入NMAP结果API失败:', error.message);
-    return {
+    if (USE_MOCK_DATA) {
+      console.warn('导入NMAP结果API失败:', error.message);
+      return {
       success: true,
       data: {
         imported_nodes: 5,
@@ -281,6 +304,9 @@ export const importNmapResults = async (nmapFile) => {
         message: 'NMAP数据导入完成'
       }
     };
+    } else {
+      throw error;
+    }
   }
 };
 

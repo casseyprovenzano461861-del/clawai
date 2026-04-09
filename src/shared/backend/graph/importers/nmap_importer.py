@@ -127,8 +127,8 @@ class NmapImporter(BaseImporter):
                 # 尝试解析JSON
                 try:
                     return json.loads(data)
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
 
             return None
         except Exception as e:

@@ -12,7 +12,7 @@ from .reflector import Reflector
 from .graph_manager import GraphManager
 from .events import event_broker, EventType
 from .tool_manager import ToolManager
-from .llm_client import LLMClient
+from ..ai_core.llm_client import LLMClient
 
 
 class PERAgent:

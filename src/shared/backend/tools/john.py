@@ -6,6 +6,7 @@ John the Ripper工具模块
 封装John the Ripper密码破解功能，支持多种哈希类型和破解模式
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -14,6 +15,8 @@ import tempfile
 import os
 import random
 import hashlib
+
+logger = logging.getLogger(__name__)
 
 class JohnTool:
     """John the Ripper密码破解工具类"""
@@ -255,7 +258,7 @@ def main():
         try:
             with open(hash_file_path, 'r', encoding='utf-8') as f:
                 hash_file = f.read()
-        except:
+        except Exception as e:
             print(f"无法读取哈希文件: {hash_file_path}")
             sys.exit(1)
         

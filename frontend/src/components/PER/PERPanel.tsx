@@ -1,13 +1,16 @@
 /**
  * P-E-R 控制台组件
  * 实时显示 Planner-Executor-Reflector 自主渗透测试流程
+ * 已集成 EventBus 桥接事件：进度条、工具时间线、彩色消息日志
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Play, Square, RefreshCw, Target, Brain, Zap, CheckCircle,
-  AlertCircle, Clock, Activity, ChevronRight, FileText
+  AlertCircle, Clock, Activity, ChevronRight, FileText,
+  Terminal, Info, AlertTriangle, XCircle
 } from 'lucide-react';
+import usePERAgent, { type ToolEvent, type LogEntry, type MessageType } from '../../hooks/usePERAgent';
 
 // 阶段图标和颜色
 const PHASE_CONFIG = {
@@ -19,12 +22,26 @@ const PHASE_CONFIG = {
   failed: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500' },
 };
 
+// 消息类型样式
+const MSG_TYPE_STYLE: Record<MessageType, string> = {
+  info: 'text-gray-300',
+  success: 'text-green-400',
+  error: 'text-red-400',
+  warning: 'text-yellow-400',
+};
+
+const MSG_TYPE_ICON: Record<MessageType, React.ElementType> = {
+  info: Info,
+  success: CheckCircle,
+  error: XCircle,
+  warning: AlertTriangle,
+};
+
 /**
  * 阶段指示器组件
  */
 export const PhaseIndicator = ({ current, className = '' }) => {
   const phases = ['planning', 'executing', 'reflecting'];
-  const config = PHASE_CONFIG[current] || PHASE_CONFIG.idle;
   const currentIndex = phases.indexOf(current);
   
   return (
@@ -142,9 +159,118 @@ export const FindingCard = ({ finding, className = '' }) => {
           {severity}
         </span>
       </div>
-      {finding.description && (
-        <p className="text-xs text-gray-400">{finding.description}</p>
+      {(finding.description || finding.detail) && (
+        <p className="text-xs text-gray-400">{finding.description || finding.detail}</p>
       )}
+    </div>
+  );
+};
+
+/**
+ * 进度条组件（EventBus PROGRESS 事件驱动）
+ */
+const ProgressBar = ({ percent, description }: { percent: number; description: string }) => {
+  const pct = Math.round(percent * 100);
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between text-xs text-gray-400 mb-1">
+        <span className="truncate max-w-xs">{description || '执行中…'}</span>
+        <span className="ml-2 shrink-0">{pct}%</span>
+      </div>
+      <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-blue-500 rounded-full transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 单条工具调用条目（EventBus TOOL 事件驱动）
+ */
+const ToolEventRow = ({ event }: { event: ToolEvent }) => {
+  const isRunning = event.status === 'start';
+  const isError = event.status === 'error';
+  const isComplete = event.status === 'complete';
+
+  return (
+    <div className="flex items-center gap-2 py-1 text-xs border-b border-gray-800/50 last:border-0">
+      <Terminal size={12} className="text-gray-500 shrink-0" />
+      <span className="text-gray-300 font-mono truncate flex-1">{event.name}</span>
+      {isRunning && <RefreshCw size={11} className="animate-spin text-yellow-400 shrink-0" />}
+      {isComplete && (
+        <>
+          <CheckCircle size={11} className="text-green-400 shrink-0" />
+          {event.durationMs !== undefined && (
+            <span className="text-gray-500 shrink-0">{event.durationMs}ms</span>
+          )}
+        </>
+      )}
+      {isError && <XCircle size={11} className="text-red-400 shrink-0" />}
+    </div>
+  );
+};
+
+/**
+ * 工具调用时间线（最近 20 条）
+ */
+const ToolTimeline = ({ events }: { events: ToolEvent[] }) => {
+  const visible = events.slice(-20);
+  return (
+    <div>
+      <h4 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+        <Terminal size={13} />
+        工具调用
+        {events.some(e => e.status === 'start') && (
+          <RefreshCw size={11} className="animate-spin text-yellow-400 ml-1" />
+        )}
+      </h4>
+      {visible.length === 0 ? (
+        <p className="text-xs text-gray-600">等待工具调用…</p>
+      ) : (
+        <div className="bg-gray-950 rounded-lg p-2 max-h-48 overflow-y-auto">
+          {visible.map(ev => <ToolEventRow key={ev.id} event={ev} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * 彩色实时消息日志（EventBus MESSAGE + 原有 per 事件）
+ */
+const ColoredLog = ({ logs }: { logs: LogEntry[] }) => {
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  return (
+    <div>
+      <h4 className="text-sm font-medium text-gray-400 mb-2">执行日志</h4>
+      <div className="bg-gray-950 rounded-lg p-3 h-64 overflow-y-auto text-xs font-mono">
+        {logs.length === 0 && (
+          <p className="text-gray-600">等待事件…</p>
+        )}
+        {logs.map(log => {
+          const Icon = MSG_TYPE_ICON[log.msgType] || Info;
+          return (
+            <div key={log.id} className="flex gap-1.5 py-0.5">
+              <span className="text-gray-600 shrink-0">
+                {new Date(log.timestamp).toLocaleTimeString()}
+              </span>
+              <Icon size={11} className={`${MSG_TYPE_STYLE[log.msgType]} shrink-0 mt-0.5`} />
+              <span className={MSG_TYPE_STYLE[log.msgType]}>{log.text}</span>
+              {log.source === 'eventbus' && (
+                <span className="text-gray-700 ml-auto shrink-0">bus</span>
+              )}
+            </div>
+          );
+        })}
+        <div ref={endRef} />
+      </div>
     </div>
   );
 };
@@ -159,136 +285,42 @@ const PERPanel = ({
   const [target, setTarget] = useState('');
   const [goal, setGoal] = useState('');
   const [mode, setMode] = useState('full');
-  const [isRunning, setIsRunning] = useState(false);
-  const [phase, setPhase] = useState('idle');
-  const [iteration, setIteration] = useState(0);
-  const [tasks, setTasks] = useState([]);
   const [activeTaskIndex, setActiveTaskIndex] = useState(-1);
-  const [findings, setFindings] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [summary, setSummary] = useState(null);
-  
-  const wsRef = useRef(null);
-  const logsEndRef = useRef(null);
-  
-  // 自动滚动到日志底部
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
-  
-  // 添加日志
-  const addLog = useCallback((event) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev.slice(-100), { ...event, timestamp }]);
-    
-    // 更新状态
-    switch (event.type) {
-      case 'phase':
-        setPhase(event.phase);
-        break;
-      case 'plan':
-        setTasks(event.tasks);
-        break;
-      case 'task_start':
-        setActiveTaskIndex(event.index);
-        setTasks(prev => prev.map((t, i) => 
-          i === event.index ? { ...t, status: 'running' } : t
-        ));
-        break;
-      case 'task_result':
-        setTasks(prev => prev.map((t, i) => 
-          i === activeTaskIndex ? { ...t, status: event.success ? 'completed' : 'failed' } : t
-        ));
-        if (event.findings) {
-          setFindings(prev => [...prev, ...event.findings]);
-        }
-        break;
-      case 'iteration':
-        setIteration(event.num);
-        break;
-      case 'reflection':
-        setSummary(event.summary);
-        break;
-      case 'complete':
-        setIsRunning(false);
-        setPhase('completed');
-        if (onSessionEnd) {
-          onSessionEnd(event);
-        }
-        break;
-      case 'error':
-        setIsRunning(false);
-        setPhase('failed');
-        break;
-    }
-  }, [activeTaskIndex, onSessionEnd]);
-  
-  // 连接 WebSocket
-  const connectWebSocket = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/per-events`;
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    
-    ws.onopen = () => {
-      addLog({ type: 'connected', message: 'WebSocket 连接成功' });
-    };
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      addLog(data);
-    };
-    
-    ws.onerror = (error) => {
-      addLog({ type: 'error', message: 'WebSocket 连接错误' });
-    };
-    
-    ws.onclose = () => {
-      addLog({ type: 'disconnected', message: 'WebSocket 连接关闭' });
-    };
-  }, [addLog]);
-  
-  // 启动 P-E-R
-  const startPER = useCallback(() => {
+  const [summary, setSummary] = useState<string | null>(null);
+
+  // 使用 usePERAgent Hook（含 EventBus 桥接新增状态）
+  const {
+    status,
+    phase,
+    iteration,
+    tasks,
+    findings,
+    report,
+    // EventBus 桥接
+    progress,
+    currentTask,
+    toolEvents,
+    logs,
+    // 方法
+    startPentest,
+    stopPentest,
+    isRunning,
+  } = usePERAgent({
+    autoConnect: true,
+    onEvent: (event) => {
+      if (event.type === 'task_start') setActiveTaskIndex(event.index ?? -1);
+      if (event.type === 'reflection') setSummary(event.summary ?? null);
+      if (event.type === 'complete' && onSessionEnd) onSessionEnd(event);
+    },
+  });
+
+  const handleStart = useCallback(() => {
     if (!target.trim()) return;
-    
-    setIsRunning(true);
-    setPhase('idle');
-    setIteration(0);
-    setTasks([]);
-    setFindings([]);
-    setLogs([]);
     setSummary(null);
-    
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      connectWebSocket();
-      // 等待连接
-      setTimeout(() => {
-        wsRef.current?.send(JSON.stringify({
-          action: 'start_per',
-          target: target.trim(),
-          goal: goal.trim() || undefined,
-          mode: mode
-        }));
-      }, 500);
-    } else {
-      wsRef.current.send(JSON.stringify({
-        action: 'start_per',
-        target: target.trim(),
-        goal: goal.trim() || undefined,
-        mode: mode
-      }));
-    }
-  }, [target, goal, mode, connectWebSocket]);
-  
-  // 停止 P-E-R
-  const stopPER = useCallback(() => {
-    wsRef.current?.send(JSON.stringify({ action: 'stop_per' }));
-    setIsRunning(false);
-    setPhase('idle');
-  }, []);
-  
+    setActiveTaskIndex(-1);
+    startPentest(target.trim(), goal.trim(), mode);
+  }, [target, goal, mode, startPentest]);
+
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 ${className}`}>
       {/* 输入区域 */}
@@ -333,7 +365,7 @@ const PERPanel = ({
         
         <div className="flex gap-2">
           <button
-            onClick={startPER}
+            onClick={handleStart}
             disabled={isRunning || !target.trim()}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -341,7 +373,7 @@ const PERPanel = ({
             开始测试
           </button>
           <button
-            onClick={stopPER}
+            onClick={stopPentest}
             disabled={!isRunning}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -351,13 +383,26 @@ const PERPanel = ({
         </div>
       </div>
       
-      {/* 状态指示器 */}
-      <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-        <PhaseIndicator current={phase} />
-        <div className="flex items-center gap-4 text-sm text-gray-400">
-          <span>迭代: {iteration}</span>
-          <span>发现: {findings.length}</span>
+      {/* 状态指示器 + 进度条 */}
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between mb-3">
+          <PhaseIndicator current={phase} />
+          <div className="flex items-center gap-4 text-sm text-gray-400">
+            <span>迭代: {iteration}</span>
+            <span>发现: {findings.length}</span>
+            <span className={`capitalize ${
+              status === 'running' ? 'text-yellow-400' :
+              status === 'connected' ? 'text-green-400' :
+              status === 'error' ? 'text-red-400' : 'text-gray-500'
+            }`}>
+              {status}
+            </span>
+          </div>
         </div>
+        {/* 进度条（仅执行中显示） */}
+        {isRunning && (
+          <ProgressBar percent={progress} description={currentTask} />
+        )}
       </div>
       
       {/* 主内容区域 */}
@@ -365,6 +410,10 @@ const PERPanel = ({
         {/* 左侧：任务列表 */}
         <div className="col-span-1">
           <TaskList tasks={tasks} activeIndex={activeTaskIndex} />
+          {/* 工具时间线（任务列表下方） */}
+          <div className="mt-4">
+            <ToolTimeline events={toolEvents} />
+          </div>
         </div>
         
         {/* 中间：发现 */}
@@ -379,32 +428,22 @@ const PERPanel = ({
           )}
         </div>
         
-        {/* 右侧：日志 */}
+        {/* 右侧：彩色日志 */}
         <div className="col-span-1">
-          <h4 className="text-sm font-medium text-gray-400 mb-2">执行日志</h4>
-          <div className="bg-gray-950 rounded-lg p-3 h-96 overflow-y-auto text-xs font-mono">
-            {logs.map((log, index) => (
-              <div key={index} className="py-1 border-b border-gray-900/50">
-                <span className="text-gray-500">[{log.timestamp}]</span>{' '}
-                <span className={`${
-                  log.type === 'error' ? 'text-red-400' :
-                  log.type === 'task_result' ? (log.success ? 'text-green-400' : 'text-red-400') :
-                  'text-gray-300'
-                }`}>
-                  {log.message || log.type}
-                </span>
-              </div>
-            ))}
-            <div ref={logsEndRef} />
-          </div>
+          <ColoredLog logs={logs} />
         </div>
       </div>
       
-      {/* 底部：摘要 */}
-      {summary && (
+      {/* 底部：摘要 / 报告 */}
+      {(summary || report) && (
         <div className="p-4 border-t border-gray-800 bg-gray-800/50">
-          <h4 className="text-sm font-medium text-gray-400 mb-2">分析摘要</h4>
-          <p className="text-sm text-gray-300">{summary}</p>
+          <h4 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+            <FileText size={13} />
+            {report ? '最终报告' : '分析摘要'}
+          </h4>
+          <p className="text-sm text-gray-300 whitespace-pre-wrap">
+            {report || summary}
+          </p>
         </div>
       )}
     </div>

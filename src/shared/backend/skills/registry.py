@@ -248,7 +248,7 @@ for username, password in bypass_payloads:
         
         for indicator in success_indicators:
             if indicator.lower() in content.lower():
-                print(f"AUTH_BYPASS_SUCCESS: {username}:{password}")
+                print(f"AUTH_BYPASS_SUCCESS: {username}:****")
                 print(f"Indicator found: {indicator}")
                 break
         else:
@@ -309,8 +309,8 @@ for file in backup_files:
         
         if response.status == 200:
             found.append(f"FOUND: {url}")
-    except:
-        pass
+    except Exception as e:
+        logger.debug(f"Error: {e}")
 
 if found:
     print("\\n".join(found))
@@ -361,8 +361,8 @@ for path in sensitive_paths:
     except urllib.error.HTTPError as e:
         if e.code in [401, 403]:
             found.append(f"{e.code}: {url}")
-    except:
-        pass
+    except Exception as e:
+        logger.debug(f"Error: {e}")
 
 if found:
     print("\\n".join(found))
@@ -639,15 +639,13 @@ for username, password in credentials:
         
         # 检测成功标志
         if "index.php" in content or "Welcome" in content:
-            print(f"LOGIN_SUCCESS: {username}:{password}")
+            print(f"LOGIN_SUCCESS: {username}:****")
             break
         else:
-            print(f"FAILED: {username}:{password}")
+            print(f"FAILED: {username}:****")
     except Exception as e:
         if "redirect" in str(e).lower():
-            print(f"LOGIN_SUCCESS: {username}:{password}")
-            break
-        print(f"ERROR: {str(e)[:50]}")
+            print(f"LOGIN_SUCCESS: {username}:****")
 """
         ))
         

@@ -616,7 +616,7 @@ class UnifiedExecutor(BaseExecutor):
                                     return file_path
                                 else:
                                     return file_path  # 即使没有执行权限也返回
-                            except:
+                            except Exception as e:
                                 return file_path
         
         return None
@@ -1024,11 +1024,19 @@ class UnifiedExecutor(BaseExecutor):
     def _execute_nmap_real(self, target: str, options: Dict) -> Dict[str, Any]:
         """真实执行nmap扫描"""
         try:
+            # 防御：如果 target 被误传为 dict，提取其中的 target 字段
+            if isinstance(target, dict):
+                target = target.get("target", target.get("host", str(target)))
+            
             # 清理目标格式
-            if target.startswith("http://"):
-                target = target.replace("http://", "")
-            elif target.startswith("https://"):
-                target = target.replace("https://", "")
+            if isinstance(target, str):
+                if target.startswith("http://"):
+                    target = target.replace("http://", "")
+                elif target.startswith("https://"):
+                    target = target.replace("https://", "")
+                target = target.rstrip("/")
+            else:
+                target = str(target)
             
             # 获取端口范围
             ports = options.get("ports", "21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1433,1521,3306,3389,5432,5900,6379,8080,8443,27017")
@@ -1096,6 +1104,11 @@ class UnifiedExecutor(BaseExecutor):
     def _execute_whatweb_real(self, target: str, options: Dict) -> Dict[str, Any]:
         """真实执行whatweb扫描"""
         try:
+            # 防御：dict 误传
+            if isinstance(target, dict):
+                target = target.get("target", target.get("url", str(target)))
+            if not isinstance(target, str):
+                target = str(target)
             # 确保目标有http/https前缀
             if not (target.startswith("http://") or target.startswith("https://")):
                 target = f"http://{target}"
@@ -1191,6 +1204,11 @@ class UnifiedExecutor(BaseExecutor):
     def _execute_nuclei_real(self, target: str, options: Dict) -> Dict[str, Any]:
         """真实执行nuclei扫描"""
         try:
+            # 防御：dict 误传
+            if isinstance(target, dict):
+                target = target.get("target", target.get("url", str(target)))
+            if not isinstance(target, str):
+                target = str(target)
             # 确保目标有http/https前缀
             if not (target.startswith("http://") or target.startswith("https://")):
                 target = f"http://{target}"
@@ -1233,6 +1251,11 @@ class UnifiedExecutor(BaseExecutor):
     def _execute_httpx_real(self, target: str, options: Dict) -> Dict[str, Any]:
         """真实执行httpx扫描"""
         try:
+            # 防御：dict 误传
+            if isinstance(target, dict):
+                target = target.get("target", target.get("url", str(target)))
+            if not isinstance(target, str):
+                target = str(target)
             # 确保目标有http/https前缀
             if not (target.startswith("http://") or target.startswith("https://")):
                 target = f"http://{target}"
@@ -1289,6 +1312,11 @@ class UnifiedExecutor(BaseExecutor):
     def _execute_sqlmap_real(self, target: str, options: Dict) -> Dict[str, Any]:
         """真实执行sqlmap扫描"""
         try:
+            # 防御：dict 误传
+            if isinstance(target, dict):
+                target = target.get("target", target.get("url", str(target)))
+            if not isinstance(target, str):
+                target = str(target)
             # 确保目标有http/https前缀
             if not (target.startswith("http://") or target.startswith("https://")):
                 target = f"http://{target}"

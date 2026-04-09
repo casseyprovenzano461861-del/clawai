@@ -2,6 +2,14 @@
 """
 健康检查API蓝图
 """
+# DEPRECATED: This Flask route module is deprecated.
+# Use FastAPI routes in src/shared/backend/ instead.
+import warnings
+warnings.warn(
+    "Flask API routes are deprecated. Use FastAPI routes instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from flask import Blueprint, jsonify
 import time

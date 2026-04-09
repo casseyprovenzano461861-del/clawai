@@ -367,15 +367,3 @@ if __name__ == "__main__":
         print("\n[SUCCESS] 离线AI模式测试通过!")
     else:
         print("\n[FAILED] 离线AI模式测试失败!")
-
-
-<environment_details>
-<｜DSML｜parameter name="task_progress" string="true">- [x] 检查现有演示材料
-- [x] 修复演示脚本 (competition_demo.py)
-- [ ] 创建演示PPT大纲 (ClawAI_Demo_Presentation.md)
-- [ ] 创建视频脚本 (demo_video_script.md)
-- [x] 准备3个预配置演示场景
-- [x] 创建离线演示模式
-- [x] 测试演示脚本
-- [x] 创建演示数据目录和场景文件
-- [ ] 验证离线模式

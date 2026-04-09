@@ -156,8 +156,8 @@ class PayloadMutator:
                 variant = mutator(payload)
                 if variant != payload and variant not in variants:
                     variants.append(variant)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error generating payload variant: {e}")
         
         return variants
 
@@ -290,7 +290,7 @@ elif test_type == "internal":
         except urllib.error.HTTPError as e:
             if e.code in [200, 403, 401]:
                 results.append(f"SSRF_INTERNAL_FOUND: {service} on {host}:{port} (HTTP {e.code})")
-        except:
+        except Exception:
             pass
 
 if results:
@@ -645,7 +645,7 @@ for name, payload in payloads.items():
                 if "uid=" in content or "root:" in content:
                     results.append(f"DESER_VULNERABLE: {name} via {header_name}")
                     print(f"RCE_VIA_DESERIALIZATION: {name}")
-            except:
+            except Exception:
                 pass
                 
     except Exception as e:
@@ -781,7 +781,7 @@ for payload, desc in malicious_payloads:
             print(f"WAF_BLOCKING: {desc} blocked with 403")
         elif e.code == 406:
             print(f"WAF_BLOCKING: {desc} blocked with 406 (ModSecurity)")
-    except:
+    except Exception:
         pass
 
 if detected_wafs:
@@ -1033,7 +1033,7 @@ for payload in get_payloads:
             if ind.lower() in content.lower():
                 print(f"NOSQL_GET_VULN: {payload}")
                 break
-    except:
+    except Exception:
         pass
 
 if results:

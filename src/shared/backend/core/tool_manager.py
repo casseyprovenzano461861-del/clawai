@@ -8,6 +8,9 @@ import subprocess
 import concurrent.futures
 import os
 import yaml
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import List, Optional, Dict, Any
 
 
@@ -24,6 +27,8 @@ class ToolManager:
             "password_cracking": "密码破解工具",
             "security_assessment": "安全评估工具"
         }
+        # 从环境变量读取工具执行超时时间（默认 300 秒）
+        self.default_timeout = int(os.getenv("TOOL_TIMEOUT", "300"))
         # 加载工具配置
         self._load_tools()
     
@@ -378,17 +383,19 @@ class ToolManager:
             }
         }
     
-    def execute_tool(self, tool_name: str, args: List[str], timeout: int = 60) -> str:
+    def execute_tool(self, tool_name: str, args: List[str], timeout: int = None) -> str:
         """执行工具
         
         Args:
             tool_name: 工具名称
             args: 工具参数
-            timeout: 超时时间（秒）
+            timeout: 超时时间（秒），默认使用 TOOL_TIMEOUT 环境变量
             
         Returns:
             工具执行结果
         """
+        if timeout is None:
+            timeout = self.default_timeout
         if tool_name not in self.tools:
             raise ValueError(f"工具 {tool_name} 不存在")
         
@@ -418,6 +425,19 @@ class ToolManager:
         except Exception as e:
             return f"执行工具时出错: {str(e)}"
     
+    def health_check(self) -> Dict[str, Any]:
+        """健康检查"""
+        total = len(self.tools)
+        available = sum(1 for t in self.tools.values() if t.get("status") == "available")
+        categories = set(t.get("category", "unknown") for t in self.tools.values())
+
+        return {
+            "total_tools": total,
+            "available_tools": available,
+            "categories": list(categories),
+            "status": "healthy" if total > 0 else "unhealthy"
+        }
+
     def get_tool_info(self, tool_name: str) -> Optional[dict]:
         """获取工具信息"""
         return self.tools.get(tool_name)
@@ -719,17 +739,19 @@ class ToolManager:
                 outdated_tools.append(update_info)
         return outdated_tools
     
-    def execute_tool_with_params(self, tool_name: str, params: dict, timeout: int = 300) -> str:
+    def execute_tool_with_params(self, tool_name: str, params: dict, timeout: int = None) -> str:
         """使用参数执行工具
         
         Args:
             tool_name: 工具名称
             params: 工具参数
-            timeout: 超时时间（秒）
+            timeout: 超时时间（秒），默认使用 TOOL_TIMEOUT 环境变量
             
         Returns:
             工具执行结果
         """
+        if timeout is None:
+            timeout = self.default_timeout
         if tool_name not in self.tools:
             return f"工具 {tool_name} 不存在"
         
@@ -983,8 +1005,8 @@ class ToolManager:
                             var_value = var_value.get(part)
                         if var_value is not None:
                             tool_params[param_name] = var_value
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Error: {e}")
             
             try:
                 logger.info(f"执行工具链步骤 {i+1}: {tool_name}")
@@ -995,7 +1017,7 @@ class ToolManager:
                 try:
                     # 尝试解析JSON结果
                     previous_output = json.loads(result)
-                except:
+                except Exception as e:
                     # 如果不是JSON，保持原始结果
                     previous_output = {"output": result}
                     

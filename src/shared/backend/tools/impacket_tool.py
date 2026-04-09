@@ -6,6 +6,7 @@ Impacket协议工具包集成
 封装Impacket库的各种网络协议攻击工具，支持SMB、MSSQL、LDAP等协议利用
 """
 
+import logging
 import subprocess
 import json
 import re
@@ -14,6 +15,8 @@ import tempfile
 import os
 import random
 import time
+
+logger = logging.getLogger(__name__)
 
 class ImpacketTool:
     """Impacket协议攻击工具类"""
@@ -82,8 +85,8 @@ class ImpacketTool:
                     
                     if result.returncode == 0:
                         self.available_tools[tool_name] = result.stdout.strip()
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Error: {e}")
     
     def _parse_impacket_output(self, output: str, tool_name: str):
         """解析Impacket工具输出"""
