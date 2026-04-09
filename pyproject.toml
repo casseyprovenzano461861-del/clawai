@@ -36,7 +36,7 @@ dependencies = [
     "textual>=0.40.0",
     # Auth and security
     "passlib[bcrypt]>=1.7.4",
-    "python-jose[cryptography]>=3.3.0",
+    "PyJWT>=2.8.0",
     # Data validation and serialization
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -85,10 +85,6 @@ neo4j = [
 ]
 postgres = [
     "psycopg2-binary>=2.9.9",
-]
-flask = [
-    "flask>=3.0.0",
-    "flask-cors>=4.0.0",
 ]
 dev = [
     "pytest>=7.0",

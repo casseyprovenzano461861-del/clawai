@@ -6,7 +6,6 @@ AI学习能力系统
 """
 
 import json
-import pickle
 import time
 import statistics
 from typing import Dict, List, Any, Optional, Tuple
@@ -980,8 +979,8 @@ class AILearningSystem:
             }
         }
         
-        with open(filepath, 'wb') as f:
-            pickle.dump(model_data, f)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(model_data, f, ensure_ascii=False, indent=2)
     
     def load_model(self, filepath: str):
         """加载学习模型"""
@@ -989,8 +988,8 @@ class AILearningSystem:
             return False
         
         try:
-            with open(filepath, 'rb') as f:
-                model_data = pickle.load(f)
+            with open(filepath, 'r', encoding='utf-8') as f:
+                model_data = json.load(f)
             
             # 加载性能指标
             for name, metrics_data in model_data.get("performance_metrics", {}).items():

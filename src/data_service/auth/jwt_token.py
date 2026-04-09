@@ -5,9 +5,10 @@ JWT令牌工具
 
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 from passlib.context import CryptContext
 import logging
 
@@ -97,9 +98,9 @@ def create_access_token(
         JWT令牌字符串
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = TokenPayload(
         sub=f"user:{user_id}",
@@ -111,7 +112,7 @@ def create_access_token(
         **(extra_data or {})
     )
 
-    encoded_jwt = jwt.encode(payload.to_dict(), SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = pyjwt.encode(payload.to_dict(), SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -136,9 +137,9 @@ def create_refresh_token(
         JWT令牌字符串
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     payload = TokenPayload(
         sub=f"user:{user_id}",
@@ -150,7 +151,7 @@ def create_refresh_token(
         **(extra_data or {})
     )
 
-    encoded_jwt = jwt.encode(payload.to_dict(), SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = pyjwt.encode(payload.to_dict(), SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -166,7 +167,7 @@ def verify_token(token: str, token_type: str = TOKEN_TYPE_ACCESS) -> Optional[To
         令牌载荷或None
     """
     try:
-        payload_dict = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload_dict = pyjwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         payload = TokenPayload.from_dict(payload_dict)
 
         # 检查令牌类型
@@ -181,7 +182,10 @@ def verify_token(token: str, token_type: str = TOKEN_TYPE_ACCESS) -> Optional[To
 
         return payload
 
-    except JWTError as e:
+    except ExpiredSignatureError:
+        logger.error("JWT验证失败: 令牌已过期")
+        return None
+    except InvalidTokenError as e:
         logger.error(f"JWT验证失败: {e}")
         return None
     except Exception as e:
@@ -202,14 +206,14 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # 注意：这里不验证签名，仅用于调试或特定场景
         # 生产环境应始终使用verify_token
-        payload_dict = jwt.decode(
+        payload_dict = pyjwt.decode(
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM],
             options={"verify_signature": False, "verify_exp": False}
         )
         return payload_dict
-    except JWTError as e:
+    except InvalidTokenError as e:
         logger.error(f"JWT解码失败: {e}")
         return None
 

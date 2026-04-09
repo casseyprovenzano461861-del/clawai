@@ -177,7 +177,7 @@ class PERPlanner:
         self.rejected_strategies.append(rejected)
         logger.debug(f"记录被拒绝策略: {strategy} - {reason}")
     
-    def generate_initial_plan(self, 
+    async def generate_initial_plan(self, 
                              goal: str, 
                              target_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """生成初始规划
@@ -198,7 +198,7 @@ class PERPlanner:
         # 如果使用LLM，尝试智能规划
         if self.use_llm and self.llm_integration:
             try:
-                operations = self._generate_plan_with_llm(goal, target_info)
+                operations = await self._generate_plan_with_llm(goal, target_info)
                 if operations:
                     logger.info(f"LLM生成规划: {len(operations)}个操作")
                     if _bus:
@@ -213,7 +213,7 @@ class PERPlanner:
             _bus.emit_message(f"规划完成（规则模式）：生成 {len(operations)} 个子任务", msg_type="info")
         return operations
     
-    def _generate_plan_with_llm(self, goal: str, target_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def _generate_plan_with_llm(self, goal: str, target_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """使用LLM生成规划
         
         Args:
@@ -237,13 +237,13 @@ class PERPlanner:
             {"role": "user", "content": user_prompt}
         ]
         
-        # 直接同步调用 LLM（call_llm 已改为同步方法）
+        # 异步调用 LLM
         try:
             from ..llm_integration import TaskType as _TT
             _task_type = _TT.PLANNING if _TT else None
         except Exception:
             _task_type = None
-        response = self.llm_integration.call_llm(messages, temperature=0.7, max_tokens=4096, task_type=_task_type)
+        response = await self.llm_integration.call_llm_async(messages, temperature=0.7, max_tokens=4096, task_type=_task_type)
         
         if not response.success:
             logger.warning(f"LLM调用失败: {response.error}")
@@ -574,7 +574,7 @@ class PERPlanner:
         
         return operations
     
-    def dynamic_replan(self, 
+    async def dynamic_replan(self, 
                       goal: str,
                       current_graph_state: Dict[str, Any],
                       intelligence_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -593,7 +593,7 @@ class PERPlanner:
         # 如果使用LLM，尝试智能重规划
         if self.use_llm and self.llm_integration:
             try:
-                operations = self._dynamic_replan_with_llm(goal, current_graph_state, intelligence_summary)
+                operations = await self._dynamic_replan_with_llm(goal, current_graph_state, intelligence_summary)
                 if operations:
                     logger.info(f"LLM动态重规划: {len(operations)}个操作")
                     return operations
@@ -603,7 +603,7 @@ class PERPlanner:
         # 回退到基于规则的重规划
         return self._dynamic_replan_with_rules(goal, current_graph_state, intelligence_summary)
     
-    def _dynamic_replan_with_llm(self, goal: str, current_graph_state: Dict[str, Any], 
+    async def _dynamic_replan_with_llm(self, goal: str, current_graph_state: Dict[str, Any], 
                                   intelligence_summary: Dict[str, Any]) -> List[Dict[str, Any]]:
         """使用LLM进行动态重规划
         
@@ -654,8 +654,8 @@ class PERPlanner:
             {"role": "user", "content": user_prompt}
         ]
         
-        # 直接同步调用 LLM
-        response = self.llm_integration.call_llm(messages, temperature=0.7, max_tokens=4096)
+        # 异步调用 LLM
+        response = await self.llm_integration.call_llm_async(messages, temperature=0.7, max_tokens=4096)
         
         if not response.success:
             return []
@@ -810,7 +810,7 @@ class PERPlanner:
         logger.info("规划历史已清空")
 
 
-def test_planner():
+async def test_planner():
     """测试规划器功能"""
     import sys
     
@@ -824,7 +824,7 @@ def test_planner():
     # 测试1: 渗透测试规划
     print("\n测试1: 渗透测试规划")
     target_info = {"target": "example.com"}
-    operations = planner.generate_initial_plan("对example.com进行渗透测试", target_info)
+    operations = await planner.generate_initial_plan("对example.com进行渗透测试", target_info)
     
     print(f"生成 {len(operations)} 个图操作:")
     for i, op in enumerate(operations):
@@ -847,7 +847,7 @@ def test_planner():
         "audit_result": {"status": "in_progress"}
     }
     
-    replan_ops = planner.dynamic_replan(
+    replan_ops = await planner.dynamic_replan(
         "对example.com进行渗透测试",
         current_state,
         intelligence
@@ -870,6 +870,6 @@ def test_planner():
 
 
 if __name__ == "__main__":
-    import sys
-    success = test_planner()
+    import asyncio
+    success = asyncio.run(test_planner())
     sys.exit(0 if success else 1)

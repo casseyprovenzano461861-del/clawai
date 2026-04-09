@@ -2,24 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Shield, User, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import userService from '../services/userService';
-
-const CyberInput = ({ icon: Icon, type = 'text', name, value, onChange, placeholder, autoComplete, suffix }) => (
-  <div className="relative">
-    <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
-    <input
-      type={type}
-      name={name}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      autoComplete={autoComplete}
-      className="input-cyber w-full pl-9 pr-10 text-sm"
-    />
-    {suffix && (
-      <div className="absolute right-3 top-1/2 -translate-y-1/2">{suffix}</div>
-    )}
-  </div>
-);
+import CyberInput from '../components/shared/CyberInput';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -95,12 +78,11 @@ const Login = () => {
                 onChange={handleChange}
                 placeholder="输入密码"
                 autoComplete="current-password"
-                suffix={
-                  <button type="button" onClick={() => setShowPwd(v => !v)} className="text-gray-600 hover:text-gray-300 transition-colors">
-                    {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                }
-              />
+              >
+                <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300 transition-colors">
+                  {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </CyberInput>
             </div>
 
             <button type="submit" disabled={loading} className="btn-cyber w-full mt-2 text-sm">

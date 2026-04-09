@@ -5,8 +5,6 @@
 
 # Web框架
 fastapi==0.104.1
-flask==3.0.0
-flask-cors==4.0.0
 python-multipart==0.0.6
 uvicorn[standard]==0.24.0
 
@@ -18,7 +16,7 @@ prompt_toolkit>=3.0.0
 
 # 认证和安全
 passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
+PyJWT>=2.8.0
 
 # 数据验证和序列化
 pydantic==2.5.0

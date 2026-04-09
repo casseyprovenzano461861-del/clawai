@@ -8,7 +8,6 @@ AI缓存系统
 import json
 import time
 import hashlib
-import pickle
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from collections import OrderedDict
@@ -120,10 +119,9 @@ class AICacheSystem:
     def _calculate_size(self, value: Any) -> int:
         """计算值的大小（字节）"""
         try:
-            # 尝试使用pickle估算大小
-            pickled = pickle.dumps(value)
-            return len(pickled)
-        except Exception as e:
+            # 使用 JSON 估算大小（安全替代 pickle）
+            return len(json.dumps(value, default=str).encode('utf-8'))
+        except Exception:
             # 备用方法：字符串长度
             return len(str(value))
     
@@ -377,12 +375,25 @@ class AICacheSystem:
     def _save_to_disk(self):
         """保存缓存到磁盘"""
         try:
-            with open(self.persistence_file, 'wb') as f:
-                pickle.dump({
-                    'cache': self.cache,
+            # 将 CacheEntry 对象序列化为可 JSON 化的字典
+            cache_data = {}
+            for key, entry in self.cache.items():
+                cache_data[key] = {
+                    "key": entry.key,
+                    "value": entry.value,
+                    "created_at": entry.created_at,
+                    "last_accessed": entry.last_accessed,
+                    "access_count": entry.access_count,
+                    "size_bytes": entry.size_bytes,
+                    "metadata": entry.metadata
+                }
+
+            with open(self.persistence_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'cache': cache_data,
                     'current_size_bytes': self.current_size_bytes,
                     'stats': self.stats
-                }, f)
+                }, f, default=str, ensure_ascii=False)
             logger.debug(f"缓存持久化到: {self.persistence_file}")
         except Exception as e:
             logger.error(f"保存缓存失败: {e}")
@@ -390,11 +401,24 @@ class AICacheSystem:
     def _load_from_disk(self):
         """从磁盘加载缓存"""
         try:
-            with open(self.persistence_file, 'rb') as f:
-                data = pickle.load(f)
-                self.cache = data.get('cache', OrderedDict())
-                self.current_size_bytes = data.get('current_size_bytes', 0)
-                self.stats = data.get('stats', self.stats.copy())
+            with open(self.persistence_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # 从 JSON 重建 CacheEntry 对象
+            raw_cache = data.get('cache', {})
+            for key, entry_data in raw_cache.items():
+                self.cache[key] = CacheEntry(
+                    key=entry_data["key"],
+                    value=entry_data["value"],
+                    created_at=entry_data["created_at"],
+                    last_accessed=entry_data["last_accessed"],
+                    access_count=entry_data.get("access_count", 0),
+                    size_bytes=entry_data.get("size_bytes", 0),
+                    metadata=entry_data.get("metadata", {})
+                )
+
+            self.current_size_bytes = data.get('current_size_bytes', 0)
+            self.stats = data.get('stats', self.stats.copy())
             
             # 清除过期的条目
             self.clear_expired()

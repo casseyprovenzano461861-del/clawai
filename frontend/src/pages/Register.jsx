@@ -2,26 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Shield, User, Lock, Mail, Eye, EyeOff, AlertCircle, UserPlus } from 'lucide-react';
 import userService from '../services/userService';
-
-const CyberInput = ({ icon: Icon, label, required, error, children, ...props }) => (
-  <div className="mb-4">
-    {label && (
-      <label className="block text-xs font-medium text-cyan-400/70 uppercase tracking-wider mb-1.5">
-        {label}{required && <span className="text-neon-pink ml-1">*</span>}
-      </label>
-    )}
-    <div className="relative">
-      {Icon && (
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-500/60 pointer-events-none" />
-      )}
-      <input
-        className={`input-cyber w-full ${Icon ? 'pl-10' : 'pl-4'} ${props.type === 'password' ? 'pr-10' : 'pr-4'} py-2.5`}
-        {...props}
-      />
-      {children}
-    </div>
-  </div>
-);
+import CyberInput from '../components/shared/CyberInput';
 
 const Register = () => {
   const navigate = useNavigate();

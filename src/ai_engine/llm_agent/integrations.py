@@ -183,7 +183,7 @@ class LLMAgentIntegrator:
         agent = self.create_agent(config_name)
 
         # 使用planner进行初步分析
-        planner_output, input_tokens, output_tokens = agent.planner(
+        planner_output, input_tokens, output_tokens = await agent.planner(
             target=target,
             scan_results={},
             available_skills=["nmap", "whatweb", "nuclei", "nikto"]
@@ -299,7 +299,7 @@ class LLMAgentIntegrator:
         # 多次运行planner生成不同方案
         plans = []
         for i in range(3):  # 生成3个不同方案
-            planner_output, input_tokens, output_tokens = agent.planner(
+            planner_output, input_tokens, output_tokens = await agent.planner(
                 target=target,
                 scan_results=scan_results,
                 available_skills=["nmap", "whatweb", "sqlmap", "nuclei", "nikto", "hydra"]

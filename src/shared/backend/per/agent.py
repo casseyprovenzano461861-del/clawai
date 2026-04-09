@@ -165,7 +165,7 @@ class PERAgent:
         
         # 阶段1: 初始规划
         logger.info("阶段1: 初始规划")
-        initial_operations = self.planner.generate_initial_plan(goal, target_info)
+        initial_operations = await self.planner.generate_initial_plan(goal, target_info)
         
         if not initial_operations:
             logger.warning("初始规划失败，无法生成任务图")
@@ -207,10 +207,10 @@ class PERAgent:
                 else:
                     logger.warning("没有待执行任务但目标未达成，可能需要重新规划")
                     # 尝试动态重规划
-                    replan_operations = self.planner.dynamic_replan(
+                    replan_operations = await self.planner.dynamic_replan(
                         goal,
                         self._get_current_graph_state(),
-                        self.reflector.generate_intelligence_summary(all_reflections)
+                        await self.reflector.generate_intelligence_summary(all_reflections)
                     )
                     
                     if replan_operations:
@@ -235,7 +235,7 @@ class PERAgent:
                 subtask_data = self._get_subtask_data(result.subtask_id)
                 
                 # 执行反思
-                reflection = self.reflector.analyze_execution_result(
+                reflection = await self.reflector.analyze_execution_result(
                     result.subtask_id,
                     result.output,
                     subtask_data
@@ -249,7 +249,7 @@ class PERAgent:
             logger.info("阶段4: 动态重规划")
             
             # 生成情报摘要
-            intelligence_summary = self.reflector.generate_intelligence_summary(reflections)
+            intelligence_summary = await self.reflector.generate_intelligence_summary(reflections)
             
             # 检查是否达成目标
             if intelligence_summary.get("audit_result", {}).get("status") == "goal_achieved":
@@ -257,7 +257,7 @@ class PERAgent:
                 break
             
             # 执行动态重规划
-            replan_operations = self.planner.dynamic_replan(
+            replan_operations = await self.planner.dynamic_replan(
                 goal,
                 self._get_current_graph_state(),
                 intelligence_summary
@@ -274,7 +274,7 @@ class PERAgent:
                 self._compress_history()
         
         # 生成最终报告
-        final_report = self._generate_final_report(all_reflections)
+        final_report = await self._generate_final_report(all_reflections)
         
         logger.info(f"P-E-R循环结束，共执行{iteration}次迭代")
         
@@ -478,14 +478,14 @@ class PERAgent:
             # 保留最近的记录
             self.session_history = self.session_history[-25:]
     
-    def _generate_final_report(self, all_reflections: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _generate_final_report(self, all_reflections: List[Dict[str, Any]]) -> Dict[str, Any]:
         """生成最终报告
 
         区分已验证漏洞（verified_findings）和疑似漏洞（unverified_findings），
         让报告具有"证据驱动"的专业性。
         """
         # 生成情报摘要
-        intelligence_summary = self.reflector.generate_intelligence_summary(all_reflections)
+        intelligence_summary = await self.reflector.generate_intelligence_summary(all_reflections)
 
         # 从反思历史中收集验证任务结果
         verified_findings = []
@@ -639,7 +639,7 @@ async def test_per_agent():
     
     # 由于我们没有真正的图谱管理器，这里只测试组件
     print("\n测试Planner组件:")
-    operations = agent.planner.generate_initial_plan(goal, target_info)
+    operations = await agent.planner.generate_initial_plan(goal, target_info)
     print(f"  生成 {len(operations)} 个图操作")
     for i, op in enumerate(operations[:3]):
         cmd = op.get("command", "UNKNOWN")
@@ -667,7 +667,7 @@ async def test_per_agent():
         "completion_criteria": "完成端口扫描和服务识别"
     }
     
-    reflection = agent.reflector.analyze_execution_result(
+    reflection = await agent.reflector.analyze_execution_result(
         "test_task",
         result.output,
         subtask_data

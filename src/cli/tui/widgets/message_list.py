@@ -70,7 +70,7 @@ class MessageItem(Static):
 
 
 class MessageList(VerticalScroll):
-    """消息列表组件"""
+    """消息列表组件（支持流式更新）"""
 
     DEFAULT_CSS = """
     MessageList {
@@ -82,6 +82,7 @@ class MessageList(VerticalScroll):
     def __init__(self):
         super().__init__()
         self.messages: List[MessageItem] = []
+        self._stream_counter = 0  # 流式消息 ID 计数器
 
     def add_message(self, role: str, content: str, timestamp: datetime = None, metadata: Dict = None):
         """添加消息"""
@@ -95,9 +96,23 @@ class MessageList(VerticalScroll):
         """添加用户消息"""
         self.add_message("user", content, timestamp)
 
-    def add_assistant_message(self, content: str, timestamp: datetime = None):
-        """添加AI响应消息"""
-        self.add_message("assistant", content, timestamp)
+    def add_assistant_message(self, content: str, timestamp: datetime = None, streaming: bool = False) -> int:
+        """添加AI响应消息
+
+        Args:
+            streaming: 是否为流式消息（可后续 update_message/finalize_message）
+
+        Returns:
+            流式消息 ID（非流式返回 0）
+        """
+        msg = MessageItem("assistant", content, timestamp)
+        if streaming:
+            self._stream_counter += 1
+            msg.metadata["stream_id"] = self._stream_counter
+        self.messages.append(msg)
+        self.mount(msg)
+        self.scroll_end(animate=False)
+        return msg.metadata.get("stream_id", 0)
 
     def add_system_message(self, content: str, timestamp: datetime = None):
         """添加系统消息"""
@@ -111,6 +126,25 @@ class MessageList(VerticalScroll):
         if output:
             content += f"\n输出: {output[:200]}{'...' if len(output) > 200 else ''}"
         self.add_message("tool", content)
+
+    def update_message(self, stream_id: int, content: str):
+        """更新流式消息内容"""
+        for msg in self.messages:
+            if msg.metadata.get("stream_id") == stream_id:
+                msg.content = content
+                msg.refresh()
+                self.scroll_end(animate=False)
+                return
+
+    def finalize_message(self, stream_id: int, content: str):
+        """完成流式消息"""
+        for msg in self.messages:
+            if msg.metadata.get("stream_id") == stream_id:
+                msg.content = content
+                msg.metadata.pop("stream_id", None)
+                msg.refresh()
+                self.scroll_end(animate=False)
+                return
 
     def clear_messages(self):
         """清空消息"""

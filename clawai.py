@@ -30,13 +30,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
-    """主入口 - 委托给新的CLI模块"""
+    """主入口 - 委托给 Click CLI"""
     try:
-        from src.cli.main import main as cli_main
-        cli_main()
+        from src.cli.main import cli
+        cli()
     except ImportError as e:
         # 如果新CLI不可用，回退到旧版
-        print(f"警告: 新CLI模块不可用 ({e})，使用旧版...")
+        print(f"警告: Click CLI模块不可用 ({e})，使用旧版...")
         _legacy_main()
 
 

@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, Tuple
 from functools import wraps
 
 from flask import request, g, jsonify
-import jwt
+import jwt as pyjwt
 
 from backend.shared.exceptions import AuthenticationError, AuthorizationError
 
@@ -41,7 +41,7 @@ def authentication_middleware():
         # 这里需要从配置获取密钥和算法
         from config import config
         
-        payload = jwt.decode(
+        payload = pyjwt.decode(
             token,
             config.JWT_SECRET,
             algorithms=[config.JWT_ALGORITHM]
@@ -55,9 +55,9 @@ def authentication_middleware():
             'permissions': payload.get('permissions', [])
         }
         
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
         raise AuthenticationError("令牌已过期", auth_type="bearer")
-    except jwt.InvalidTokenError as e:
+    except pyjwt.InvalidTokenError as e:
         raise AuthenticationError(f"无效令牌: {str(e)}", auth_type="bearer")
     except Exception as e:
         raise AuthenticationError(f"认证失败: {str(e)}", auth_type="bearer")

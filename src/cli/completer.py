@@ -3,7 +3,8 @@
 ClawAI CLI 命令补全系统
 
 基于 prompt_toolkit 实现的智能命令补全，支持：
-- 内联控制命令（session/pause/resume/stop/追加指令等）
+- /斜杠命令（从 CommandRegistry 动态获取）
+- !bash 模式提示
 - 意图触发关键词（扫描/scan/报告/report 等）
 - session load <id> 动态补全已保存的 session_id
 - 中英文混合补全
@@ -13,7 +14,7 @@ ClawAI CLI 命令补全系统
 --------
     from src.cli.completer import get_prompt_session
 
-    session = get_prompt_session()
+    session = get_prompt_session(registry=registry)
     text = await session.prompt_async("❯ ")
 """
 
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
@@ -32,45 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# 补全候选词表
+# 意图触发关键词（自然语言开头词，不是完整命令）
 # ---------------------------------------------------------------------------
 
-# 内联控制命令（完整命令字符串）
-_INLINE_COMMANDS: list[tuple[str, str]] = [
-    # session 系列
-    ("session list",             "列出所有已保存会话"),
-    ("sessions",                 "列出所有已保存会话"),
-    ("session save",             "手动保存当前会话"),
-    ("session load ",            "加载指定会话（后接 session_id）"),
-    ("session export markdown",  "导出会话报告（Markdown 格式）"),
-    ("session export json",      "导出会话报告（JSON 格式）"),
-    ("session export html",      "导出会话报告（HTML 格式）"),
-    # 干预控制
-    ("pause",                    "暂停 Agent 执行"),
-    ("暂停",                      "暂停 Agent 执行"),
-    ("resume",                   "恢复 Agent 执行"),
-    ("继续",                      "恢复 Agent 执行"),
-    ("恢复",                      "恢复 Agent 执行"),
-    ("stop",                     "停止 Agent 执行"),
-    ("停止",                      "停止 Agent 执行"),
-    ("中止",                      "停止 Agent 执行"),
-    # 追加指令前缀
-    ("追加指令:",                  "向 Agent 追加自然语言指令"),
-    ("追加:",                      "向 Agent 追加自然语言指令（简写）"),
-    ("add instruction:",         "Append instruction to Agent"),
-    ("instruct:",                "Append instruction to Agent (short)"),
-    # 帮助/退出
-    ("help",                     "显示帮助"),
-    ("帮助",                      "显示帮助"),
-    ("?",                        "显示帮助"),
-    ("exit",                     "退出 ClawAI"),
-    ("quit",                     "退出 ClawAI"),
-    ("退出",                      "退出 ClawAI"),
-    ("bye",                      "退出 ClawAI"),
-    ("再见",                      "退出 ClawAI"),
-]
-
-# 意图触发关键词（不是完整命令，是对话开头词）
 _INTENT_KEYWORDS: list[tuple[str, str]] = [
     ("扫描 ",       "标准扫描（5轮）"),
     ("快速扫描 ",   "快速扫描（3轮: nmap + whatweb）"),
@@ -88,7 +53,6 @@ _INTENT_KEYWORDS: list[tuple[str, str]] = [
     ("报告",        "生成渗透测试报告"),
     ("report",      "Generate report"),
     ("导出",        "导出报告"),
-    ("export ",     "Export report"),
     ("总结",        "总结发现"),
     ("状态",        "查看当前状态"),
     ("status",      "Check current status"),
@@ -96,27 +60,42 @@ _INTENT_KEYWORDS: list[tuple[str, str]] = [
     ("config",      "Show current config"),
 ]
 
-# 所有顶层命令词首字（用于快速过滤）
-_ALL_CANDIDATES = _INLINE_COMMANDS + _INTENT_KEYWORDS
-
 
 # ---------------------------------------------------------------------------
-# 核心补全器
+# 核心补全器（注册表驱动）
 # ---------------------------------------------------------------------------
 
 class ClawAICompleter(Completer):
-    """ClawAI 智能命令补全器
+    """ClawAI 智能命令补全器（注册表驱动）
 
     补全策略：
-    1. 空输入 → 展示所有内联命令（最多 20 个）
-    2. 'session load ' 结尾 → 动态补全已保存的 session_id
-    3. 其他前缀 → 从候选词表中前缀匹配
+    1. / 前缀 → 从 CommandRegistry 获取斜杠命令补全
+    2. ! 前缀 → bash 模式提示
+    3. 'session load ' 结尾 → 动态补全已保存的 session_id
+    4. 其他前缀 → 从意图关键词表中前缀匹配
     """
+
+    def __init__(self, registry=None):
+        self.registry = registry
 
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
     ) -> Iterable[Completion]:
         text = document.text_before_cursor
+
+        # ── /斜杠命令补全 ──
+        if text.startswith("/"):
+            yield from self._complete_slash(text)
+            return
+
+        # ── !bash 模式提示 ──
+        if text == "!":
+            yield Completion(
+                "! ", start_position=-1,
+                display="!command",
+                display_meta="执行 bash 命令",
+            )
+            return
 
         # ── 动态补全 session_id ──
         if text.lower().startswith("session load "):
@@ -124,17 +103,10 @@ class ClawAICompleter(Completer):
             yield from self._complete_session_ids(prefix_after_cmd)
             return
 
-        # ── 空输入：展示常用内联命令 ──
-        if not text.strip():
-            for cmd, meta in _INLINE_COMMANDS[:20]:
-                yield Completion(cmd, start_position=0, display_meta=meta)
-            return
-
-        # ── 前缀匹配所有候选词 ──
+        # ── 意图关键词前缀匹配 ──
         text_lower = text.lower()
-        for candidate, meta in _ALL_CANDIDATES:
+        for candidate, meta in _INTENT_KEYWORDS:
             if candidate.lower().startswith(text_lower):
-                # 计算需要补全的字符数
                 yield Completion(
                     candidate,
                     start_position=-len(text),
@@ -142,9 +114,62 @@ class ClawAICompleter(Completer):
                     display_meta=meta,
                 )
 
-    # ------------------------------------------------------------------
-    # 动态 session_id 补全
-    # ------------------------------------------------------------------
+    def _complete_slash(self, text: str) -> Iterable[Completion]:
+        """从注册表获取 /command 补全 + 工具名补全"""
+        if not self.registry:
+            return
+
+        prefix = text[1:].lower()  # 去掉 / 前缀
+
+        # /session 子命令补全
+        if prefix.startswith("session "):
+            sub_prefix = prefix[len("session "):]
+            subs = [("list", "列出所有已保存会话"), ("save", "手动保存当前会话"),
+                    ("load ", "加载指定会话"), ("export", "导出会话报告"),
+                    ("delete ", "删除指定会话")]
+            for sub, desc in subs:
+                if sub.startswith(sub_prefix):
+                    yield Completion(
+                        f"/session {sub}", start_position=-len(text),
+                        display=f"/session {sub}", display_meta=desc,
+                    )
+            return
+
+        # 从注册表获取所有命令
+        for meta in self.registry.all_commands():
+            name = meta.name
+            if name.startswith(prefix):
+                display = f"/{name}"
+                hint = meta.argument_hint
+                if hint:
+                    display += f" {hint}"
+                yield Completion(
+                    f"/{name} ",
+                    start_position=-len(text),
+                    display=display,
+                    display_meta=meta.description_zh,
+                )
+
+        # 补全工具名 (直接工具执行)
+        try:
+            from src.cli.tools import get_tool_registry
+            tool_registry = get_tool_registry()
+            for tool in tool_registry.all_tools():
+                if tool.name.startswith(prefix) and tool.name not in {
+                    m.name for m in self.registry.all_commands()
+                }:
+                    display = f"/{tool.name}"
+                    # 标记危险/只读
+                    tag = "⚠危险" if tool.is_dangerous else ("只读" if tool.is_readonly else "")
+                    meta_text = f"[工具] {tool.description[:40]}{'  ' + tag if tag else ''}"
+                    yield Completion(
+                        f"/{tool.name} ",
+                        start_position=-len(text),
+                        display=display,
+                        display_meta=meta_text,
+                    )
+        except Exception:
+            pass
 
     def _complete_session_ids(self, prefix: str) -> Iterable[Completion]:
         """列出已保存的 session_id 供补全"""
@@ -171,20 +196,18 @@ class ClawAICompleter(Completer):
 # prompt_toolkit 样式
 # ---------------------------------------------------------------------------
 
+NEON_CYAN = "#00ff41"
+
 CLAWAI_STYLE = Style.from_dict(
     {
-        # 提示符颜色
-        "prompt":          "bold ansicyan",
-        # 补全菜单
-        "completion-menu.completion":         "bg:#1e1e2e fg:#cdd6f4",
-        "completion-menu.completion.current": "bg:#313244 fg:#89dceb bold",
-        "completion-menu.meta":               "bg:#1e1e2e fg:#6c7086",
-        "completion-menu.meta.current":       "bg:#313244 fg:#a6adc8",
-        # 提示框边框
-        "completion-menu.border":             "fg:#313244",
-        # 滚动条
-        "scrollbar.background":               "bg:#313244",
-        "scrollbar.button":                   "bg:#585b70",
+        "prompt":          f"bold {NEON_CYAN}",
+        "completion-menu.completion":         "bg:#0a0f0a fg:#b0d0b0",
+        "completion-menu.completion.current": "bg:#0a1f0a fg:#00ff41 bold",
+        "completion-menu.meta":               "bg:#0a0f0a fg:#507050",
+        "completion-menu.meta.current":       "bg:#0a1f0a fg:#00ff41",
+        "completion-menu.border":             "fg:#1a3a1a",
+        "scrollbar.background":               "bg:#0a1f0a",
+        "scrollbar.button":                   "bg:#00ff41",
     }
 )
 
@@ -193,12 +216,15 @@ CLAWAI_STYLE = Style.from_dict(
 # 工厂函数
 # ---------------------------------------------------------------------------
 
-def get_prompt_session(history_file: str | Path | None = None):
+def get_prompt_session(
+    history_file: str | Path | None = None,
+    registry=None,
+):
     """创建带历史记录和补全的 PromptSession
 
     Args:
-        history_file: 历史文件路径。None 则尝试 ~/.clawai/history，
-                      失败则回退到内存历史。
+        history_file: 历史文件路径。None 则尝试 ~/.clawai/history。
+        registry: CommandRegistry 实例。None 则自动获取。
 
     Returns:
         prompt_toolkit.PromptSession
@@ -206,15 +232,22 @@ def get_prompt_session(history_file: str | Path | None = None):
     from prompt_toolkit import PromptSession
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
-    # 尝试持久化历史
+    # 懒加载注册表
+    if registry is None:
+        try:
+            from src.cli.commands import get_registry
+            registry = get_registry()
+        except Exception:
+            pass
+
     history = _make_history(history_file)
 
     return PromptSession(
-        completer=ClawAICompleter(),
+        completer=ClawAICompleter(registry=registry),
         history=history,
         auto_suggest=AutoSuggestFromHistory(),
         style=CLAWAI_STYLE,
-        complete_while_typing=True,  # 边输入边补全
+        complete_while_typing=True,
         enable_history_search=True,  # Ctrl-R 搜索历史
         mouse_support=False,
     )

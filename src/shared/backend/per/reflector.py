@@ -208,7 +208,7 @@ class PERReflector:
             "hard_rule": True,
         }
 
-    def analyze_execution_result(self,
+    async def analyze_execution_result(self,
                                 subtask_id: str,
                                 execution_result: Dict[str, Any],
                                 subtask_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -247,7 +247,7 @@ class PERReflector:
         # 如果使用LLM，尝试智能分析
         if self.use_llm and self.llm_integration:
             try:
-                reflection_report = self._analyze_with_llm(subtask_id, execution_result, subtask_data)
+                reflection_report = await self._analyze_with_llm(subtask_id, execution_result, subtask_data)
                 if reflection_report:
                     logger.info(f"LLM反思完成: {subtask_id}")
                     if _bus:
@@ -266,7 +266,7 @@ class PERReflector:
             _bus.emit_message(f"[反思] {subtask_id}: {insight}", msg_type="info")
         return report
     
-    def _analyze_with_llm(self, subtask_id: str, execution_result: Dict[str, Any],
+    async def _analyze_with_llm(self, subtask_id: str, execution_result: Dict[str, Any],
                           subtask_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """使用LLM分析执行结果
         
@@ -295,13 +295,13 @@ class PERReflector:
             {"role": "user", "content": user_prompt}
         ]
         
-        # 直接同步调用 LLM
+        # 异步调用 LLM
         try:
             from ..llm_integration import TaskType as _TT
             _task_type = _TT.REFLECTION if _TT else None
         except Exception:
             _task_type = None
-        response = self.llm_integration.call_llm(messages, temperature=0.5, max_tokens=4096, task_type=_task_type)
+        response = await self.llm_integration.call_llm_async(messages, temperature=0.5, max_tokens=4096, task_type=_task_type)
         
         if not response.success:
             logger.warning(f"LLM调用失败: {response.error}")
@@ -811,7 +811,7 @@ class PERReflector:
             self.success_patterns[success_pattern]["count"] += 1
             self.success_patterns[success_pattern]["last_seen"] = datetime.now().isoformat()
     
-    def generate_intelligence_summary(self, 
+    async def generate_intelligence_summary(self, 
                                      recent_reflections: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """生成情报摘要
         
@@ -831,7 +831,7 @@ class PERReflector:
         # 如果使用LLM且有足够的反思记录，尝试智能汇总
         if self.use_llm and self.llm_integration and len(recent_reflections) >= 2:
             try:
-                summary = self._generate_intelligence_with_llm(recent_reflections)
+                summary = await self._generate_intelligence_with_llm(recent_reflections)
                 if summary:
                     return summary
             except Exception as e:
@@ -840,7 +840,7 @@ class PERReflector:
         # 回退到基于规则的汇总
         return self._generate_intelligence_with_rules(recent_reflections)
     
-    def _generate_intelligence_with_llm(self, recent_reflections: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    async def _generate_intelligence_with_llm(self, recent_reflections: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """使用LLM生成情报摘要
         
         Args:
@@ -873,8 +873,8 @@ class PERReflector:
             {"role": "user", "content": user_prompt}
         ]
         
-        # 直接同步调用 LLM
-        response = self.llm_integration.call_llm(messages, temperature=0.5, max_tokens=4096)
+        # 异步调用 LLM
+        response = await self.llm_integration.call_llm_async(messages, temperature=0.5, max_tokens=4096)
         
         if not response.success:
             return None
@@ -1035,7 +1035,7 @@ class PERReflector:
         logger.info("反思历史已清空")
 
 
-def test_reflector():
+async def test_reflector():
     """测试反思器功能"""
     import sys
     
@@ -1069,7 +1069,7 @@ def test_reflector():
         "completion_criteria": "完成端口扫描和服务识别"
     }
     
-    reflection1 = reflector.analyze_execution_result("recon_success", success_result, success_task)
+    reflection1 = await reflector.analyze_execution_result("recon_success", success_result, success_task)
     print(f"反思结果状态: {reflection1['audit_result']['status']}")
     print(f"关键发现数: {len(reflection1['key_findings'])}")
     print(f"洞察: {reflection1['insight']}")
@@ -1093,14 +1093,14 @@ def test_reflector():
         "completion_criteria": "识别潜在的安全漏洞"
     }
     
-    reflection2 = reflector.analyze_execution_result("vuln_scan_failed", failure_result, failure_task)
+    reflection2 = await reflector.analyze_execution_result("vuln_scan_failed", failure_result, failure_task)
     print(f"反思结果状态: {reflection2['audit_result']['status']}")
     print(f"失败原因: {reflection2['audit_result']['completion_check']}")
     print(f"建议: {reflection2['audit_result']['recommendations']}")
     
     # 测试3: 生成情报摘要
     print("\n测试3: 生成情报摘要")
-    intelligence = reflector.generate_intelligence_summary([reflection1, reflection2])
+    intelligence = await reflector.generate_intelligence_summary([reflection1, reflection2])
     print(f"总发现数: {len(intelligence['findings'])}")
     print(f"审计状态: {intelligence['audit_result']['status']}")
     print(f"失败模式: {intelligence['patterns_summary']['failure_patterns']}")
@@ -1121,5 +1121,6 @@ def test_reflector():
 
 
 if __name__ == "__main__":
-    success = test_reflector()
+    import asyncio
+    success = asyncio.run(test_reflector())
     sys.exit(0 if success else 1)

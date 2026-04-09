@@ -46,36 +46,42 @@ class AuthenticationManager:
     def create_access_token(self, data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
         """生成访问令牌"""
         try:
-            from jose import jwt as jose_jwt
+            import jwt as pyjwt
         except ImportError:
-            logger.error("python-jose not installed, cannot create JWT tokens")
+            logger.error("PyJWT not installed, cannot create JWT tokens")
             return ""
 
         to_encode = data.copy()
         expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=self._access_expire_minutes))
         to_encode.update({"exp": expire, "type": "access"})
-        return jose_jwt.encode(to_encode, self._secret_key, algorithm=self._algorithm)
+        return pyjwt.encode(to_encode, self._secret_key, algorithm=self._algorithm)
 
     def create_refresh_token(self, data: Dict[str, Any]) -> str:
         """生成刷新令牌"""
         try:
-            from jose import jwt as jose_jwt
+            import jwt as pyjwt
         except ImportError:
             return ""
 
         to_encode = data.copy()
         expire = datetime.now(timezone.utc) + timedelta(days=self._refresh_expire_days)
         to_encode.update({"exp": expire, "type": "refresh"})
-        return jose_jwt.encode(to_encode, self._secret_key, algorithm=self._algorithm)
+        return pyjwt.encode(to_encode, self._secret_key, algorithm=self._algorithm)
 
     def verify_token(self, token: str) -> Dict[str, Any]:
         """验证令牌，返回 payload dict；失败返回空 dict"""
         if not token:
             return {}
         try:
-            from jose import jwt as jose_jwt, JWTError
-            payload = jose_jwt.decode(token, self._secret_key, algorithms=[self._algorithm])
+            import jwt as pyjwt
+            payload = pyjwt.decode(token, self._secret_key, algorithms=[self._algorithm])
             return payload
+        except pyjwt.ExpiredSignatureError:
+            logger.debug("Token has expired")
+            return {}
+        except pyjwt.InvalidTokenError as e:
+            logger.debug(f"Token verification failed: {e}")
+            return {}
         except Exception as e:
             logger.debug(f"Token verification failed: {e}")
             return {}
