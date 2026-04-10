@@ -64,3 +64,4 @@ clawai.db  # SQLite数据库文件，通常不提交
 htmlcov/
 .tox/
 .mypy_cache/references/PentestGPT
+references/
