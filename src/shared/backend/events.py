@@ -24,7 +24,8 @@ class EventType(Enum):
     STATE_CHANGED = auto()  # idle / running / paused / completed / error
     MESSAGE = auto()        # 文本消息（info / success / error / warning）
     TOOL = auto()           # 工具调用（start / complete / error）
-    FINDING = auto()        # 发现漏洞/Flag
+    FINDING = auto()        # 发现漏洞/关键信息
+    FLAG_FOUND = auto()     # 发现 Flag（高优先级，单独事件）
     PROGRESS = auto()       # 进度更新（percent + description）
 
     # UI -> Agent 事件
@@ -174,7 +175,7 @@ class EventBus:
         )
 
     def emit_finding(self, title: str, severity: str = "info", detail: str = "") -> None:
-        """发射发现事件（漏洞/Flag/关键信息）
+        """发射发现事件（漏洞/关键信息）
 
         Args:
             title: 发现标题
@@ -182,6 +183,25 @@ class EventBus:
             detail: 详细说明
         """
         self.emit(Event(EventType.FINDING, {"title": title, "severity": severity, "detail": detail}))
+
+    def emit_flag(self, flag_value: str, location: str = "", method: str = "") -> None:
+        """发射 Flag 发现事件（高优先级）
+
+        Args:
+            flag_value: Flag 的值（如 flag{xxxxx}）
+            location: 发现位置（文件路径、URL 等）
+            method: 利用方式简述
+        """
+        self.emit(Event(
+            EventType.FLAG_FOUND,
+            {"flag": flag_value, "location": location, "method": method},
+        ))
+        # 同时以 FINDING 事件冒泡，确保 UI 订阅者也能感知
+        self.emit_finding(
+            title=f"⚑ FLAG FOUND: {flag_value}",
+            severity="critical",
+            detail=f"位置: {location} | 方法: {method}",
+        )
 
     def emit_progress(self, percent: float, description: str = "") -> None:
         """发射进度事件

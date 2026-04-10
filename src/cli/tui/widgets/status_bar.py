@@ -17,10 +17,11 @@ class StatusBar(Static):
     StatusBar {
         dock: bottom;
         height: 1;
-        background: $primary;
-        color: $text;
+        background: #0a0e17;
+        color: #00ff41;
         padding: 0 2;
         content-align: center middle;
+        border-top: solid #1a3a1a;
     }
     """
 
@@ -38,41 +39,46 @@ class StatusBar(Static):
         """渲染状态栏"""
         text = Text()
 
-        # 状态图标和文字
+        # Status markers - hacker terminal style
         status_config = {
-            "idle": ("⏸ Idle", "dim"),
-            "processing": ("⏳ Processing", "yellow"),
-            "scanning": ("🔍 Scanning", "cyan"),
-            "analyzing": ("📊 Analyzing", "blue"),
-            "waiting": ("⌨️ Waiting", "green"),
-            "error": ("❌ Error", "red")
+            "idle":        ("IDLE",  "dim"),
+            "processing":  ("PROC",  "yellow"),
+            "scanning":    ("SCAN",  "cyan"),
+            "analyzing":   ("ANLYZ", "blue"),
+            "waiting":     ("WAIT",  "green"),
+            "thinking":    ("THINK", "cyan"),
+            "flag_found":  ("FLAG",  "bright_red"),
+            "error":       ("ERR",   "red"),
         }
 
-        status_icon, status_color = status_config.get(
-            self.agent_status, ("❓ Unknown", "dim")
+        status_marker, status_color = status_config.get(
+            self.agent_status, ("????", "dim")
         )
 
-        text.append(f"{status_icon} ")
+        text.append(f"[", style="dim")
+        text.append(f"{status_marker}", style=f"bold {status_color}")
+        text.append(f"] ", style="dim")
 
-        # 附加消息
+        # Message
         if self.agent_message:
-            text.append(f"- {self.agent_message} ")
+            text.append(f"{self.agent_message} ", style=status_color)
 
-        text.append("│ ")
+        text.append("| ", style="dim")
 
-        # 目标
+        # Target
         if self.target:
-            text.append(f"🎯 {self.target}")
+            text.append(f"TGT:", style="bold cyan")
+            text.append(f" {self.target}", style="cyan")
         else:
             text.append("No target", style="dim")
 
-        text.append(" │ ")
+        text.append(" | ", style="dim")
 
-        # 快捷键提示
+        # Keybindings
         text.append("Ctrl+C", style="bold")
-        text.append(" Exit  ")
+        text.append(" Exit  ", style="dim")
         text.append("F1", style="bold")
-        text.append(" Help")
+        text.append(" Help", style="dim")
 
         return text
 

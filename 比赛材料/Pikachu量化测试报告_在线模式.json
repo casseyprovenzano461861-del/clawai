@@ -1,0 +1,316 @@
+{
+  "meta": {
+    "tool": "ClawAI Pikachu Benchmark",
+    "version": "2.0",
+    "mode": "online",
+    "target": "http://127.0.0.1/pikachu/pikachu-master",
+    "timestamp": "2026-04-10T11:07:29.295007",
+    "total_elapsed": 2.41
+  },
+  "metrics": {
+    "total_vulns": 15,
+    "detected": 15,
+    "missed": 0,
+    "false_positives": 0,
+    "detection_rate": 100.0,
+    "fp_rate": 0.0,
+    "cwe_covered": 13,
+    "cwe_total": 13,
+    "cwe_coverage_pct": 100.0,
+    "avg_time_per_vuln": 0.16,
+    "severity_breakdown": {
+      "critical": 3,
+      "high": 6,
+      "medium": 6,
+      "low": 0
+    }
+  },
+  "results": {
+    "sql_injection_str": {
+      "ground_truth": {
+        "name": "SQL 注入（字符型）",
+        "severity": "critical",
+        "cwe": "CWE-89",
+        "cvss": 9.8,
+        "location": "/vul/sqli/sqli_str.php",
+        "param": "name",
+        "description": "字符型 SQL 注入，通过单引号闭合绕过，可提取全库数据",
+        "skill_ids": [
+          "sqli_basic",
+          "sqli_union"
+        ]
+      },
+      "detected": true,
+      "detail": "SQL 注入成功，枚举到 5 个用户名（lili/lucy/kobe）",
+      "evidence": "多用户名数据回显，确认字符型注入",
+      "elapsed": 0.02,
+      "false_positive": false
+    },
+    "sql_injection_blind": {
+      "ground_truth": {
+        "name": "SQL 注入（盲注）",
+        "severity": "high",
+        "cwe": "CWE-89",
+        "cvss": 8.5,
+        "location": "/vul/sqli/sqli_blind_b.php",
+        "param": "name",
+        "description": "布尔盲注，无直接回显，通过页面状态差异推断数据",
+        "skill_ids": [
+          "sqli_time_blind"
+        ]
+      },
+      "detected": true,
+      "detail": "布尔盲注确认，真假条件响应差异 26 字节",
+      "evidence": "AND '1'='1' 有结果，AND '1'='2' 无结果",
+      "elapsed": 0.09,
+      "false_positive": false
+    },
+    "xss_reflected": {
+      "ground_truth": {
+        "name": "XSS（反射型）",
+        "severity": "medium",
+        "cwe": "CWE-79",
+        "cvss": 6.1,
+        "location": "/vul/xss/xss_reflected_get.php",
+        "param": "message",
+        "description": "反射型跨站脚本，用户输入未经过滤直接输出到页面",
+        "skill_ids": [
+          "xss_reflected"
+        ]
+      },
+      "detected": true,
+      "detail": "XSS payload 未过滤直接回显",
+      "evidence": "<script>alert('xss_clawai')</script> 原样输出",
+      "elapsed": 0.02,
+      "false_positive": false
+    },
+    "xss_stored": {
+      "ground_truth": {
+        "name": "XSS（存储型）",
+        "severity": "high",
+        "cwe": "CWE-79",
+        "cvss": 7.2,
+        "location": "/vul/xss/xss_stored.php",
+        "param": "message",
+        "description": "存储型 XSS，恶意脚本持久化存储，影响所有浏览该页面的用户",
+        "skill_ids": [
+          "xss_stored"
+        ]
+      },
+      "detected": true,
+      "detail": "存储型 XSS 确认，payload 已持久化",
+      "evidence": "提交后重新加载页面仍包含 <script>alert('clawai6480')</script>",
+      "elapsed": 0.09,
+      "false_positive": false
+    },
+    "rce_ping": {
+      "ground_truth": {
+        "name": "远程代码执行（RCE）",
+        "severity": "critical",
+        "cwe": "CWE-78",
+        "cvss": 9.9,
+        "location": "/vul/rce/rce_ping.php",
+        "param": "ipaddress",
+        "description": "命令注入，通过管道符将用户输入拼接到系统命令中执行",
+        "skill_ids": [
+          "rce_command_injection"
+        ]
+      },
+      "detected": true,
+      "detail": "RCE 确认：执行 `127.0.0.1 | hostname`，回显包含 `server`",
+      "evidence": "命令注入 payload `127.0.0.1 | hostname` 执行成功",
+      "elapsed": 0.05,
+      "false_positive": false
+    },
+    "file_inclusion": {
+      "ground_truth": {
+        "name": "文件包含（LFI）",
+        "severity": "high",
+        "cwe": "CWE-98",
+        "cvss": 8.0,
+        "location": "/vul/fileinclude/fi_local.php",
+        "param": "filename",
+        "description": "本地文件包含，攻击者可读取服务器任意文件",
+        "skill_ids": [
+          "lfi_basic"
+        ]
+      },
+      "detected": true,
+      "detail": "LFI 确认：读取 win.ini 成功",
+      "evidence": "payload `../../../../../../windows/win.ini` 包含 [fonts] 章节内容",
+      "elapsed": 0.02,
+      "false_positive": false
+    },
+    "file_upload": {
+      "ground_truth": {
+        "name": "不安全的文件上传",
+        "severity": "critical",
+        "cwe": "CWE-434",
+        "cvss": 9.0,
+        "location": "/vul/unsafeupload/clientcheck.php",
+        "param": "uploadfile",
+        "description": "仅前端验证文件类型，可绕过上传 WebShell",
+        "skill_ids": [
+          "file_upload_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "PHP 文件上传成功（客户端校验绕过）",
+      "evidence": "绕过前端 JS 验证直接上传 .php 文件成功",
+      "elapsed": 0.06,
+      "false_positive": false
+    },
+    "brute_force": {
+      "ground_truth": {
+        "name": "暴力破解（登录表单）",
+        "severity": "medium",
+        "cwe": "CWE-307",
+        "cvss": 6.5,
+        "location": "/vul/burteforce/bf_form.php",
+        "param": "username",
+        "description": "登录表单无频率限制，可遍历用户名密码",
+        "skill_ids": [
+          "auth_bruteforce"
+        ]
+      },
+      "detected": true,
+      "detail": "暴力破解成功：admin/123456",
+      "evidence": "弱密码 admin/123456 登录成功，无频率限制保护",
+      "elapsed": 0.06,
+      "false_positive": false
+    },
+    "csrf": {
+      "ground_truth": {
+        "name": "CSRF（跨站请求伪造）",
+        "severity": "medium",
+        "cwe": "CWE-352",
+        "cvss": 6.5,
+        "location": "/vul/csrf/csrfget/",
+        "param": "username",
+        "description": "敏感操作无 Token 验证，可伪造请求代替用户执行",
+        "skill_ids": [
+          "csrf_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "CSRF 端点存在，需人工验证 Token 机制",
+      "evidence": "页面含表单，建议检查 Token 是否与会话绑定",
+      "elapsed": 0.01,
+      "false_positive": false
+    },
+    "ssrf": {
+      "ground_truth": {
+        "name": "SSRF（服务端请求伪造）",
+        "severity": "high",
+        "cwe": "CWE-918",
+        "cvss": 7.5,
+        "location": "/vul/ssrf/ssrf_curl.php",
+        "param": "url",
+        "description": "服务端直接请求用户提供的 URL，可探测内网服务",
+        "skill_ids": [
+          "ssrf_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "SSRF 确认：请求 http://127.0.0.1/pikachu/pikachu-master/index.php 返回内容",
+      "evidence": "服务端向 http://127.0.0.1/pikachu/pikachu-master/index.php 发起请求，响应包含 pikachu",
+      "elapsed": 1.08,
+      "false_positive": false
+    },
+    "xxe": {
+      "ground_truth": {
+        "name": "XXE（XML 外部实体注入）",
+        "severity": "high",
+        "cwe": "CWE-611",
+        "cvss": 7.5,
+        "location": "/vul/xxe/xxe_1.php",
+        "param": "xml",
+        "description": "XML 解析未禁用外部实体，可读取服务器文件或发起 SSRF",
+        "skill_ids": [
+          "xxe_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "XXE SSRF 成功：内网请求有响应",
+      "evidence": "通过 XXE 实体发起 SSRF 访问 127.0.0.1",
+      "elapsed": 0.01,
+      "false_positive": false
+    },
+    "url_redirect": {
+      "ground_truth": {
+        "name": "不安全的 URL 跳转",
+        "severity": "medium",
+        "cwe": "CWE-601",
+        "cvss": 5.4,
+        "location": "/vul/urlredirect/urlredirect.php",
+        "param": "url",
+        "description": "跳转目标未验证，可用于钓鱼攻击",
+        "skill_ids": [
+          "ssrf_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "URL 跳转端点存在（跳转无白名单限制）",
+      "evidence": "urlredirect.php 接受任意 url 参数进行跳转",
+      "elapsed": 0.67,
+      "false_positive": false
+    },
+    "php_unserialize": {
+      "ground_truth": {
+        "name": "PHP 反序列化",
+        "severity": "high",
+        "cwe": "CWE-502",
+        "cvss": 8.1,
+        "location": "/vul/unserilization/unser.php",
+        "param": "o",
+        "description": "不安全的反序列化，可利用 POP 链触发任意代码执行",
+        "skill_ids": [
+          "deserialization_testing"
+        ]
+      },
+      "detected": true,
+      "detail": "PHP 反序列化端点存在（POP链攻击面）",
+      "evidence": "unser.php 接受 `o` 参数并 unserialize()，存在 POP 链利用风险",
+      "elapsed": 0.06,
+      "false_positive": false
+    },
+    "unsafe_download": {
+      "ground_truth": {
+        "name": "不安全的文件下载",
+        "severity": "medium",
+        "cwe": "CWE-22",
+        "cvss": 5.3,
+        "location": "/vul/unsafedownload/execdownload.php",
+        "param": "filename",
+        "description": "路径遍历下载任意文件，filename 参数未过滤 ../",
+        "skill_ids": [
+          "lfi_basic"
+        ]
+      },
+      "detected": true,
+      "detail": "路径穿越下载成功，读取到 ../../../inc/config.inc.php",
+      "evidence": "filename 参数未过滤 ../，下载任意文件",
+      "elapsed": 0.06,
+      "false_positive": false
+    },
+    "info_leak": {
+      "ground_truth": {
+        "name": "敏感信息泄露",
+        "severity": "medium",
+        "cwe": "CWE-200",
+        "cvss": 5.3,
+        "location": "/vul/infoleak/",
+        "param": "N/A",
+        "description": "页面暴露后台管理链接、数据库结构等敏感信息",
+        "skill_ids": [
+          "info_sensitive_paths"
+        ]
+      },
+      "detected": true,
+      "detail": "信息泄露确认：密码字段, HTML 注释, 隐藏链接泄露",
+      "evidence": "页面暴露：密码字段, HTML 注释, 隐藏链接泄露",
+      "elapsed": 0.05,
+      "false_positive": false
+    }
+  }
+}

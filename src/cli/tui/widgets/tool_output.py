@@ -19,18 +19,18 @@ class ToolOutput(Static):
     ToolOutput {
         margin: 0 1;
         padding: 0 1;
-        background: $surface-darken-2;
-        border: solid $warning;
+        background: #0d0d0d;
+        border: solid #ffd700;
         width: 1fr;
     }
     ToolOutput.running {
-        border: solid $primary;
+        border: solid #00d4ff;
     }
     ToolOutput.completed {
-        border: solid $success;
+        border: solid #00ff41;
     }
     ToolOutput.failed {
-        border: solid $error;
+        border: solid #ff0040;
     }
     """
 
@@ -47,27 +47,35 @@ class ToolOutput(Static):
         """渲染工具输出"""
         text = Text()
 
-        # 工具名称和状态
-        status_icons = {
-            "pending": "⏳",
-            "running": "🔄",
-            "completed": "✅",
-            "failed": "❌"
+        # Tool status markers - hacker terminal style
+        status_markers = {
+            "pending": "[...]",
+            "running": "[>>]",
+            "completed": "[OK]",
+            "failed": "[!!]"
         }
-        icon = status_icons.get(self.status, "❓")
+        status_colors = {
+            "pending": "dim",
+            "running": "cyan",
+            "completed": "green",
+            "failed": "red"
+        }
 
-        text.append(f"{icon} {self.tool_name}\n", style="bold")
+        marker = status_markers.get(self.status, "[??]")
+        color = status_colors.get(self.status, "white")
 
-        # 参数
+        text.append(f"{marker} ", style=f"bold {color}")
+        text.append(f"{self.tool_name}\n", style="bold")
+
+        # Params
         if self.params:
-            text.append("参数: ", style="dim")
+            text.append("ARGS: ", style="dim")
             params_str = ", ".join(f"{k}={v}" for k, v in self.params.items() if v)
             text.append(f"{params_str}\n", style="cyan")
 
-        # 输出
+        # Output
         if self.output:
             text.append("\n")
-            # 限制输出长度
             output_display = self.output[:500]
             if len(self.output) > 500:
                 output_display += "..."
@@ -103,7 +111,7 @@ class ToolOutputPanel(Vertical):
     ToolOutputPanel {
         height: auto;
         max-height: 15;
-        background: $surface-darken-1;
+        background: #0a0e17;
     }
     """
 

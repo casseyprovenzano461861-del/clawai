@@ -171,6 +171,131 @@ async def execute_streaming(
         )
 
 
+def _linux_to_win(command: str) -> str:
+    """Auto-translate common Linux shell patterns to Windows cmd equivalents.
+
+    This is a safety net for when the LLM generates Linux-style commands
+    despite the platform hint in the system prompt.
+    """
+    import re
+
+    # 2>/dev/null -> 2>nul
+    command = command.replace("2>/dev/null", "2>nul")
+    command = command.replace("2>/dev/tty", "CON")
+
+    # ping -c N -> ping -n N
+    command = re.sub(r'\bping\s+-c\s+(\d+)', r'ping -n \1', command)
+
+    # cat -> type (standalone only, not in paths like /etc/passwd)
+    command = re.sub(r'\bcat\s+', 'type ', command)
+
+    # grep -> findstr (basic cases)
+    command = re.sub(r'\bgrep\s+', 'findstr ', command)
+
+    # head -N -> powershell or just skip (cmd has no head)
+    command = re.sub(r'\bhead\s+-(\d+)\b', r'powershell -c "$input | Select-Object -First \1"', command)
+
+    # tail -N
+    command = re.sub(r'\btail\s+-(\d+)\b', r'powershell -c "$input | Select-Object -Last \1"', command)
+
+    # which -> where
+    command = re.sub(r'\bwhich\s+', 'where ', command)
+
+    # rm -f -> del /f /q (basic)
+    command = re.sub(r'\brm\s+-rf\s+', r'del /s /q ', command)
+    command = re.sub(r'\brm\s+-f\s+', r'del /q ', command)
+
+    return command
+
+
+async def execute_shell_streaming(
+    command: str,
+    on_output: Optional[Callable[[str], None]] = None,
+    timeout: int = 120,
+) -> ToolResult:
+    """异步流式执行 shell 命令字符串, 支持 pipes, redirects, || 等
+
+    Unlike execute_streaming which takes a list and uses subprocess_exec,
+    this runs the command through a shell to properly handle shell operators.
+
+    Args:
+        command: Shell command string (e.g. "curl -s http://x | grep ok")
+        on_output: Output callback (called per line)
+        timeout: Timeout in seconds
+
+    Returns:
+        ToolResult
+    """
+    import time
+    import sys
+    start = time.time()
+    lines = []
+
+    # Auto-translate common Linux patterns on Windows
+    if sys.platform == "win32":
+        command = _linux_to_win(command)
+
+    try:
+        if sys.platform == "win32":
+            proc = await asyncio.create_subprocess_exec(
+                "cmd.exe", "/c", command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                "/bin/bash", "-c", command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+
+        async def _read_output():
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                decoded = line.decode(errors='replace').rstrip()
+                lines.append(decoded)
+                if on_output:
+                    on_output(decoded)
+
+        try:
+            await asyncio.wait_for(_read_output(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            elapsed = time.time() - start
+            return ToolResult(
+                success=False,
+                output="\n".join(lines),
+                error=f"命令超时 ({timeout}s)",
+                duration=elapsed,
+            )
+
+        await proc.wait()
+        elapsed = time.time() - start
+        output = "\n".join(lines)
+
+        if proc.returncode == 0:
+            return ToolResult(success=True, output=output, duration=elapsed)
+        else:
+            return ToolResult(
+                success=False,
+                output=output,
+                error=f"退出码 {proc.returncode}",
+                duration=elapsed,
+            )
+
+    except Exception as e:
+        elapsed = time.time() - start
+        return ToolResult(
+            success=False,
+            output="\n".join(lines),
+            error=str(e),
+            duration=elapsed,
+        )
+
+
 class ToolRegistry:
     """工具注册表"""
 

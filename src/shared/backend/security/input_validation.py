@@ -433,8 +433,8 @@ class SecureInputValidator:
         if re.match(domain_pattern, target):
             return True
         
-        # URL (简单验证)
-        url_pattern = r'^(http|https)://([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:[0-9]+)?(/.*)?$'
+        # URL (支持域名或 IP 地址作为 host)
+        url_pattern = r'^(http|https)://(([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}|(\d{1,3}\.){3}\d{1,3})(:[0-9]+)?(/.*)?$'
         if re.match(url_pattern, target, re.IGNORECASE):
             return True
         

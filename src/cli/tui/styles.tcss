@@ -1,117 +1,173 @@
-/* ClawAI TUI 默认样式 */
+/* ClawAI TUI - Cyberpunk Hacker Terminal Theme */
+
+/* ── Color Tokens ── */
+$cyber-dark: #0a0e17;
+$cyber-darker: #060910;
+$neon-green: #00ff41;
+$neon-cyan: #00d4ff;
+$neon-red: #ff0040;
+$neon-yellow: #ffd700;
+$neon-purple: #b400ff;
+$neon-orange: #ff8c00;
+$dim-green: #1a3a1a;
+$text-primary: #c0d0c0;
+$text-dim: #507050;
 
 Screen {
-    background: $surface;
+    background: $cyber-darker;
 }
 
 #main_container {
     layout: vertical;
     height: 1fr;
+    background: $cyber-darker;
 }
 
 Header {
-    background: $primary;
-    color: $text;
+    background: $cyber-dark;
+    color: $neon-green;
+    border-bottom: solid $neon-green;
     padding: 0 1;
+    text-style: bold;
 }
 
 Footer {
-    background: $primary-darken-1;
-    color: $text;
+    background: $cyber-dark;
+    color: $neon-green;
+    border-top: solid $dim-green;
 }
 
+/* ── Message List ── */
 MessageList {
     height: 1fr;
-    background: $surface;
-    padding: 1;
+    min-height: 10;
+    background: $cyber-darker;
+    padding: 0 1;
+    border: solid $dim-green;
+    scrollbar-gutter: stable;
+    overflow-y: auto;
 }
 
 MessageItem {
-    margin: 0 1;
+    margin: 0 0 1 0;
     padding: 0 1;
     width: 1fr;
 }
 
 MessageItem.user {
-    background: $surface-darken-1;
+    background: #0d1a0d;
+    border-left: solid $neon-cyan;
+    padding-left: 1;
 }
 
 MessageItem.assistant {
-    background: $surface;
+    background: $cyber-darker;
+    border-left: solid $neon-green;
+    padding-left: 1;
 }
 
 MessageItem.system {
-    background: $primary-darken-2;
-    color: $text-muted;
+    background: #0a0a1a;
+    border-left: solid $neon-purple;
+    color: $text-dim;
+    padding-left: 1;
 }
 
 MessageItem.tool {
-    background: $warning-darken-2;
+    background: #1a1a0a;
+    border-left: solid $neon-yellow;
+    padding-left: 1;
 }
 
+/* ── 新增：安全发现消息 ── */
+MessageItem.finding {
+    background: #1a0d00;
+    border-left: solid $neon-orange;
+    padding-left: 1;
+}
+
+/* ── 新增：Flag 捕获消息 ── */
+MessageItem.flag {
+    background: #1a0000;
+    border-left: double $neon-red;
+    padding-left: 1;
+    text-style: bold;
+}
+
+/* ── Chat Input ── */
 ChatInput {
     dock: bottom;
     height: 3;
-    background: $surface-darken-1;
-    border: solid $primary;
+    min-height: 3;
+    background: $cyber-dark;
+    border: tall $neon-green;
+    border-title-color: $neon-green;
     padding: 0 1;
+    color: $neon-green;
 }
 
 ChatInput:focus {
-    border: double $accent;
+    border: double $neon-cyan;
 }
 
+/* ── Status Bar ── */
 StatusBar {
     dock: bottom;
     height: 1;
-    background: $primary;
-    color: $text;
+    background: $cyber-dark;
+    color: $neon-green;
     padding: 0 2;
+    content-align: left middle;
+    border-top: solid $dim-green;
 }
 
+/* ── Tool Output Panel ── */
 ToolOutputPanel {
     height: auto;
-    max-height: 10;
-    background: $surface-darken-1;
-    border: solid $warning;
+    max-height: 12;
+    min-height: 0;
+    background: $cyber-dark;
+    border: solid $neon-yellow;
+    overflow-y: auto;
 }
 
 ToolOutput {
     margin: 0 1;
     padding: 0 1;
-    background: $surface-darken-2;
-    border: solid $warning;
+    background: #0d0d0d;
+    border: solid $neon-yellow;
     width: 1fr;
 }
 
 ToolOutput.running {
-    border: solid $primary;
+    border: solid $neon-cyan;
 }
 
 ToolOutput.completed {
-    border: solid $success;
+    border: solid $neon-green;
 }
 
 ToolOutput.failed {
-    border: solid $error;
+    border: solid $neon-red;
 }
 
-/* 帮助屏幕样式 */
+/* ── Help Screen ── */
 HelpScreen {
     align: center middle;
 }
 
 HelpScreen > Container {
-    width: 60;
-    height: 25;
-    background: $surface;
-    border: thick $primary;
+    width: 64;
+    height: 28;
+    background: $cyber-dark;
+    border: thick $neon-green;
     padding: 1 2;
+    color: $text-primary;
 }
 
 #title {
     text-align: center;
     text-style: bold;
-    color: $primary;
+    color: $neon-green;
     margin-bottom: 1;
 }

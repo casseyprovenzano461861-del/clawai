@@ -219,9 +219,18 @@ class SkillExecutor:
     def _execute_python(self, skill: Skill, params: Dict[str, Any]) -> str:
         """执行 Python 脚本"""
         # 清理参数，防止代码注入
+        # cookie/header 参数允许包含 ; (分号是 Cookie 的正常分隔符)
+        ALLOW_SEMICOLON = {"cookie", "headers", "user_agent"}
         safe_params = {}
         for key, value in params.items():
-            safe_params[key] = self._sanitize_param(value)
+            if key.lower() in ALLOW_SEMICOLON:
+                # 只禁止最危险的命令注入字符，允许分号
+                str_val = str(value)
+                if re.search(r'[`$]', str_val):
+                    raise ValueError(f"参数包含危险字符，拒绝执行: {str_val[:50]}")
+                safe_params[key] = str_val
+            else:
+                safe_params[key] = self._sanitize_param(value)
 
         # 替换参数
         code = skill.code

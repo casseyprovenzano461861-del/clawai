@@ -1,0 +1,243 @@
+{
+  "meta": {
+    "tool": "ClawAI Automated Penetration Testing System",
+    "version": "2.0.0",
+    "target": "http://127.0.0.1/dvwa",
+    "mode": "online",
+    "level": "low",
+    "timestamp": "2026-04-10T10:23:49.262629",
+    "elapsed_s": 2.56
+  },
+  "metrics": {
+    "mode": "online",
+    "detection_rate": 20.0,
+    "false_positive_rate": 0.0,
+    "precision": 100.0,
+    "recall": 20.0,
+    "f1_score": 33.3,
+    "cve_coverage": 25.0,
+    "attack_efficiency": 20.0,
+    "total_known": 10,
+    "detected": 2,
+    "missed": 8,
+    "false_positives": 0,
+    "detected_cwes": [
+      "CWE-613",
+      "CWE-89"
+    ],
+    "by_severity": {
+      "critical": {
+        "total": 3,
+        "detected": 1
+      },
+      "high": {
+        "total": 3,
+        "detected": 0
+      },
+      "medium": {
+        "total": 3,
+        "detected": 0
+      },
+      "low": {
+        "total": 1,
+        "detected": 1
+      }
+    },
+    "total_test_time_s": 1.84,
+    "avg_time_per_vuln_s": 0.18,
+    "compliance": {
+      "detection_rate_ge_90pct": false,
+      "detection_rate_ge_95pct": false,
+      "false_positive_rate_le_10pct": true,
+      "false_positive_rate_le_5pct": true,
+      "cve_coverage_ge_1pct": true,
+      "cve_coverage_ge_5pct": true,
+      "attack_success_rate_ge_80pct": false
+    },
+    "total_elapsed_s": 2.56
+  },
+  "findings": [
+    {
+      "vuln_id": "sql_injection",
+      "detected": true,
+      "technique": "UNION SELECT + boolean",
+      "evidence": "响应包含用户关键词",
+      "payload": "' OR '1'='1",
+      "elapsed": 0.06,
+      "name": "SQL Injection",
+      "severity": "critical",
+      "cwe": "CWE-89",
+      "cvss": 9.8,
+      "location": "/vulnerabilities/sqli/",
+      "param": "id",
+      "description": "经典 SQL 注入，可提取数据库全量数据",
+      "skill_ids": [
+        "dvwa_sqli",
+        "sqli_basic",
+        "sqli_union"
+      ]
+    },
+    {
+      "vuln_id": "sql_injection_blind",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.23,
+      "name": "SQL Injection (Blind)",
+      "severity": "high",
+      "cwe": "CWE-89",
+      "cvss": 8.5,
+      "location": "/vulnerabilities/sqli_blind/",
+      "param": "id",
+      "description": "盲注漏洞，无直接回显",
+      "skill_ids": [
+        "sqli_time_blind"
+      ]
+    },
+    {
+      "vuln_id": "xss_reflected",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.17,
+      "name": "XSS (Reflected)",
+      "severity": "medium",
+      "cwe": "CWE-79",
+      "cvss": 6.1,
+      "location": "/vulnerabilities/xss_r/",
+      "param": "name",
+      "description": "反射型跨站脚本",
+      "skill_ids": [
+        "dvwa_xss",
+        "xss_reflected"
+      ]
+    },
+    {
+      "vuln_id": "xss_stored",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.09,
+      "name": "XSS (Stored)",
+      "severity": "high",
+      "cwe": "CWE-79",
+      "cvss": 7.2,
+      "location": "/vulnerabilities/xss_s/",
+      "param": "txtName",
+      "description": "存储型 XSS，持久化攻击",
+      "skill_ids": [
+        "xss_stored"
+      ]
+    },
+    {
+      "vuln_id": "command_injection",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.23,
+      "name": "Command Injection",
+      "severity": "critical",
+      "cwe": "CWE-78",
+      "cvss": 9.8,
+      "location": "/vulnerabilities/exec/",
+      "param": "ip",
+      "description": "操作系统命令注入，可执行任意命令",
+      "skill_ids": [
+        "rce_command_injection"
+      ]
+    },
+    {
+      "vuln_id": "file_inclusion",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.2,
+      "name": "File Inclusion (LFI)",
+      "severity": "high",
+      "cwe": "CWE-98",
+      "cvss": 8.1,
+      "location": "/vulnerabilities/fi/",
+      "param": "page",
+      "description": "本地/远程文件包含",
+      "skill_ids": [
+        "lfi_basic"
+      ]
+    },
+    {
+      "vuln_id": "file_upload",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.08,
+      "name": "Unrestricted File Upload",
+      "severity": "critical",
+      "cwe": "CWE-434",
+      "cvss": 9.0,
+      "location": "/vulnerabilities/upload/",
+      "param": "uploaded",
+      "description": "任意文件上传，可上传 webshell",
+      "skill_ids": [
+        "file_upload_testing"
+      ]
+    },
+    {
+      "vuln_id": "csrf",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.14,
+      "name": "Cross-Site Request Forgery (CSRF)",
+      "severity": "medium",
+      "cwe": "CWE-352",
+      "cvss": 6.5,
+      "location": "/vulnerabilities/csrf/",
+      "param": "password_new",
+      "description": "跨站请求伪造，可劫持用户操作",
+      "skill_ids": [
+        "csrf_testing"
+      ]
+    },
+    {
+      "vuln_id": "brute_force",
+      "detected": false,
+      "technique": "",
+      "evidence": "",
+      "payload": "",
+      "elapsed": 0.29,
+      "name": "Brute Force (Authentication)",
+      "severity": "medium",
+      "cwe": "CWE-307",
+      "cvss": 7.5,
+      "location": "/vulnerabilities/brute/",
+      "param": "username",
+      "description": "弱密码暴力破解，无速率限制",
+      "skill_ids": [
+        "dvwa_bruteforce",
+        "auth_bruteforce"
+      ]
+    },
+    {
+      "vuln_id": "weak_session",
+      "detected": true,
+      "technique": "Weak session ID endpoint",
+      "evidence": "弱会话 ID 生成页面存在（DVWA 设计缺陷）",
+      "payload": "",
+      "elapsed": 0.35,
+      "name": "Weak Session IDs",
+      "severity": "low",
+      "cwe": "CWE-613",
+      "cvss": 4.3,
+      "location": "/vulnerabilities/weak_id/",
+      "param": "dvwaSession",
+      "description": "弱会话 ID，可被预测",
+      "skill_ids": []
+    }
+  ]
+}

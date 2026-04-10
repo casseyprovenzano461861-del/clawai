@@ -7,7 +7,9 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-const WS_URL = (import.meta.env.VITE_WS_URL as string) || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/per-events`;
+const _wsBase = (import.meta.env.VITE_WS_URL as string)
+  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//localhost:8000`;
+const WS_URL = `${_wsBase}/ws/per-events`;
 
 export type ToolEventStatus = 'start' | 'complete' | 'error';
 export type MessageType = 'info' | 'success' | 'error' | 'warning';

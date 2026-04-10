@@ -228,22 +228,20 @@ async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = Non
     registry = get_registry()
     dispatcher = SlashDispatcher(registry, chat_cli)
 
-    _prompt_session = None
-    try:
-        from src.cli.completer import get_prompt_session
-        _prompt_session = get_prompt_session(registry=registry)
-    except Exception as e:
-        logger.debug(f"命令补全初始化失败: {e}")
+    # 输入读取：在线程池里用原生 input()，兼容所有终端（Windows cmd/PowerShell/Linux）
+    # 不使用 prompt_toolkit，避免 Windows cmd.exe 下的 EOFError 闪退问题
+    def _sync_input() -> str:
+        try:
+            return input("> ")
+        except EOFError:
+            return "__EOF__"
 
     async def _read_input() -> str:
-        if _prompt_session is not None:
-            try:
-                return await _prompt_session.prompt_async("> ")
-            except (EOFError, KeyboardInterrupt):
-                raise
-            except Exception:
-                pass
-        return console.input(f"[{GRN}]>[/] ")
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _sync_input)
+        if result == "__EOF__":
+            raise EOFError
+        return result
 
     async def _run_direct_tool(tool_name: str, args: list, chat_cli_obj, cons):
         """直接工具执行"""
@@ -282,15 +280,14 @@ async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = Non
         if tool_def.is_dangerous:
             from rich.prompt import Prompt
             display = tool_def.format_call_display(tool_args)
-            cons.print(Text(f"    [!] DANGEROUS: ", style=AMBER), Text(display, style=REDB))
+            _print_tool_card(cons, tool_name, tool_args, "DANGER", "⚠")
             action = Prompt.ask("    execute?", choices=["y", "n"], default="n")
             if action == "n":
                 cons.print(Text("    [-] rejected", style=DIM))
                 return
 
-        # 执行
-        display = tool_def.format_call_display(tool_args)
-        cons.print(Text(f"    [+] ", style=GRN), Text(display, style=WHT))
+        # 执行 — 统一工具卡片
+        _print_tool_card(cons, tool_name, tool_args, "RUNNING", "▶")
 
         try:
             from src.shared.backend.events import EventBus
@@ -318,10 +315,8 @@ async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = Non
         if not output_started:
             tool_spinner.stop()
 
-        if result.success:
-            cons.print(Text(f"    [+] done {result.duration:.1f}s", style=GRN))
-        else:
-            cons.print(Text(f"    [-] {result.error} ({result.duration:.1f}s)", style=RED))
+        # 结果状态
+        _print_tool_status(cons, result)
 
         try:
             from src.shared.backend.events import EventBus
@@ -401,7 +396,9 @@ async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = Non
             continue
         except Exception as e:
             logger.error(f"处理失败: {e}")
-            console.print(Text(f"    [-] error: {e}", style=RED))
+            # 使用友好的错误处理器
+            from src.cli.error_handler import handle_error
+            handle_error(e, console)
 
 
 def _run_bash(command: str) -> str:
@@ -415,6 +412,57 @@ def _run_bash(command: str) -> str:
         return "    [-] timeout (30s)"
     except Exception as e:
         return f"    [-] error: {e}"
+
+
+def _print_tool_card(console_obj, tool_name: str, args: dict, status: str, icon: str):
+    """打印工具执行卡片 - 统一格式
+
+    Args:
+        console_obj: rich.Console 实例
+        tool_name: 工具名称
+        args: 工具参数
+        status: "RUNNING", "DANGER", "DONE"
+        icon: 图标 "▶", "⚠", "✓"
+    """
+    from rich.panel import Panel
+    from rich.text import Text
+
+    # 格式化参数
+    parts = []
+    for k, v in args.items():
+        if v:
+            parts.append(f"{k}={v}")
+    arg_str = " ".join(parts) if parts else ""
+
+    # 状态颜色
+    color_map = {"RUNNING": GRN, "DANGER": AMBER, "DONE": GRN}
+    status_color = color_map.get(status, WHT)
+
+    header = Text(f"{icon} {tool_name}", style=status_color)
+    if arg_str:
+        header.append(f" {arg_str}", style=DIM)
+
+    panel = Panel(
+        Text("", style=""),
+        title=header,
+        title_align="left",
+        border_style=DIM,
+        padding=(0, 1),
+        expand=False,
+    )
+    console_obj.print(panel)
+
+
+def _print_tool_status(console_obj, result: "ToolResult"):
+    """打印工具执行状态 - 统一格式"""
+    from rich.text import Text
+
+    if result.success:
+        console_obj.print(Text(f"    ✓ 完成 {result.duration:.1f}s", style=GRN))
+    else:
+        console_obj.print(Text(f"    ✗ 失败 {result.duration:.1f}s", style=RED))
+        if result.error:
+            console_obj.print(Text(f"        {result.error}", style=DIM))
 
 
 async def run_scan_mode(target: str, tools: str, output: Optional[str]):

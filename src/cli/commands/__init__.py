@@ -183,3 +183,11 @@ def get_registry() -> CommandRegistry:
     registry = CommandRegistry.get()
     registry.discover()
     return registry
+
+
+# 导出历史记录管理器供其他模块使用
+from src.cli.commands.history import HistoryManager
+
+def get_history_manager() -> HistoryManager:
+    """获取历史记录管理器实例"""
+    return HistoryManager()

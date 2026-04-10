@@ -137,6 +137,7 @@ const Dashboard = () => {
   const [target,       setTarget]       = useState('');
   const [scanMode,     setScanMode]     = useState('full');
   const [loading,      setLoading]      = useState(false);
+  const [perAutoStart, setPerAutoStart] = useState(false);
   const [connected,    setConnected]    = useState(false);
   const [activeTab,    setActiveTab]    = useState('overview');
   const [activeAgents, setActiveAgents] = useState([]);
@@ -204,6 +205,7 @@ const Dashboard = () => {
   const handleScan = useCallback(async () => {
     if (!target.trim() || loading) return;
     setLoading(true);
+    setPerAutoStart(false); // 先重置，确保 effect 能触发
     setActiveTab('per');   // 自动切到 P-E-R 控制台
     setActivity(prev => [{
       type: 'scan',
@@ -212,6 +214,7 @@ const Dashboard = () => {
       time: new Date().toLocaleTimeString(),
     }, ...prev.slice(0, 49)]);
     try {
+      setPerAutoStart(true); // 触发 PERPanel 自动启动
       await startScan(target.trim(), scanMode);
       setActivity(prev => [{
         type: 'success',
@@ -227,6 +230,7 @@ const Dashboard = () => {
       }, ...prev.slice(0, 49)]);
     } finally {
       setLoading(false);
+      setPerAutoStart(false);
     }
   }, [target, scanMode, loading, startScan]);
 
@@ -441,6 +445,8 @@ const Dashboard = () => {
             {activeTab === 'per' && (
               <div className="animate-fade-in">
                 <PERPanel
+                  initialTarget={target}
+                  autoStart={perAutoStart}
                   onSessionEnd={ev => {
                     setActivity(prev => [{
                       type: 'success',

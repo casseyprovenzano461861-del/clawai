@@ -118,9 +118,8 @@ html {
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
-  transition: background-color var(--transition-normal) ease, color var(--transition-normal) ease;
+  color: #e2e8f0;
+  background-color: #060910;
   min-height: 100vh;
 }
 
@@ -575,4 +574,25 @@ body {
   );
   pointer-events: none;
   z-index: 0;
+}
+
+/* Hero 区点阵背景装饰 */
+.hero-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(0,212,255,0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 渐隐动画 */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.25s ease both;
 }

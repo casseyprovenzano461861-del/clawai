@@ -6,11 +6,12 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Shield, Home, Target, Network, Activity,
-  History, FileText, Zap, Menu, X, User, LogOut,
+  History, FileText, Zap, Menu, X, User, LogOut, Terminal,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { name: '仪表板',   href: '/',                icon: Home },
+  { name: '实时扫描', href: '/scan',             icon: Terminal },
   { name: '实时监控', href: '/monitor',          icon: Activity },
   { name: '知识图谱', href: '/knowledge-graph',  icon: Network },
   { name: '扫描历史', href: '/history',          icon: History },

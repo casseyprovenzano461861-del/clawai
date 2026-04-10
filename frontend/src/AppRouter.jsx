@@ -16,8 +16,9 @@ const Monitor       = lazy(() => import('./components/RealTimeMonitor'));
 const KnowledgeGraph = lazy(() => import('./components/KnowledgeGraph'));
 const ScanHistory   = lazy(() => import('./components/ScanHistory'));
 const ReportGenerator = lazy(() => import('./components/ReportGenerator'));
-const PluginManager = lazy(() => import('./components/PluginManager'));
-const Login         = lazy(() => import('./pages/Login'));
+const PluginManager  = lazy(() => import('./components/PluginManager'));
+const ScanTerminal   = lazy(() => import('./pages/ScanTerminal'));
+const Login          = lazy(() => import('./pages/Login'));
 const Register      = lazy(() => import('./pages/Register'));
 
 const Loader = () => <PageLoadingSkeleton />;
@@ -49,7 +50,7 @@ const AppRouter = () => (
           {/* 带 AppShell 的主应用路由（需认证） */}
           <Route element={<AppShell />}>
             <Route index element={<Suspense fallback={<Loader />}><ProtectedRoute><Dashboard /></ProtectedRoute></Suspense>} />
-            <Route path="/scan"            element={<Suspense fallback={<Loader />}><ProtectedRoute><Dashboard /></ProtectedRoute></Suspense>} />
+            <Route path="/scan"            element={<Suspense fallback={<Loader />}><ProtectedRoute><ScanTerminal /></ProtectedRoute></Suspense>} />
             <Route path="/monitor"         element={<Suspense fallback={<Loader />}><ProtectedRoute><Monitor /></ProtectedRoute></Suspense>} />
             <Route path="/knowledge-graph" element={<Suspense fallback={<Loader />}><ProtectedRoute><KnowledgeGraph /></ProtectedRoute></Suspense>} />
             <Route path="/history"         element={<Suspense fallback={<Loader />}><ProtectedRoute><ScanHistory /></ProtectedRoute></Suspense>} />

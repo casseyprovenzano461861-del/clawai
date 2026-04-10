@@ -267,13 +267,26 @@ class UnifiedExecutor(BaseExecutor):
             self.logger.warning(f"无法导入工具包装器: {e}")
             tool_wrapper = None
         
-        # 项目工具目录
+        # 项目工具目录（实际路径：tools/penetration/）
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+        pentest_tools_dir = os.path.join(project_root, 'tools', 'penetration')
         project_tools_dir = os.path.join(os.path.dirname(__file__), '..', '..', '工具')
         external_tools_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'external_tools')
         
         
         def get_tool_path(config_name: str, default_cmd: str) -> str:
             """获取工具路径，优先级：工具包装器 > PATH > 配置文件路径 > 默认命令"""
+            # 对于 "python /path/to/script.py" 形式的命令，特殊处理（避免 lower() 破坏路径大小写）
+            parts = default_cmd.split(None, 1)  # 最多分成2段
+            if len(parts) == 2 and parts[0].lower() in ('python', 'python3', 'python.exe'):
+                script_path = parts[1]
+                if os.path.isfile(script_path):
+                    self.logger.info(f"脚本文件存在: {script_path}")
+                    return default_cmd  # 返回原始命令，保留大小写
+                else:
+                    self.logger.warning(f"脚本文件未找到: {script_path}，使用默认命令: {default_cmd}")
+                    return default_cmd
+
             tool_name = default_cmd.lower()
             
             # 1. 使用工具包装器查找（优先）
@@ -424,7 +437,7 @@ class UnifiedExecutor(BaseExecutor):
                 "priority_level": "P1"
             },
             "sqlmap": {
-                "path": get_tool_path("SQLMAP_PATH", "sqlmap"),
+                "path": get_tool_path("SQLMAP_PATH", f"python {os.path.join(pentest_tools_dir, 'sqlmap', 'sqlmap.py')}"),
                 "enabled": True,
                 "timeout": 900,
                 "description": "SQL注入检测工具",
@@ -545,9 +558,9 @@ class UnifiedExecutor(BaseExecutor):
                 "priority_level": "P3"
             },
             
-            # 新增工具：XSStrike和Commix
+            # 新增工具：XSStrike和Commix（路径动态计算，指向 tools/penetration/）
             "xsstrike": {
-                "path": get_tool_path("XSSTRIKE_PATH", "python e:\\ClawAI\\工具\\XSStrike\\xsstrike.py"),
+                "path": get_tool_path("XSSTRIKE_PATH", f"python {os.path.join(pentest_tools_dir, 'XSStrike', 'xsstrike.py')}"),
                 "enabled": True,
                 "timeout": 180,
                 "description": "高级XSS检测工具",
@@ -560,7 +573,7 @@ class UnifiedExecutor(BaseExecutor):
                 "priority_level": "P1"
             },
             "commix": {
-                "path": get_tool_path("COMMIX_PATH", "python e:\\ClawAI\\工具\\commix\\commix.py"),
+                "path": get_tool_path("COMMIX_PATH", f"python {os.path.join(pentest_tools_dir, 'commix', 'commix.py')}"),
                 "enabled": True,
                 "timeout": 300,
                 "description": "命令注入检测与利用工具",
@@ -630,8 +643,14 @@ class UnifiedExecutor(BaseExecutor):
                 available[tool_name] = False
                 continue
             
-            # 首先检查工具是否在PATH中
-            tool_path = shutil.which(tool_config["path"])
+            # 首先检查工具是否在PATH中（对 "python script.py" 形式特殊处理）
+            tool_cmd = tool_config["path"]
+            cmd_parts = tool_cmd.split(None, 1)
+            if len(cmd_parts) == 2 and cmd_parts[0].lower() in ('python', 'python3', 'python.exe'):
+                # Python 脚本：检查脚本文件是否存在
+                tool_path = cmd_parts[1] if os.path.isfile(cmd_parts[1]) else None
+            else:
+                tool_path = shutil.which(tool_cmd)
             if not tool_path:
                 available[tool_name] = False
                 self.logger.warning(f"工具 {tool_name} 未在PATH中找到: {tool_config['path']}")
@@ -693,8 +712,13 @@ class UnifiedExecutor(BaseExecutor):
         
         for tool_name, tool_config in self.tools_config.items():
             try:
-                # 检查工具是否在PATH中
-                tool_path = shutil.which(tool_config["path"])
+                # 检查工具是否在PATH中（对 "python script.py" 形式特殊处理）
+                tool_cmd = tool_config["path"]
+                _parts = tool_cmd.split(None, 1)
+                if len(_parts) == 2 and _parts[0].lower() in ('python', 'python3', 'python.exe'):
+                    tool_path = _parts[1] if os.path.isfile(_parts[1]) else None
+                else:
+                    tool_path = shutil.which(tool_cmd)
                 
                 status = {
                     "installed": tool_path is not None,

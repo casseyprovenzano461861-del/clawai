@@ -280,9 +280,11 @@ const ColoredLog = ({ logs }: { logs: LogEntry[] }) => {
  */
 const PERPanel = ({ 
   onSessionEnd,
+  initialTarget = '',
+  autoStart = false,
   className = '' 
 }) => {
-  const [target, setTarget] = useState('');
+  const [target, setTarget] = useState(initialTarget);
   const [goal, setGoal] = useState('');
   const [mode, setMode] = useState('full');
   const [activeTaskIndex, setActiveTaskIndex] = useState(-1);
@@ -320,6 +322,21 @@ const PERPanel = ({
     setActiveTaskIndex(-1);
     startPentest(target.trim(), goal.trim(), mode);
   }, [target, goal, mode, startPentest]);
+
+  // 当外部传入新目标时更新并自动启动
+  useEffect(() => {
+    if (initialTarget && initialTarget !== target) {
+      setTarget(initialTarget);
+    }
+  }, [initialTarget]);
+
+  useEffect(() => {
+    if (autoStart && initialTarget && !isRunning) {
+      setSummary(null);
+      setActiveTaskIndex(-1);
+      startPentest(initialTarget.trim(), '', mode);
+    }
+  }, [autoStart, initialTarget]);
 
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 ${className}`}>

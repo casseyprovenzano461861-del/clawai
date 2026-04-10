@@ -115,25 +115,68 @@ class ClawAICompleter(Completer):
                 )
 
     def _complete_slash(self, text: str) -> Iterable[Completion]:
-        """从注册表获取 /command 补全 + 工具名补全"""
+        """从注册表获取 /command 补全 + 工具名补全 + 参数补全"""
         if not self.registry:
             return
 
-        prefix = text[1:].lower()  # 去掉 / 前缀
+        parts = text[1:].split()
+        if not parts:
+            return
+
+        prefix = parts[0].lower()
+        cmd_args = parts[1:]
+
+        # /history 子命令补全
+        if prefix == "history" and len(parts) >= 2:
+            sub_prefix = parts[1].lower()
+            subs = [("search", "搜索历史关键词"), ("prefix", "按前缀过滤"),
+                    ("export", "导出历史到文件")]
+            for sub, desc in subs:
+                if sub.startswith(sub_prefix):
+                    yield Completion(
+                        f"/{prefix} {sub} ", start_position=-len(text),
+                        display=f"/{prefix} {sub}", display_meta=desc,
+                    )
+            return
 
         # /session 子命令补全
-        if prefix.startswith("session "):
-            sub_prefix = prefix[len("session "):]
+        if prefix == "session" and len(parts) >= 2:
+            sub_prefix = parts[1].lower()
             subs = [("list", "列出所有已保存会话"), ("save", "手动保存当前会话"),
                     ("load ", "加载指定会话"), ("export", "导出会话报告"),
                     ("delete ", "删除指定会话")]
             for sub, desc in subs:
                 if sub.startswith(sub_prefix):
                     yield Completion(
-                        f"/session {sub}", start_position=-len(text),
-                        display=f"/session {sub}", display_meta=desc,
+                        f"/{prefix} {sub}", start_position=-len(text),
+                        display=f"/{prefix} {sub}", display_meta=desc,
                     )
             return
+
+        # 参数补全：当已输入完整工具名，且后续有空格
+        # 检查是否匹配工具名
+        try:
+            from src.cli.tools import get_tool_registry
+            tool_registry = get_tool_registry()
+            tool_def = tool_registry.lookup(prefix)
+            if tool_def and len(parts) == 1:
+                # 工具名已完整，等待参数输入，显示参数提示
+                schema = tool_def.input_schema
+                props = schema.get("properties", {})
+                required = schema.get("required", [])
+                # 显示参数列表作为提示
+                param_hints = []
+                for pname in list(props.keys())[:5]:
+                    req_mark = "*" if pname in required else ""
+                    param_hints.append(f"{pname}{req_mark}")
+                meta = f"参数: {', '.join(param_hints)}" + ("..." if len(props) > 5 else "")
+                yield Completion(
+                    f"/{prefix} ", start_position=-len(text),
+                    display=f"/{prefix}", display_meta=meta,
+                )
+                return
+        except Exception:
+            pass
 
         # 从注册表获取所有命令
         for meta in self.registry.all_commands():
@@ -160,7 +203,7 @@ class ClawAICompleter(Completer):
                 }:
                     display = f"/{tool.name}"
                     # 标记危险/只读
-                    tag = "⚠危险" if tool.is_dangerous else ("只读" if tool.is_readonly else "")
+                    tag = "[DANGER]" if tool.is_dangerous else ("[RO]" if tool.is_readonly else "")
                     meta_text = f"[工具] {tool.description[:40]}{'  ' + tag if tag else ''}"
                     yield Completion(
                         f"/{tool.name} ",

@@ -32,6 +32,7 @@ class HelpCommand:
 
     @staticmethod
     def _show_all(registry, console) -> str:
+        from rich.table import Table
         commands = registry.all_commands()
         if not commands:
             console.print("[yellow]暂无可用命令[/]")

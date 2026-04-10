@@ -24,6 +24,17 @@ class SkillRegistry:
         self.skills: Dict[str, Skill] = {}
         self.executor = SkillExecutor()
         self._load_builtin_skills()
+        self._load_cve_exploit_skills()
+
+    def _load_cve_exploit_skills(self):
+        """加载 CVE exploit 技能（Vulhub 靶场专用）"""
+        try:
+            from .cve_exploit_skills import get_cve_exploit_skills
+            for skill in get_cve_exploit_skills():
+                self.register(skill)
+            logger.info(f"已加载 {len(get_cve_exploit_skills())} 个 CVE exploit 技能")
+        except Exception as e:
+            logger.warning(f"CVE exploit 技能加载失败: {e}")
     
     def _load_builtin_skills(self):
         """加载内置技能"""
@@ -738,6 +749,14 @@ for username, password in credentials:
     def get(self, skill_id: str) -> Optional[Skill]:
         """获取技能"""
         return self.skills.get(skill_id)
+
+    def get_skill(self, skill_id: str) -> Optional[Skill]:
+        """获取技能（get 的别名，兼容旧调用）"""
+        return self.get(skill_id)
+
+    def get_all_skill_names(self) -> List[str]:
+        """返回所有技能 ID 列表"""
+        return list(self.skills.keys())
     
     def list(self, 
              type: SkillType = None,

@@ -22,13 +22,14 @@ class ChatInput(TextArea):
     ChatInput {
         dock: bottom;
         height: 3;
-        background: $surface;
-        border: solid $primary;
-        border-title-color: $primary;
+        background: #0a0e17;
+        border: tall #00ff41;
+        border-title-color: #00ff41;
         padding: 0 1;
+        color: #00ff41;
     }
     ChatInput:focus {
-        border: double $accent;
+        border: double #00d4ff;
     }
     """
 
@@ -38,7 +39,7 @@ class ChatInput(TextArea):
             super().__init__()
             self.text = text
 
-    def __init__(self, placeholder: str = "输入消息... (Enter发送, /命令, !bash)"):
+    def __init__(self, placeholder: str = ">>_ "):
         super().__init__(placeholder=placeholder)
         self.placeholder = placeholder
 

@@ -9,7 +9,10 @@ import asyncio
 from pathlib import Path
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# __file__ = src/shared/backend/main.py → parent*4 = 项目根目录
+_PROJECT_ROOT = str(Path(__file__).parent.parent.parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,14 +109,14 @@ async def lifespan(app: FastAPI):
             if "sqlmap" in tool_manager.tools:
                 sqlmap_path = os.path.join(actual_tools_dir, "sqlmap", "sqlmap.py")
                 if os.path.exists(sqlmap_path):
-                    tool_manager.tools["sqlmap"].command = f'python "{sqlmap_path}"'
+                    tool_manager.tools["sqlmap"].command = [sys.executable, sqlmap_path]
                     logger.info(f"更新sqlmap命令路径: {sqlmap_path}")
 
             # 更新dirsearch命令
             if "dirsearch" in tool_manager.tools:
                 dirsearch_path = os.path.join(actual_tools_dir, "dirsearch", "dirsearch.py")
                 if os.path.exists(dirsearch_path):
-                    tool_manager.tools["dirsearch"].command = f'python "{dirsearch_path}"'
+                    tool_manager.tools["dirsearch"].command = [sys.executable, dirsearch_path]
                     logger.info(f"更新dirsearch命令路径: {dirsearch_path}")
 
             # 更新其他工具命令（如果有特定路径需求）
@@ -859,6 +862,14 @@ try:
 except ImportError as e:
     logger.warning(f"渗透测试API路由导入失败: {e}")
 
+# 导入实时扫描API路由
+try:
+    from src.shared.backend.api.v1.scan import router as scan_router
+    app.include_router(scan_router, prefix="/api/v1/scan", tags=["实时扫描"])
+    logger.info("实时扫描API路由已加载")
+except ImportError as e:
+    logger.warning(f"实时扫描API路由导入失败: {e}")
+
 # 导入知识图谱API路由
 try:
     from backend.api.knowledge_graph_fastapi import router as knowledge_graph_router
@@ -923,6 +934,14 @@ except ImportError as e:
 
     app.include_router(knowledge_graph_router)
     logger.info("知识图谱API路由已加载（回退到模拟数据）")
+
+# 注册 WebSocket 路由（P-E-R 事件 + 监控）
+try:
+    from .api.websocket import router as websocket_router
+    app.include_router(websocket_router)
+    logger.info("WebSocket路由已加载（/ws/per-events, /ws/monitoring）")
+except ImportError as e:
+    logger.warning(f"WebSocket路由导入失败: {e}")
 
 
 def _validate_config():
