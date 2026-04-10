@@ -65,3 +65,4 @@ htmlcov/
 .tox/
 .mypy_cache/references/PentestGPT
 references/
+tools/penetration/
