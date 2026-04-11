@@ -11,6 +11,7 @@ import {
   Terminal, Info, AlertTriangle, XCircle
 } from 'lucide-react';
 import usePERAgent, { type ToolEvent, type LogEntry, type MessageType } from '../../hooks/usePERAgent';
+import { usePERAgentContext } from '../../context/PERAgentContext';
 
 // 阶段图标和颜色
 const PHASE_CONFIG = {
@@ -290,7 +291,7 @@ const PERPanel = ({
   const [activeTaskIndex, setActiveTaskIndex] = useState(-1);
   const [summary, setSummary] = useState<string | null>(null);
 
-  // 使用 usePERAgent Hook（含 EventBus 桥接新增状态）
+  // 从全局 Context 读取，页面切换不丢失数据
   const {
     status,
     phase,
@@ -307,14 +308,20 @@ const PERPanel = ({
     startPentest,
     stopPentest,
     isRunning,
-  } = usePERAgent({
-    autoConnect: true,
-    onEvent: (event) => {
-      if (event.type === 'task_start') setActiveTaskIndex(event.index ?? -1);
-      if (event.type === 'reflection') setSummary(event.summary ?? null);
-      if (event.type === 'complete' && onSessionEnd) onSessionEnd(event);
-    },
-  });
+  } = usePERAgentContext();
+
+  // 监听 report 变化（完成时）：通知父组件（保存已由 PERAgentContext 统一处理）
+  // tasks 变化时同步激活索引
+  useEffect(() => {
+    const runningIdx = tasks.findIndex(t => t.status === 'running');
+    setActiveTaskIndex(runningIdx);
+  }, [tasks]);
+
+  // 监听 report 变化（完成时）：通知父组件（保存已由 PERAgentContext 统一处理）
+  useEffect(() => {
+    if (!report) return;
+    if (onSessionEnd) onSessionEnd({ type: 'complete', report });
+  }, [report]);
 
   const handleStart = useCallback(() => {
     if (!target.trim()) return;
@@ -323,20 +330,29 @@ const PERPanel = ({
     startPentest(target.trim(), goal.trim(), mode);
   }, [target, goal, mode, startPentest]);
 
-  // 当外部传入新目标时更新并自动启动
+  // 当外部传入新目标时同步到本地 state
   useEffect(() => {
     if (initialTarget && initialTarget !== target) {
       setTarget(initialTarget);
     }
   }, [initialTarget]);
 
+  // autoStart：外部触发扫描，直接调用 startPentest（内部会处理连接等待）
+  const autoStartFiredRef = useRef(false);
   useEffect(() => {
-    if (autoStart && initialTarget && !isRunning) {
+    if (autoStart && initialTarget) {
+      autoStartFiredRef.current = false; // 重置，允许本次触发
+    }
+  }, [autoStart, initialTarget]);
+
+  useEffect(() => {
+    if (autoStart && initialTarget && !autoStartFiredRef.current && !isRunning) {
+      autoStartFiredRef.current = true;
       setSummary(null);
       setActiveTaskIndex(-1);
       startPentest(initialTarget.trim(), '', mode);
     }
-  }, [autoStart, initialTarget]);
+  }, [autoStart, initialTarget, isRunning, startPentest, mode]);
 
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 ${className}`}>

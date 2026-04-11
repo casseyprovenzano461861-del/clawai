@@ -207,37 +207,98 @@ async def per_events_endpoint(
                 # 导入并创建 IntelligentPERAgent
                 try:
                     from ..ai_agent.intelligent_per import IntelligentPERAgent
-                    from ..ai_agent.orchestrator import create_agent
-                    from ..config import get_settings
-                    
-                    settings = get_settings()
-                    
-                    # 创建 Agent
-                    agent_core = create_agent(
-                        provider=settings.active_provider,
-                        model=settings.active_model
-                    )
-                    
+                    from ..ai_agent.orchestrator import AIAgentOrchestrator
+
+                    # 通过 Orchestrator 获取完整初始化的工具执行器
+                    orchestrator = AIAgentOrchestrator()
+                    tool_executor = orchestrator.tool_bridge.execute if orchestrator.tool_bridge else None
+                    llm_client = orchestrator.agent_core
+
                     # 创建 P-E-R Agent
                     agent = IntelligentPERAgent(
-                        llm_client=agent_core,
-                        tool_executor=None,  # 需要传入工具执行器
+                        llm_client=llm_client,
+                        tool_executor=tool_executor,
                         max_iterations=5
                     )
-                    
+
                     # 发送开始事件
                     await manager.send_json(cid, {
-                        "type": "per_started",
+                        "type": "start",
                         "target": target,
                         "mode": mode,
                         "timestamp": datetime.now().isoformat()
                     })
-                    
+
                     # 执行 P-E-R 循环并推送事件
                     async for event in agent.run(target=target, goal=goal, mode=mode):
                         event["timestamp"] = datetime.now().isoformat()
                         await manager.send_json(cid, event)
-                        
+
+                        # task_start → 同时发 tool_event(start) + message，让前端时间线显示
+                        if event.get("type") == "task_start":
+                            tool_name = event.get("task", "unknown")
+                            await manager.send_json(cid, {
+                                "type": "tool_event",
+                                "status": "start",
+                                "name": tool_name,
+                                "args": {},
+                                "timestamp": event["timestamp"],
+                            })
+                            await manager.send_json(cid, {
+                                "type": "message",
+                                "text": f"执行任务: {tool_name}",
+                                "msg_type": "info",
+                                "timestamp": event["timestamp"],
+                            })
+
+                        # task_result → 发 tool_event(complete/error) + message + 逐条 finding
+                        elif event.get("type") == "task_result":
+                            tool_name = event.get("task", "unknown")
+                            success = event.get("success", False)
+                            raw_findings = event.get('findings') or []
+                            findings_count = len(raw_findings)
+                            await manager.send_json(cid, {
+                                "type": "tool_event",
+                                "status": "complete" if success else "error",
+                                "name": tool_name,
+                                "args": {},
+                                "result": raw_findings,
+                                "timestamp": event["timestamp"],
+                            })
+                            await manager.send_json(cid, {
+                                "type": "message",
+                                "text": f"{tool_name} 完成 → 发现 {findings_count} 项" if success else f"{tool_name} 执行失败",
+                                "msg_type": "success" if success else "warning",
+                                "timestamp": event["timestamp"],
+                            })
+                            # 逐条发送 finding 事件，让前端 findings state 正确更新
+                            for f in raw_findings:
+                                await manager.send_json(cid, {
+                                    "type": "finding",
+                                    "timestamp": event["timestamp"],
+                                    **f,  # 直接展开 finding dict（type, ports, detail, severity 等）
+                                })
+
+                        # phase → message
+                        elif event.get("type") == "phase":
+                            await manager.send_json(cid, {
+                                "type": "message",
+                                "text": event.get("message", f"阶段: {event.get('phase')}"),
+                                "msg_type": "info",
+                                "timestamp": event["timestamp"],
+                            })
+
+                        # reflection → message
+                        elif event.get("type") == "reflection":
+                            summary = event.get("summary", "")
+                            if summary:
+                                await manager.send_json(cid, {
+                                    "type": "message",
+                                    "text": f"反思: {summary[:200]}",
+                                    "msg_type": "info",
+                                    "timestamp": event["timestamp"],
+                                })
+
                         # 如果是完成或错误事件，结束循环
                         if event.get("type") in ["complete", "error"]:
                             break

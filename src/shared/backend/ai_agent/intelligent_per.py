@@ -140,18 +140,49 @@ class IntelligentPERAgent:
         
         logger.info("IntelligentPERAgent (增强版) 初始化完成")
     
+    # 所有工具定义（含描述），运行时按可用性过滤
+    _ALL_TOOL_DEFS = [
+        {"name": "nmap_scan",      "description": "端口扫描，发现开放端口和服务",     "category": "recon"},
+        {"name": "whatweb_scan",   "description": "Web技术栈识别",                   "category": "recon"},
+        {"name": "nuclei_scan",    "description": "基于模板的漏洞扫描",               "category": "vuln"},
+        {"name": "sqlmap_scan",    "description": "SQL注入检测和利用",               "category": "vuln"},
+        {"name": "nikto_scan",     "description": "Web服务器漏洞扫描",               "category": "vuln"},
+        {"name": "dirsearch_scan", "description": "目录和文件爆破",                   "category": "recon"},
+        {"name": "httpx_probe",    "description": "HTTP服务探测",                    "category": "recon"},
+        {"name": "xsstrike_scan",  "description": "XSS漏洞检测",                     "category": "vuln"},
+        {"name": "commix_scan",    "description": "命令注入检测",                     "category": "vuln"},
+        {"name": "subfinder_scan", "description": "子域名发现",                       "category": "recon"},
+    ]
+
     def _get_tool_definitions(self) -> List[Dict[str, Any]]:
-        """获取工具定义（包含技能）"""
+        """获取工具定义，只保留真实可用的工具 + 所有技能"""
+        # 获取可用工具集合
+        available_set = set()
+        try:
+            from ..tools.unified_executor_final import UnifiedExecutor
+            ex = UnifiedExecutor()
+            avail_map = ex._check_tool_availability()
+            available_set = {k for k, v in avail_map.items() if v}
+        except Exception:
+            pass
+
+        # 工具名到 executor key 的映射
+        tool_name_map = {
+            "nmap_scan": "nmap",
+            "whatweb_scan": "whatweb",
+            "nuclei_scan": "nuclei",
+            "sqlmap_scan": "sqlmap",
+            "nikto_scan": "nikto",
+            "dirsearch_scan": "dirsearch",
+            "httpx_probe": "httpx",
+            "xsstrike_scan": "xsstrike",
+            "commix_scan": "commix",
+            "subfinder_scan": "subfinder",
+        }
+
         tools = [
-            {"name": "nmap_scan", "description": "端口扫描，发现开放端口和服务", "category": "recon"},
-            {"name": "whatweb_scan", "description": "Web技术栈识别", "category": "recon"},
-            {"name": "nuclei_scan", "description": "基于模板的漏洞扫描", "category": "vuln"},
-            {"name": "sqlmap_scan", "description": "SQL注入检测和利用", "category": "vuln"},
-            {"name": "nikto_scan", "description": "Web服务器漏洞扫描", "category": "vuln"},
-            {"name": "dirsearch_scan", "description": "目录和文件爆破", "category": "recon"},
-            {"name": "httpx_probe", "description": "HTTP服务探测", "category": "recon"},
-            {"name": "ffuf_scan", "description": "模糊测试，目录/DNS/子域名", "category": "recon"},
-            {"name": "subfinder_scan", "description": "子域名发现", "category": "recon"},
+            t for t in self._ALL_TOOL_DEFS
+            if tool_name_map.get(t["name"], t["name"]) in available_set
         ]
         
         # 添加技能作为工具
@@ -469,6 +500,7 @@ class IntelligentPERAgent:
 - 目标: {target}
 - 迭代: {iteration}/{self.ctx.max_iterations}
 - 已收集信息: {collected if collected != '{}' else '无'}{budget_hint}
+- 已执行任务（**不要重复这些**）: {', '.join(list({t['task'] for t in self.ctx.history})) or '无'}
 
 ## 信息缺口
 {json.dumps(gaps_data, ensure_ascii=False, indent=2) if gaps_data else '需要发现目标的开放端口和服务'}
@@ -479,10 +511,11 @@ class IntelligentPERAgent:
 ## 任务
 **重要：目标是 {target}，必须扫描这个目标！**
 
-选择 1-2 个最需要执行的扫描任务（必须包含 target 参数）：
+选择 1-2 个**尚未执行过**的扫描任务（必须包含 target 参数）：
 1. 如果是第一次迭代，优先执行 nmap_scan 发现端口
-2. 如果已发现端口，根据服务选择后续扫描
-3. 如果发现漏洞迹象，使用对应的 skill_xxx 技能
+2. 如果已发现端口，根据服务选择**新的**漏洞检测技能
+3. 如果某技能已失败，换其他技能，不要重试
+4. 如果已发现漏洞，可以停止或补充其他类型检测
 4. 每个任务必须指定 target 参数为 {target}
 
 请以 JSON 格式返回计划:
@@ -496,37 +529,48 @@ class IntelligentPERAgent:
         return prompt
     
     def _get_planner_system_prompt(self) -> str:
-        """Planner 系统提示词"""
-        return """你是一个专业的渗透测试规划专家。你的职责是:
+        """Planner 系统提示词（动态注入可用工具列表）"""
+        # 只列出真实可用的普通工具
+        regular_tools = [t["name"] for t in self.tools if not t.get("is_skill")]
+        tools_str = ", ".join(regular_tools) if regular_tools else "（无可用工具）"
+
+        return f"""你是一个专业的渗透测试规划专家。你的职责是:
 1. 分析当前收集的信息
 2. 识别信息缺口
 3. 选择最合适的工具来填补缺口
 4. 生成执行计划
 
-渗透测试阶段:
-1. 信息收集: nmap_scan, whatweb_scan, dirsearch_scan
-2. 漏洞扫描: nuclei_scan, sqlmap_scan
-3. 漏洞利用: 
-   - skill_sqli_basic: SQL注入基础检测
-   - skill_sqli_union: SQL注入UNION利用
-   - skill_sqli_time_blind: SQL注入时间盲注检测
-   - skill_xss_reflected: 反射型XSS检测
-   - skill_auth_bypass_sql: SQL认证绕过
-   - skill_auth_bruteforce: 认证暴力破解
-   - skill_rce_command_injection: 命令注入检测
-   - skill_lfi_basic: 本地文件包含检测
-   - skill_dvwa_sqli: DVWA SQL注入利用
-   - skill_dvwa_xss: DVWA XSS利用
-   - skill_dvwa_bruteforce: DVWA暴力破解
+当前可用的扫描工具（只能选这些，不要选其他工具）:
+{tools_str}
+
+可用的技能工具（skill_ 前缀）:
+- skill_sqli_basic: SQL注入基础检测
+- skill_sqli_union: SQL注入UNION利用
+- skill_sqli_time_blind: SQL注入时间盲注
+- skill_xss_reflected: 反射型XSS检测
+- skill_xss_stored: 存储型XSS检测
+- skill_auth_bypass_sql: SQL认证绕过
+- skill_auth_bruteforce: 认证暴力破解
+- skill_rce_command_injection: 命令注入检测
+- skill_lfi_basic: 本地文件包含检测
+- skill_csrf_testing: CSRF漏洞检测
+- skill_xxe_testing: XXE漏洞检测
+- skill_ssrf_testing: SSRF漏洞检测
+- skill_file_upload_testing: 文件上传漏洞
+- skill_idor_testing: IDOR越权检测
+- skill_ssti_testing: 模板注入检测
+- skill_dvwa_sqli: DVWA SQL注入
+- skill_dvwa_xss: DVWA XSS
+- skill_dvwa_bruteforce: DVWA暴力破解
 
 重要规则:
-- 第一次迭代执行信息收集 (nmap_scan, whatweb_scan)
-- 发现Web应用后执行漏洞扫描 (nuclei_scan)
-- 发现SQL注入迹象后使用 skill_sqli_* 技能
-- 发现登录页面后尝试 skill_auth_bypass_sql 或 skill_auth_bruteforce
+- 只使用上面列出的可用工具，不要使用未列出的工具
+- 第一次迭代优先执行 nmap_scan
+- 发现Web应用后，使用 skill_* 技能进行漏洞检测
 - 针对 DVWA 使用 skill_dvwa_* 系列技能
-- 不要执行 get_tool_status 等管理工具
-- 每次迭代选择 1-2 个工具执行"""
+- 针对 pikachu 靶场优先测试: skill_csrf_testing, skill_xss_reflected, skill_sqli_basic
+- **绝对不要重复执行已经执行过且失败的任务**
+- 每次迭代选择 1-2 个【未执行过的】任务"""
     
     def _parse_plan(self, response) -> List[Task]:
         """解析 LLM 返回的计划"""
@@ -870,23 +914,32 @@ class IntelligentPERAgent:
     
     def _get_reflector_system_prompt(self) -> str:
         """Reflector 系统提示词"""
-        return """你是一个渗透测试结果分析专家。你的职责是:
+        executed = list({t["task"] for t in self.ctx.history})
+        executed_str = ", ".join(executed) if executed else "无"
+        findings_count = len([f for f in self.ctx.findings if f.get("type") != "open_ports"])
+        return f"""你是一个渗透测试结果分析专家。你的职责是:
 1. 分析扫描结果，提取有价值的信息
 2. 评估测试目标的完成度
 3. 提出后续建议
+
+已执行任务（不要再建议重复执行这些）: {executed_str}
+当前发现漏洞数量: {findings_count}
 
 分析原则:
 - 关注开放的端口和服务
 - 关注发现的漏洞和安全问题
 - 评估风险等级
-- 考虑是否需要深入测试
+- 已经失败的任务不要重复执行
+
+目标达成标准（满足任意一条即可）:
+- 发现了任意可确认的漏洞（CSRF/XSS/SQLi/RCE/LFI等）
+- 完成了对目标的全面扫描且无新发现
+- 已执行 3 次或以上任务且结果趋于重复
 
 重要规则:
-- 只有完成漏洞利用才算目标达成
-- 发现Web应用后需要继续进行漏洞扫描
-- 发现数据库端口后需要尝试SQL注入
-- 发现登录页面后需要尝试暴力破解
-- 不要轻易说目标达成或无需继续"""
+- 如果已经发现漏洞，说"目标已达成"，不要继续测试同一漏洞
+- 如果某个工具连续失败 2 次，不要再建议使用它
+- 不要建议重复执行 {executed_str} 中的任务"""
     
     # ==================== 辅助方法 ====================
     
@@ -906,7 +959,8 @@ class IntelligentPERAgent:
             return
         
         if task.tool == "nmap_scan":
-            self.ctx.collected_info["ports"] = output.get("ports", [])
+            ports = output.get("ports", [])
+            self.ctx.collected_info["ports"] = ports
             self.ctx.collected_info["target"] = self.ctx.target
         
         elif task.tool == "whatweb_scan":
@@ -929,6 +983,17 @@ class IntelligentPERAgent:
         findings = []
         output = result.get("output", {})
         
+        # 技能执行结果：vulnerable=True 就是一个 finding
+        if result.get("is_skill") and result.get("vulnerable"):
+            skill_id = result.get("skill_id", "")
+            findings.append({
+                "type": skill_id,
+                "severity": self._get_skill_severity(skill_id),
+                "evidence": output.get("evidence", "") if isinstance(output, dict) else "",
+                "target": self.ctx.target,
+            })
+            return findings
+        
         if isinstance(output, dict):
             # 端口发现
             if "ports" in output:
@@ -937,7 +1002,8 @@ class IntelligentPERAgent:
                     findings.append({
                         "type": "open_ports",
                         "count": len(ports),
-                        "ports": [p.get("port") for p in ports[:5]]
+                        # 保留完整端口对象 {port, service, state}
+                        "ports": ports if isinstance(ports[0], dict) else [{"port": p} for p in ports]
                     })
             
             # 漏洞发现
@@ -985,33 +1051,181 @@ class IntelligentPERAgent:
         return schemas
     
     def _generate_report(self) -> str:
-        """生成最终报告"""
-        lines = [
-            "# 渗透测试报告",
-            "",
-            f"**目标**: {self.ctx.target}",
-            f"**执行时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            f"**迭代次数**: {self.ctx.iteration}",
-            f"**RAG 查询次数**: {self.ctx.rag_queries}",
-            f"**Token 消耗**: {self.ctx.budget_used}",
-            "",
-            "## 收集的信息",
-            ""
-        ]
-        
-        for key, value in self.ctx.collected_info.items():
-            lines.append(f"- **{key}**: {json.dumps(value, ensure_ascii=False)[:200]}")
-        
-        lines.extend([
-            "",
-            "## 发现",
-            ""
-        ])
-        
-        if self.ctx.findings:
-            for i, f in enumerate(self.ctx.findings[:10], 1):
-                lines.append(f"{i}. {json.dumps(f, ensure_ascii=False)[:200]}")
+        """生成结构化可读报告"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        target = self.ctx.target
+
+        # ── 整理端口 ──────────────────────────────────────────
+        ports = self.ctx.collected_info.get("ports", [])
+        port_lines = []
+        for p in ports:
+            if isinstance(p, dict):
+                port_lines.append(
+                    f"  - **{p.get('port')}**/{p.get('service','?')}  状态: {p.get('state','open')}"
+                )
+            else:
+                port_lines.append(f"  - **{p}**")
+
+        # ── 整理漏洞发现 ──────────────────────────────────────
+        SEV_CN = {
+            "critical": "严重", "high": "高危",
+            "medium": "中危", "low": "低危", "info": "信息",
+        }
+        SEV_EMOJI = {
+            "critical": "🔴", "high": "🟠",
+            "medium": "🟡", "low": "🔵", "info": "⚪",
+        }
+        TYPE_CN = {
+            "csrf_testing":           "CSRF 跨站请求伪造",
+            "sqli_basic":             "SQL 注入",
+            "sqli_union":             "SQL 联合注入",
+            "sqli_time_blind":        "SQL 时间盲注",
+            "xss_reflected":          "反射型 XSS",
+            "xss_stored":             "存储型 XSS",
+            "auth_bypass_sql":        "SQL 认证绕过",
+            "auth_bruteforce":        "暴力破解",
+            "rce_command_injection":  "远程命令执行 (RCE)",
+            "lfi_basic":              "本地文件包含 (LFI)",
+            "xxe_testing":            "XML 外部实体 (XXE)",
+            "ssrf_testing":           "服务器端请求伪造 (SSRF)",
+            "file_upload_testing":    "文件上传漏洞",
+            "idor_testing":           "越权访问 (IDOR)",
+            "ssti_testing":           "模板注入 (SSTI)",
+            "deserialization_testing":"反序列化漏洞",
+            "nosql_injection":        "NoSQL 注入",
+            "waf_detect":             "WAF 检测",
+        }
+
+        vuln_findings = [f for f in self.ctx.findings if f.get("type") != "open_ports"]
+        vuln_blocks = []
+        for i, f in enumerate(vuln_findings, 1):
+            ftype    = f.get("type", "unknown")
+            sev      = f.get("severity", "info")
+            name_cn  = TYPE_CN.get(ftype, ftype.replace("_", " ").upper())
+            emoji    = SEV_EMOJI.get(sev, "⚪")
+            sev_cn   = SEV_CN.get(sev, sev)
+            evidence = f.get("evidence", "")
+            # 把 evidence 里的换行整理成缩进列表
+            ev_lines = []
+            for line in evidence.splitlines():
+                line = line.strip()
+                if line:
+                    ev_lines.append(f"    - {line}")
+            ev_block = "\n".join(ev_lines) if ev_lines else "    - （无详细证据）"
+            vuln_blocks.append(
+                f"### {i}. {emoji} {name_cn}  [{sev_cn}]\n"
+                f"  - **目标**: `{f.get('target', target)}`\n"
+                f"  - **证据**:\n{ev_block}"
+            )
+
+        # ── 整理执行任务 ──────────────────────────────────────
+        TASK_CN = {
+            "nmap_scan":   "端口扫描 (nmap)",
+            "nikto_scan":  "Web 漏洞扫描 (nikto)",
+            "sqlmap_scan": "SQL 注入扫描 (sqlmap)",
+        }
+        seen_tasks = {}
+        for h in self.ctx.history:
+            name = h.get("task", "unknown")
+            seen_tasks[name] = h.get("success", False)
+
+        task_lines = []
+        for name, success in seen_tasks.items():
+            display = TASK_CN.get(name, name)
+            if name.startswith("skill_"):
+                skill_id = name[6:]
+                display = TYPE_CN.get(skill_id, skill_id.replace("_", " ").upper()) + " 技能"
+            status = "✅ 成功" if success else "❌ 无发现"
+            task_lines.append(f"  - {display}  {status}")
+
+        # ── 风险评级 ──────────────────────────────────────────
+        sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        for f in vuln_findings:
+            s = f.get("severity", "info")
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+
+        if sev_counts["critical"] > 0:
+            risk_level, risk_desc = "严重 🔴", "存在严重漏洞，建议立即修复，可能被攻击者完全控制系统。"
+        elif sev_counts["high"] > 0:
+            risk_level, risk_desc = "高危 🟠", "存在高危漏洞，建议尽快修复，可能导致数据泄露或系统被控。"
+        elif sev_counts["medium"] > 0:
+            risk_level, risk_desc = "中危 🟡", "存在中危漏洞，建议在近期安排修复计划。"
+        elif sev_counts["low"] > 0:
+            risk_level, risk_desc = "低危 🔵", "存在低危漏洞，风险较小，建议在版本迭代时修复。"
         else:
-            lines.append("暂无重要发现")
-        
-        return "\n".join(lines)
+            risk_level, risk_desc = "安全 ✅", "未发现明显漏洞，但建议保持定期安全评估。"
+
+        # ── 修复建议 ──────────────────────────────────────────
+        FIX_ADVICE = {
+            "csrf_testing":           "在所有表单和 AJAX 请求中加入 CSRF Token 验证；使用 SameSite Cookie 属性。",
+            "sqli_basic":             "使用参数化查询（Prepared Statement）替代字符串拼接；对用户输入进行严格过滤。",
+            "sqli_union":             "使用 ORM 框架或参数化查询；限制数据库账户权限。",
+            "sqli_time_blind":        "同 SQL 注入修复建议，另需设置合理的数据库查询超时。",
+            "xss_reflected":          "对所有输出进行 HTML 实体编码；设置 Content-Security-Policy 响应头。",
+            "xss_stored":             "存储前进行输入过滤，输出时进行 HTML 编码；启用 CSP。",
+            "auth_bypass_sql":        "使用参数化查询处理登录逻辑；不要将用户输入直接拼接到 SQL。",
+            "auth_bruteforce":        "启用账户锁定策略；增加验证码；使用多因素认证。",
+            "rce_command_injection":  "避免将用户输入传入系统命令；使用白名单验证；使用安全 API 替代 shell 调用。",
+            "lfi_basic":              "禁止用户控制文件路径参数；使用白名单限制可访问文件范围。",
+            "xxe_testing":            "禁用 XML 解析器的外部实体功能（DTD/外部实体）。",
+            "ssrf_testing":           "对内部 URL 请求进行白名单过滤；禁止访问内网 IP 段。",
+            "file_upload_testing":    "验证文件类型和内容（MIME + 魔术字节）；上传后重命名并存储于 Web 根目录外。",
+            "idor_testing":           "在服务端验证资源所有权；不要依赖前端隐藏 ID。",
+            "ssti_testing":           "避免将用户输入直接渲染为模板；使用沙箱模板引擎。",
+        }
+        advice_lines = []
+        for f in vuln_findings:
+            ftype = f.get("type", "")
+            if ftype in FIX_ADVICE:
+                name_cn = TYPE_CN.get(ftype, ftype)
+                advice_lines.append(f"- **{name_cn}**: {FIX_ADVICE[ftype]}")
+
+        # ── 拼装完整报告 ──────────────────────────────────────
+        sections = []
+        sections.append(f"# 渗透测试报告\n")
+        sections.append(
+            f"| 项目 | 详情 |\n"
+            f"|------|------|\n"
+            f"| 目标 | `{target}` |\n"
+            f"| 测试时间 | {now} |\n"
+            f"| 迭代次数 | {self.ctx.iteration} 次 |\n"
+            f"| 整体风险 | {risk_level} |"
+        )
+
+        sections.append(f"\n---\n\n## 一、开放端口")
+        if port_lines:
+            sections.append("\n".join(port_lines))
+        else:
+            sections.append("  - 未发现开放端口")
+
+        sections.append(f"\n## 二、漏洞发现（共 {len(vuln_findings)} 项）")
+        if vuln_blocks:
+            sections.append("\n\n".join(vuln_blocks))
+        else:
+            sections.append("  未发现漏洞。")
+
+        sections.append(f"\n## 三、风险评估\n\n{risk_desc}\n\n"
+            f"| 严重程度 | 数量 |\n"
+            f"|--------|------|\n"
+            f"| 🔴 严重 | {sev_counts['critical']} |\n"
+            f"| 🟠 高危 | {sev_counts['high']} |\n"
+            f"| 🟡 中危 | {sev_counts['medium']} |\n"
+            f"| 🔵 低危 | {sev_counts['low']} |\n"
+            f"| ⚪ 信息 | {sev_counts['info']} |"
+        )
+
+        sections.append(f"\n## 四、修复建议")
+        if advice_lines:
+            sections.append("\n".join(advice_lines))
+        else:
+            sections.append("  无具体修复建议（未发现可利用漏洞）。")
+
+        sections.append(f"\n## 五、执行过程")
+        if task_lines:
+            sections.append("\n".join(task_lines))
+        else:
+            sections.append("  - 无执行记录")
+
+        sections.append(f"\n---\n*报告由 ClawAI 自动生成 · {now}*")
+
+        return "\n\n".join(sections)

@@ -6,9 +6,12 @@ import { USE_MOCK_DATA } from './config';
 
 // 插件状态枚举
 export const PluginStatus = {
+  ACTIVE: 'active',
   INSTALLED: 'installed',
   ENABLED: 'enabled',
+  INACTIVE: 'inactive',
   DISABLED: 'disabled',
+  AVAILABLE: 'available',
   UPDATING: 'updating',
   ERROR: 'error'
 };

@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useScan } from '../context/ScanContext';
+import { usePERAgentContext } from '../context/PERAgentContext';
 import {
   Target, Play, Square, Shield, Activity, AlertTriangle,
   CheckCircle, Cpu, Zap, Clock, RefreshCw, ChevronRight,
@@ -23,8 +24,7 @@ import StatCard    from '../components/shared/StatCard';
 import SectionHeader from '../components/shared/SectionHeader';
 import PERPanel    from '../components/PER/PERPanel';
 import ScanHistory from '../components/ScanHistory';
-import { api }     from '../services/apiClient';
-import attackService from '../services/attackService';
+import { api }     from '../services/apiClient'; // kept for future use
 
 // ─── 严重程度颜色 ────────────────────────────────────────────────────────────
 const SEV_COLOR = {
@@ -132,10 +132,10 @@ const FindingsPieChart = ({ data }) => {
 
 // ─── 主组件 ───────────────────────────────────────────────────────────────────
 const Dashboard = () => {
-  const { startScan, scanHistory, scanStatus } = useScan();
+  const { scanHistory } = useScan();
+  const { isRunning, tasks, findings: perFindings, phase, status: wsStatus } = usePERAgentContext();
 
   const [target,       setTarget]       = useState('');
-  const [scanMode,     setScanMode]     = useState('full');
   const [loading,      setLoading]      = useState(false);
   const [perAutoStart, setPerAutoStart] = useState(false);
   const [connected,    setConnected]    = useState(false);
@@ -149,90 +149,85 @@ const Dashboard = () => {
     critical: 0, high: 0, medium: 0, low: 0, info: 0,
   });
 
-  const pollRef = useRef(null);
+  const _unusedRef = useRef(null);
 
-  // ── 拉取后端数据 ────────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    try {
-      const [healthRes, scansRes] = await Promise.allSettled([
-        api.health.check(),
-        api.scans?.list?.({ limit: 5 }),
-      ]);
-
-      if (healthRes.status === 'fulfilled') setConnected(true);
-
-      if (scansRes.status === 'fulfilled' && scansRes.value?.data) {
-        const scans = scansRes.value.data;
-        const running   = scans.filter(s => s.status === 'running').length;
-        const completed = scans.filter(s => s.status === 'completed').length;
-        setStats(prev => ({ ...prev, total: scans.length, running, completed }));
-        setActiveAgents(scans.filter(s => s.status === 'running').slice(0, 5).map(s => ({
-          target: s.target, status: s.status, progress: s.progress,
-        })));
-      }
-    } catch {
-      setConnected(false);
-    }
-  }, []);
+  // WebSocket 连接状态直接从 PERAgentContext 读取
+  useEffect(() => {
+    setConnected(wsStatus === 'connected' || wsStatus === 'running');
+  }, [wsStatus]);
 
   // ── 本地扫描历史（从 ScanContext 同步）──────────────────────────────────────
   useEffect(() => {
-    // 从历史统计发现分布
     const fc = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    let completed = 0;
+
     scanHistory.forEach(s => {
+      if (s.success) completed++;
+
+      // PER 格式：findings 数组，每项有 severity 字段
+      const findings = s.findings || [];
+      findings.forEach(f => {
+        if (f.type === 'open_ports') return;
+        const sev = f.severity || 'info';
+        if (fc[sev] !== undefined) fc[sev]++;
+      });
+
+      // 旧格式兼容：vulnerabilities 对象 {critical: N, high: N, ...}
       if (s.vulnerabilities) {
         Object.entries(s.vulnerabilities).forEach(([k, v]) => {
           if (fc[k] !== undefined) fc[k] += (v || 0);
         });
       }
     });
+
     setFindings(fc);
     setStats(prev => ({
       ...prev,
-      total: scanHistory.length,
-      findings: Object.values(fc).reduce((a, b) => a + b, 0),
+      total:     scanHistory.length,
+      completed,
+      findings:  Object.values(fc).reduce((a, b) => a + b, 0),
     }));
   }, [scanHistory]);
 
-  // ── 轮询后端 ────────────────────────────────────────────────────────────────
+  // ── 活动代理：从 PERAgentContext 实时同步 ──────────────────────────────────
   useEffect(() => {
-    fetchData();
-    pollRef.current = setInterval(fetchData, 10_000);
-    return () => clearInterval(pollRef.current);
-  }, [fetchData]);
+    const currentTarget = sessionStorage.getItem('per_current_target') || '';
+    if (isRunning && currentTarget) {
+      const runningCount = tasks.filter(t => t.status === 'running').length;
+      setActiveAgents([{
+        target: currentTarget,
+        status: 'running',
+        progress: tasks.length > 0
+          ? tasks.filter(t => t.status === 'completed').length / tasks.length
+          : undefined,
+        phase,
+      }]);
+      setStats(prev => ({ ...prev, running: 1 }));
+    } else if (!isRunning) {
+      setActiveAgents([]);
+      setStats(prev => ({ ...prev, running: 0 }));
+    }
+  }, [isRunning, tasks, phase]);
 
   // ── 快速扫描（通过 ScanContext 驱动）──────────────────────────────────────
-  const handleScan = useCallback(async () => {
+  const handleScan = useCallback(() => {
     if (!target.trim() || loading) return;
     setLoading(true);
-    setPerAutoStart(false); // 先重置，确保 effect 能触发
-    setActiveTab('per');   // 自动切到 P-E-R 控制台
+    setPerAutoStart(false);          // 先重置确保 effect 能重新触发
+    setActiveTab('per');             // 切到 P-E-R 控制台
     setActivity(prev => [{
       type: 'scan',
       message: `启动扫描: ${target.trim()}`,
       target: target.trim(),
       time: new Date().toLocaleTimeString(),
     }, ...prev.slice(0, 49)]);
-    try {
-      setPerAutoStart(true); // 触发 PERPanel 自动启动
-      await startScan(target.trim(), scanMode);
-      setActivity(prev => [{
-        type: 'success',
-        message: `扫描完成: ${target.trim()}`,
-        target: target.trim(),
-        time: new Date().toLocaleTimeString(),
-      }, ...prev.slice(0, 49)]);
-    } catch (e) {
-      setActivity(prev => [{
-        type: 'error',
-        message: `扫描失败: ${e.message}`,
-        time: new Date().toLocaleTimeString(),
-      }, ...prev.slice(0, 49)]);
-    } finally {
+    // 用 setTimeout 保证 perAutoStart=false 先渲染，再设为 true
+    setTimeout(() => {
+      sessionStorage.setItem('per_current_target', target.trim()); // 供 AttackMap 读取
+      setPerAutoStart(true);
       setLoading(false);
-      setPerAutoStart(false);
-    }
-  }, [target, scanMode, loading, startScan]);
+    }, 50);
+  }, [target, loading]);
 
   const pieData = Object.entries(findings)
     .filter(([, v]) => v > 0)
@@ -264,8 +259,7 @@ const Dashboard = () => {
 
           {/* 模式选择 */}
           <select
-            value={scanMode}
-            onChange={e => setScanMode(e.target.value)}
+            value="full"
             disabled={loading}
             className="input-cyber text-sm w-full sm:w-36"
           >
@@ -277,10 +271,10 @@ const Dashboard = () => {
           {/* 扫描按钮 */}
           <button
             onClick={handleScan}
-            disabled={loading || scanStatus === 'scanning' || !target.trim()}
+            disabled={loading || !target.trim()}
             className="btn-cyber flex items-center justify-center gap-2 whitespace-nowrap text-sm"
           >
-            {(loading || scanStatus === 'scanning') ? (
+            {loading ? (
               <><RefreshCw size={14} className="animate-spin" /> 扫描中</>
             ) : (
               <><Play size={14} /> 开始扫描</>

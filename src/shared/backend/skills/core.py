@@ -237,9 +237,10 @@ class SkillExecutor:
         for key, value in safe_params.items():
             code = code.replace(f"{{{{{key}}}}}", str(value))
 
-        # 写入临时文件
+        # 写入临时文件（显式指定 utf-8 避免 Windows cp936 编码问题）
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
+            f.write('# -*- coding: utf-8 -*-\n')
             f.write(code)
             temp_path = f.name
 
@@ -249,6 +250,8 @@ class SkillExecutor:
                 shell=False,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
             return result.stdout + result.stderr

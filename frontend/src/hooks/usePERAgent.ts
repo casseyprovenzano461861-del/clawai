@@ -64,6 +64,9 @@ export const usePERAgent = (options = {}) => {
   const wsRef = useRef(null);
   const retryCountRef = useRef(0);
   const sessionIdRef = useRef(null);
+  const connectRef = useRef<() => void>(() => {}); // 存最新 connect，供 onclose 递归调用
+  /** 等待连接后自动发送的 pending 请求 */
+  const pendingStartRef = useRef<{ target: string; goal: string; mode: string } | null>(null);
   /** tool_event start 时间戳，key = tool name */
   const toolStartRef = useRef<Record<string, number>>({});
   const logCounterRef = useRef(0);
@@ -72,9 +75,9 @@ export const usePERAgent = (options = {}) => {
 
   // 连接 WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
+    // 已连接或正在连接中，不重复创建
+    const rs = wsRef.current?.readyState;
+    if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) return;
 
     setStatus('connecting');
 
@@ -85,9 +88,16 @@ export const usePERAgent = (options = {}) => {
       ws.onopen = () => {
         setStatus('connected');
         retryCountRef.current = 0;
-        
-        // 发送心跳
         ws.send(JSON.stringify({ action: 'ping' }));
+        // 如果有等待中的扫描请求，立即发送
+        if (pendingStartRef.current) {
+          const { target, goal, mode } = pendingStartRef.current;
+          pendingStartRef.current = null;
+          setStatus('running');
+          setPhase('idle');
+          setIteration(0);
+          ws.send(JSON.stringify({ action: 'start_per', target, goal: goal || undefined, mode }));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -106,14 +116,19 @@ export const usePERAgent = (options = {}) => {
       };
 
       ws.onclose = () => {
-        if (status === 'running') {
-          setStatus('connected');
-        }
-        
-        // 自动重连
+        setStatus(prev => prev === 'running' ? 'connected' : prev);
+
+        // 有限次重连，后端未启动时不无限循环
         if (retryCountRef.current < maxRetries) {
           retryCountRef.current++;
-          setTimeout(connect, retryDelay * retryCountRef.current);
+          const delay = retryDelay * retryCountRef.current;
+          setTimeout(() => {
+            // 只在还没有活跃连接时才重连
+            const cur = wsRef.current?.readyState;
+            if (cur !== WebSocket.OPEN && cur !== WebSocket.CONNECTING) {
+              connectRef.current();
+            }
+          }, delay);
         }
       };
 
@@ -122,7 +137,11 @@ export const usePERAgent = (options = {}) => {
       setStatus('error');
       onError?.(error);
     }
-  }, [maxRetries, retryDelay, status, onError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxRetries, retryDelay, onError]); // 去掉 status 依赖，避免每次状态变化重建 connect
+
+  // 始终保持 connectRef 指向最新版本
+  useEffect(() => { connectRef.current = connect; }, [connect]);
 
   // 处理事件
   const handleEvent = useCallback((event) => {
@@ -169,6 +188,7 @@ export const usePERAgent = (options = {}) => {
         setTasks(prev => prev.map((t, i) => 
           t.name === event.task ? { ...t, status: event.success ? 'completed' : 'failed' } : t
         ));
+        // task_result 里的 findings 也合并进去
         if (event.findings?.length) {
           setFindings(prev => [...prev, ...event.findings]);
         }
@@ -259,19 +279,23 @@ export const usePERAgent = (options = {}) => {
         break;
       }
 
-      case 'finding':
-        // 合并进 findings，避免标题重复
+      case 'finding': {
+        // 合并进 findings，支持带/不带 title 的格式
+        // 后端 findings 格式：{ type, ports, ... } 或 { type, title, severity, detail }
+        const { type: _evType, timestamp: _ts, ...findingData } = event;
         setFindings(prev => {
-          const exists = prev.some(f => f.title === event.title);
-          if (exists) return prev;
-          return [...prev, {
-            title: event.title,
-            severity: event.severity,
-            detail: event.detail,
-            timestamp: event.timestamp,
-          }];
+          // 去重：同类型且关键字段相同则跳过
+          const ftype = findingData.type || '';
+          const duplicate = prev.some(f => {
+            if (f.type !== ftype) return false;
+            if (ftype === 'open_ports') return JSON.stringify(f.ports) === JSON.stringify(findingData.ports);
+            return f.title === findingData.title && f.detail === findingData.detail;
+          });
+          if (duplicate) return prev;
+          return [...prev, findingData];
         });
         break;
+      }
 
       case 'progress':
         setProgress(Math.min(1, Math.max(0, event.percent ?? 0)));
@@ -286,15 +310,15 @@ export const usePERAgent = (options = {}) => {
   // 启动 P-E-R
   const startPentest = useCallback((target, goal = '', mode = 'full') => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      // 存储请求，等连接建立后在 onopen 里自动发送
+      pendingStartRef.current = { target, goal, mode };
       connect();
-      setTimeout(() => startPentest(target, goal, mode), 500);
       return;
     }
 
     setStatus('running');
     setPhase('idle');
     setIteration(0);
-    
     wsRef.current.send(JSON.stringify({
       action: 'start_per',
       target,
@@ -319,16 +343,19 @@ export const usePERAgent = (options = {}) => {
     setStatus('idle');
   }, []);
 
-  // 自动连接
+  // 自动连接 — 只在挂载时执行一次，不把 connect 放依赖数组
   useEffect(() => {
     if (autoConnect) {
       connect();
     }
-    
     return () => {
+      // 卸载时关闭，清空 ref 避免悬空引用
       wsRef.current?.close();
+      wsRef.current = null;
     };
-  }, [autoConnect, connect]);
+  // connect 用 ref 方式规避，只在 autoConnect 变化时重跑
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
   return {
     // 原有状态

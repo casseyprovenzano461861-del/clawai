@@ -264,8 +264,8 @@ class IntentRecognizer:
 
     # 目标提取正则
     TARGET_PATTERNS = [
-        r'(?:目标|target|扫描|scan|测试|test)\s*[::]?\s*(https?://[^\s]+)',
-        r'(https?://[^\s]+)',
+        r'(?:目标|target|扫描|scan|测试|test)\s*[::]?\s*(https?://[^\s\u4e00-\u9fff]+)',
+        r'(https?://[^\s\u4e00-\u9fff]+)',  # 排除中文字符，URL 只含 ASCII
         r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?::\d+)?)',
         r'(?:目标|target|扫描|scan|测试|test)\s*[::]?\s*([a-zA-Z0-9\-\.]+(?:\.\w+)?)',
         r'([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]+\.\w+)',
@@ -446,7 +446,7 @@ class ClawAIChatCLI:
             },
             "agent": {
                 "max_iterations": 10,
-                "timeout_duration": 30
+                "timeout_duration": 300
             }
         }
 
@@ -500,7 +500,7 @@ class ClawAIChatCLI:
                         },
                         "agent": {
                             "new_observation_length_limit": 2000,
-                            "timeout_duration": getattr(self.config, 'scan_timeout', 300) // 10,
+                            "timeout_duration": getattr(self.config, 'scan_timeout', 300),
                             "max_iterations": 10,
                             "use_skills": True,
                             "skill_selection_strategy": "hybrid",
@@ -691,6 +691,7 @@ class ClawAIChatCLI:
                 _session_cookie = self.config.get("cookie", "")
 
             results = {"target": target, "iterations": [], "final_summary": "", "status": "completed"}
+            self.session.findings.clear()  # 每次扫描前清空历史发现，避免污染
             self.agent.reset()
             # 将 Cookie 注入 agent 上下文，让 planner 生成的 curl 命令带上认证
             if _session_cookie:
@@ -1268,6 +1269,7 @@ class ClawAIChatCLI:
         借鉴 cc-haha 的 query.ts 主循环
         """
         from src.cli.tools import get_tool_registry, ToolResult
+        from src.cli.spinner import AsyncSpinner, SpinnerMode
 
         tool_registry = get_tool_registry()
         openai_tools = tool_registry.get_openai_schemas()
@@ -1296,10 +1298,7 @@ class ClawAIChatCLI:
                 return f"AI 响应失败: {e}"
 
             # 流式输出文本 + 收集 tool_calls 增量
-            # 阶段1: spinner 等待 → 阶段2: 纯文本流式输出
-            from rich.live import Live
-            from src.cli.spinner import AsyncSpinner, SpinnerMode
-
+            # 阶段1: spinner 等待 → 阶段2: 纯文本流式输出（直接逐 token print，避免 Windows 终端重复）
             text_parts: List[str] = []
             tool_calls_map: Dict[int, Dict] = {}  # index → {id, name, arguments}
             spinner_done = False
@@ -1308,32 +1307,34 @@ class ClawAIChatCLI:
             spinner = AsyncSpinner(console)
             spinner.start(mode=SpinnerMode.REQUESTING)
 
-            with Live(spinner.render_line(), console=console, refresh_per_second=8, vertical_overflow="visible") as live:
-                for chunk in stream:
-                    delta = chunk.choices[0].delta if chunk.choices else None
-                    if not delta:
-                        continue
-                    if delta.content:
-                        if not spinner_done:
-                            # 第一个 token → 停止 spinner, 切换到文本流
-                            spinner.stop()
-                            spinner_done = True
-                            live_text = Text("  > ", style="rgb(0,255,65)")
-                        text_parts.append(delta.content)
-                        live_text.append(delta.content)
-                        live.update(live_text)
-                    if delta.tool_calls:
-                        for tc_delta in delta.tool_calls:
-                            idx = tc_delta.index
-                            if idx not in tool_calls_map:
-                                tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
-                            if tc_delta.id:
-                                tool_calls_map[idx]["id"] = tc_delta.id
-                            if tc_delta.function:
-                                if tc_delta.function.name:
-                                    tool_calls_map[idx]["name"] = tc_delta.function.name
-                                if tc_delta.function.arguments:
-                                    tool_calls_map[idx]["arguments"] += tc_delta.function.arguments
+            for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if not delta:
+                    continue
+                if delta.content:
+                    if not spinner_done:
+                        # 第一个 token → 停止 spinner，打印前缀
+                        spinner.stop()
+                        spinner_done = True
+                        console.print("  > ", style="rgb(0,255,65)", end="")
+                    text_parts.append(delta.content)
+                    # 直接逐 token 输出，避免 Rich Live 在 Windows 终端重复打印
+                    console.print(delta.content, end="", highlight=False)
+                if delta.tool_calls:
+                    if not spinner_done:
+                        spinner.stop()
+                        spinner_done = True
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_calls_map:
+                            tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.id:
+                            tool_calls_map[idx]["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_calls_map[idx]["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_calls_map[idx]["arguments"] += tc_delta.function.arguments
 
             if not spinner_done:
                 spinner.stop()

@@ -5,18 +5,14 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Shield, Home, Target, Network, Activity,
-  History, FileText, Zap, Menu, X, User, LogOut, Terminal,
+  Shield, Home, FileText, Zap, Menu, X, User, Network,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { name: '仪表板',   href: '/',                icon: Home },
-  { name: '实时扫描', href: '/scan',             icon: Terminal },
-  { name: '实时监控', href: '/monitor',          icon: Activity },
-  { name: '知识图谱', href: '/knowledge-graph',  icon: Network },
-  { name: '扫描历史', href: '/history',          icon: History },
-  { name: '报告管理', href: '/reports',          icon: FileText },
-  { name: '插件管理', href: '/plugins',          icon: Zap },
+  { name: '仪表板',   href: '/',         icon: Home },
+  { name: '攻击地图', href: '/attack-map', icon: Network },
+  { name: '报告管理', href: '/reports',  icon: FileText },
+  { name: '插件商城', href: '/plugins',  icon: Zap },
 ];
 
 const NavLink = ({ item, active }) => {

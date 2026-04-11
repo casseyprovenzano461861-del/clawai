@@ -112,12 +112,37 @@ export function ScanProvider({ children }) {
     dispatch({ type: 'CLEAR_LAST' });
   }, []);
 
+  /** P-E-R 扫描完成后保存报告到历史 */
+  const savePERReport = useCallback((target, findings, report, tasks) => {
+    if (!target) return;
+    const record = {
+      id: `per_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      target,
+      success: true,
+      executionMode: 'per',
+      findings: findings || [],
+      tasks: tasks || [],
+      report,
+    };
+    // 直接写 localStorage（格式与 ReportGenerator 读取的格式一致）
+    try {
+      const existing = JSON.parse(localStorage.getItem('clawai_scan_history') || '[]');
+      const updated = [record, ...existing].slice(0, 50);
+      localStorage.setItem('clawai_scan_history', JSON.stringify(updated));
+    } catch (e) {
+      console.error('保存报告失败:', e);
+    }
+    dispatch({ type: 'SCAN_DONE', result: { target, findings, report, tasks }, record });
+  }, []);
+
   const value = {
     ...state,
     startScan,
     refreshHistory,
     selectScan,
     clearLastScan,
+    savePERReport,
   };
 
   return <ScanContext.Provider value={value}>{children}</ScanContext.Provider>;
