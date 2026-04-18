@@ -300,8 +300,140 @@ def _escape_html(text: str) -> str:
 # 便捷函数
 # ------------------------------------------------------------------
 
-def export_session(session, fmt: str = "markdown", filename: Optional[str] = None,
-                   export_dir: Optional[Path] = None) -> Path:
+def export_session(session, fmt: str = "markdown", filename: Optional[str] = None) -> Path:
+    """Exporter().export() 的模块级便捷包装，供 chat_cli 等模块直接导入使用。"""
+    return Exporter().export(session, fmt=fmt, filename=filename)
+
+
+def compare_sessions(session1, session2, export_dir: Optional[Path] = None) -> Path:
+    """
+    对比两次扫描会话，生成差异报告（Markdown）。
+
+    Args:
+        session1: 旧会话 (Session dataclass 或 dict)
+        session2: 新会话 (Session dataclass 或 dict)
+        export_dir: 可选导出目录
+
+    Returns:
+        对比报告文件路径
+    """
+    d1 = _session_to_dict(session1)
+    d2 = _session_to_dict(session2)
+
+    out_dir = export_dir or get_config().export_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sid1 = d1.get("session_id", "s1")[:12]
+    sid2 = d2.get("session_id", "s2")[:12]
+    path = out_dir / f"compare_{sid1}_vs_{sid2}_{ts}.md"
+
+    lines = _build_compare_markdown(d1, d2)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    logger.info(f"对比报告导出完成: {path}")
+    return path
+
+
+def _build_compare_markdown(d1: Dict[str, Any], d2: Dict[str, Any]) -> list:
+    """构建对比 Markdown 内容"""
+    f1: List[Dict] = d1.get("findings", [])
+    f2: List[Dict] = d2.get("findings", [])
+
+    def sev_cnt(findings):
+        cnt = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        for f in findings:
+            s = f.get("severity", "info").lower()
+            cnt[s] = cnt.get(s, 0) + 1
+        return cnt
+
+    cnt1 = sev_cnt(f1)
+    cnt2 = sev_cnt(f2)
+
+    t1 = d1.get("target", "未知")
+    t2 = d2.get("target", "未知")
+    same_target = t1 == t2
+
+    def _delta(a, b):
+        diff = b - a
+        if diff > 0:
+            return f"+{diff} ▲"
+        elif diff < 0:
+            return f"{diff} ▼"
+        return "—"
+
+    # 建立 findings 的 key 集合（用 type+title+location 作唯一标识）
+    def _key(f):
+        return (
+            (f.get("type") or ""),
+            (f.get("title") or f.get("name") or ""),
+            (f.get("location") or f.get("url") or ""),
+        )
+
+    keys1 = {_key(f) for f in f1}
+    keys2 = {_key(f) for f in f2}
+    new_keys = keys2 - keys1
+    fixed_keys = keys1 - keys2
+    persist_keys = keys1 & keys2
+
+    new_findings = [f for f in f2 if _key(f) in new_keys]
+    fixed_findings = [f for f in f1 if _key(f) in fixed_keys]
+
+    lines = [
+        "# ClawAI 扫描对比报告",
+        "",
+        f"| 字段 | 扫描 A | 扫描 B |",
+        f"|------|--------|--------|",
+        f"| **目标** | `{t1}` | `{t2}` |",
+        f"| **会话 ID** | `{d1.get('session_id','')[:20]}` | `{d2.get('session_id','')[:20]}` |",
+        f"| **阶段** | {d1.get('phase','')} | {d2.get('phase','')} |",
+        f"| **时间** | {d1.get('updated_at','')[:19]} | {d2.get('updated_at','')[:19]} |",
+        f"| **发现总数** | {len(f1)} | {len(f2)} ({_delta(len(f1), len(f2))}) |",
+        "",
+        "## 风险变化",
+        "",
+        "| 级别 | 扫描 A | 扫描 B | 变化 |",
+        "|------|--------|--------|------|",
+    ]
+
+    for sev in ("critical", "high", "medium", "low", "info"):
+        a, b = cnt1.get(sev, 0), cnt2.get(sev, 0)
+        lines.append(f"| {sev.upper()} | {a} | {b} | {_delta(a, b)} |")
+
+    lines += ["", "## 新增漏洞（仅出现在扫描 B）", ""]
+    if new_findings:
+        sorted_new = sorted(new_findings, key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "").lower(), 5))
+        for f in sorted_new:
+            sev = f.get("severity", "info").upper()
+            title = f.get("title") or f.get("name") or f.get("type", "未知")
+            loc = f.get("location") or f.get("url") or ""
+            lines.append(f"- `[{sev}]` **{title}**" + (f"  — `{loc}`" if loc else ""))
+    else:
+        lines.append("> 无新增漏洞，安全状况有所改善。")
+
+    lines += ["", "## 已修复漏洞（仅出现在扫描 A）", ""]
+    if fixed_findings:
+        sorted_fixed = sorted(fixed_findings, key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "").lower(), 5))
+        for f in sorted_fixed:
+            sev = f.get("severity", "info").upper()
+            title = f.get("title") or f.get("name") or f.get("type", "未知")
+            loc = f.get("location") or f.get("url") or ""
+            lines.append(f"- `[{sev}]` ~~{title}~~" + (f"  — `{loc}`" if loc else ""))
+    else:
+        lines.append("> 无已修复漏洞。")
+
+    lines += [
+        "",
+        f"## 持续存在的漏洞（共 {len(persist_keys)} 个）",
+        "",
+        f"> 这些问题在两次扫描中均存在，建议优先修复。" if persist_keys else "> 无持续性漏洞。",
+        "",
+        "---",
+        f"*对比报告由 ClawAI 自动生成 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
+    ]
+
+    return lines
     """
     快速导出会话结果。
 

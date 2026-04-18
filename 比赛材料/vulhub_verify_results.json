@@ -1,0 +1,92 @@
+[
+  {
+    "lab": "struts2/s2-045",
+    "skill": "cve_s2_045",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_s2_045', 'skill_name': 'Struts2 S2-045 RCE (CVE-2017-5638)', 'success': True, 'vulnerable': True, 'output': 'RCE_SUCCESS\\nuid=0(root) gid=0(root) groups=0(root)\\n', 'evidence': 'RCE_"
+  },
+  {
+    "lab": "struts2/s2-057",
+    "skill": "cve_s2_057",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_s2_057', 'skill_name': 'Struts2 S2-057 RCE (CVE-2018-11776)', 'success': True, 'vulnerable': True, 'output': 'RCE_SUCCESS\\nuid=0(root) gid=0(root) groups=0(root)\\n', 'evidence': 'RCE"
+  },
+  {
+    "lab": "thinkphp/5.0.23-rce",
+    "skill": "cve_thinkphp_rce",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_thinkphp_rce', 'skill_name': 'ThinkPHP 5.0.23 RCE', 'success': True, 'vulnerable': True, 'output': 'RCE_SUCCESS\\n方式: POST s=captcha\\nuid=33(www-data) gid=33(www-data) groups=33(www-d"
+  },
+  {
+    "lab": "weblogic/CVE-2023-21839",
+    "skill": "cve_weblogic_21839",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_weblogic_21839', 'skill_name': 'WebLogic CVE-2023-21839 IIOP JNDI 注入', 'success': True, 'vulnerable': False, 'output': 'WEBLOGIC_DETECTED version=12\\nEXPLOIT_ERROR: timed out\\n', 'ev"
+  },
+  {
+    "lab": "tomcat/CVE-2017-12615",
+    "skill": "cve_tomcat_12615",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_tomcat_12615', 'skill_name': 'Tomcat CVE-2017-12615 PUT JSP RCE', 'success': True, 'vulnerable': True, 'output': 'UPLOAD_STATUS: 201\\nWEBSHELL_UPLOADED\\nRCE_SUCCESS\\n命令输出: uid=0(root"
+  },
+  {
+    "lab": "php/CVE-2019-11043",
+    "skill": "cve_php_fpm_11043",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_php_fpm_11043', 'skill_name': 'PHP-FPM CVE-2019-11043 RCE 检测', 'success': True, 'vulnerable': False, 'output': '正常请求 /index.php → HTTP 200\\n漏洞探测 /index.php%0a → HTTP 404\\nPHP_FPM_DET"
+  },
+  {
+    "lab": "activemq/CVE-2022-41678",
+    "skill": "cve_activemq_41678",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_activemq_41678', 'skill_name': 'ActiveMQ CVE-2022-41678 Jolokia RCE', 'success': True, 'vulnerable': False, 'output': 'ACTIVEMQ_DETECTED\\n路径: /admin/\\nJOLOKIA_ERROR: HTTP Error 401: "
+  },
+  {
+    "lab": "jboss/CVE-2017-7504",
+    "skill": "cve_jboss_7504",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_jboss_7504', 'skill_name': 'JBoss CVE-2017-7504 反序列化 RCE', 'success': True, 'vulnerable': False, 'output': \"JBOSS_DETECTED\\n漏洞路径: /jbossmq-httpil/HTTPServerILServlet\\nCVE-2017-7504: "
+  },
+  {
+    "lab": "tomcat/tomcat8",
+    "skill": "cve_tomcat_12615",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_tomcat_12615', 'skill_name': 'Tomcat CVE-2017-12615 PUT JSP RCE', 'success': True, 'vulnerable': False, 'output': 'HTTP_ERROR: 403\\nTomcat PUT 被拒绝，可能未开启写权限或已修复\\n', 'evidence': None, "
+  },
+  {
+    "lab": "shiro/CVE-2016-4437",
+    "skill": "cve_shiro_550",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_shiro_550', 'skill_name': 'Apache Shiro CVE-2016-4437 检测 (Shiro-550)', 'success': True, 'vulnerable': False, 'output': 'SHIRO_DETECTED\\nApache Shiro RememberMe 反序列化漏洞 (CVE-2016-4437/"
+  },
+  {
+    "lab": "fastjson/1.2.24-rce",
+    "skill": "cve_fastjson_1224",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_fastjson_1224', 'skill_name': 'FastJSON 1.2.24 JNDI RCE', 'success': True, 'vulnerable': False, 'output': 'ERROR: timed out\\n', 'evidence': None, 'error': None}"
+  },
+  {
+    "lab": "fastjson/1.2.47-rce",
+    "skill": "cve_fastjson_1247",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_fastjson_1247', 'skill_name': 'FastJSON 1.2.47 RCE (loadClass 绕过)', 'success': True, 'vulnerable': False, 'output': 'ERROR: timed out\\n', 'evidence': None, 'error': None}"
+  },
+  {
+    "lab": "django/CVE-2022-34265",
+    "skill": "cve_django_34265",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_django_34265', 'skill_name': 'Django CVE-2022-34265 SQL 注入', 'success': True, 'vulnerable': False, 'output': 'SQLI_POSSIBLE\\n路径: /?date=xxxx\\'xxxx\\nHTTP 500 - SQL 错误触发服务器内部错误\\nCVE-20"
+  },
+  {
+    "lab": "flask/ssti",
+    "skill": "flask_ssti_exploit",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'flask_ssti_exploit', 'skill_name': 'Flask/Jinja2 SSTI RCE', 'success': True, 'vulnerable': False, 'output': 'SSTI_DETECTED\\n路径: /?name={{7*7}}\\n响应包含 49 (7*7=49)\\nRCE_ATTEMPT_ERROR: HTTP "
+  },
+  {
+    "lab": "geoserver/CVE-2024-36401",
+    "skill": "cve_geoserver_36401",
+    "status": "✓ RCE成功",
+    "output": "{'skill_id': 'cve_geoserver_36401', 'skill_name': 'GeoServer CVE-2024-36401 OGC eval RCE', 'success': True, 'vulnerable': True, 'output': \"GEOSERVER_DETECTED\\n尝试 CVE-2024-36401 OGC GetPropertyValue ev"
+  }
+]

@@ -21,6 +21,15 @@ _ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 _ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 _REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
+# 生产环境强制检查：禁止使用默认开发密钥
+_ENV = os.getenv("ENVIRONMENT", "development")
+_WEAK_KEYS = {"dev-jwt-secret-not-for-production", "secret", "changeme", ""}
+if _ENV == "production" and _SECRET_KEY in _WEAK_KEYS:
+    raise RuntimeError(
+        "FATAL: JWT_SECRET_KEY 未配置或使用了不安全的默认值。"
+        "生产环境必须通过环境变量 JWT_SECRET_KEY 设置强密钥（建议 openssl rand -hex 32）。"
+    )
+
 
 class AuthenticationManager:
     """认证管理器 - 提供 JWT 令牌操作和密码哈希"""

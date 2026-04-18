@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1080px; height: 1080px; overflow: hidden;
+  background: #0d2350;
+  font-family: 'Microsoft YaHei', 'Arial', sans-serif;
+  display: flex; align-items: center; justify-content: center;
+}
+.container {
+  display: flex; align-items: center; gap: 48px;
+}
+/* DeepSeek 官方风格 Logo */
+.logo-icon {
+  width: 180px; height: 180px;
+  flex-shrink: 0;
+}
+.logo-text-area { }
+.logo-text {
+  font-size: 96px;
+  font-weight: 700;
+  color: #5ab8f5;
+  letter-spacing: -2px;
+  line-height: 1;
+  /* 渐变文字 */
+  background: linear-gradient(135deg, #7ecef7 0%, #3a9de0 50%, #1e6bbf 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.logo-tagline {
+  font-size: 18px;
+  color: #5ab8f588;
+  letter-spacing: 3px;
+  margin-top: 8px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- DeepSeek D 形状 icon（SVG手绘，接近官方） -->
+  <svg class="logo-icon" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="dg1" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#7ecef7"/>
+        <stop offset="100%" stop-color="#1e6bbf"/>
+      </linearGradient>
+    </defs>
+    <!-- 外六边形 -->
+    <polygon points="90,10 160,50 160,130 90,170 20,130 20,50"
+      fill="none" stroke="url(#dg1)" stroke-width="3"/>
+    <!-- 内部 D 形箭头 -->
+    <path d="M 60 58 L 60 122 L 92 122 Q 128 122 128 90 Q 128 58 92 58 Z"
+      fill="url(#dg1)" opacity="0.9"/>
+    <!-- 内部镂空 -->
+    <path d="M 72 70 L 72 110 L 90 110 Q 116 110 116 90 Q 116 70 90 70 Z"
+      fill="#0d2350"/>
+    <!-- 右上角小箭头装饰 -->
+    <polygon points="120,44 140,44 140,64" fill="#5ab8f7" opacity="0.7"/>
+  </svg>
+
+  <div class="logo-text-area">
+    <div class="logo-text">DeepSeek</div>
+    <div class="logo-tagline">Into the Unknown</div>
+  </div>
+</div>
+</body>
+</html>

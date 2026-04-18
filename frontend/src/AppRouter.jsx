@@ -1,55 +1,76 @@
-/**
- * AppRouter — 路由配置
- */
-
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, Component } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 import AppShell from './components/layout/AppShell';
-import ErrorBoundary from './components/ErrorBoundary';
 import { PageLoadingSkeleton } from './components/Skeleton';
 import { ScanProvider } from './context/ScanContext';
 import { PERAgentProvider } from './context/PERAgentContext';
 
-const Dashboard    = lazy(() => import('./pages/Dashboard'));
-const AttackMap    = lazy(() => import('./pages/AttackMap'));
-const ReportGenerator = lazy(() => import('./components/ReportGenerator'));
-const PluginManager   = lazy(() => import('./components/PluginManager'));
-const Login        = lazy(() => import('./pages/Login'));
-const Register     = lazy(() => import('./pages/Register'));
+const Dashboard     = lazy(() => import('./pages/Dashboard'));
+const AttackMap     = lazy(() => import('./pages/AttackMap'));
+const Reports       = lazy(() => import('./pages/Reports'));
+const PluginManager = lazy(() => import('./components/PluginManager'));
 
 const Loader = () => <PageLoadingSkeleton />;
 
-const isAuthenticated = () => !!localStorage.getItem('access_token');
+/** 页面级错误边界：显示内联错误，不会跳转路由 */
+class PageErrorBoundary extends Component {
+  state = { hasError: false, error: null };
 
-const ProtectedRoute = ({ children }) => {
-  if (!isAuthenticated()) return <Navigate to="/login" replace />;
-  return children;
-};
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
 
-const wrap = (Component) => (
-  <Suspense fallback={<Loader />}>
-    <ProtectedRoute><Component /></ProtectedRoute>
-  </Suspense>
+  componentDidCatch(error, info) {
+    console.error('[PageErrorBoundary]', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-4 p-8">
+          <div className="text-red-400 text-4xl">⚠</div>
+          <p className="text-gray-300 font-mono text-sm">页面加载失败</p>
+          <p className="text-gray-600 text-xs max-w-md text-center break-all">
+            {this.state.error?.message}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-2 px-4 py-2 text-xs rounded-lg border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+          >
+            重试
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** 稳定包装：Suspense + 页面级错误边界，不会触发路由跳转 */
+const PageWrapper = ({ children }) => (
+  <PageErrorBoundary>
+    <Suspense fallback={<Loader />}>
+      {children}
+    </Suspense>
+  </PageErrorBoundary>
 );
 
 const AppRouter = () => (
   <Router>
     <ScanProvider>
       <PERAgentProvider>
-        <ErrorBoundary>
-          <Routes>
-            <Route path="/login"    element={<Suspense fallback={<Loader />}><Login /></Suspense>} />
-            <Route path="/register" element={<Suspense fallback={<Loader />}><Register /></Suspense>} />
-
-            <Route element={<AppShell />}>
-              <Route index          element={wrap(Dashboard)} />
-              <Route path="/attack-map" element={wrap(AttackMap)} />
-              <Route path="/reports"    element={wrap(ReportGenerator)} />
-              <Route path="/plugins"    element={wrap(PluginManager)} />
-            </Route>
-          </Routes>
-        </ErrorBoundary>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index              element={<PageWrapper><Dashboard /></PageWrapper>} />
+            <Route path="/attack-map" element={<PageWrapper><AttackMap /></PageWrapper>} />
+            <Route path="/reports"    element={<PageWrapper><Reports /></PageWrapper>} />
+            <Route path="/plugins"    element={<PageWrapper><PluginManager /></PageWrapper>} />
+          </Route>
+          <Route path="/login"    element={<Navigate to="/" replace />} />
+          <Route path="/register" element={<Navigate to="/" replace />} />
+          <Route path="*"         element={<Navigate to="/" replace />} />
+        </Routes>
       </PERAgentProvider>
     </ScanProvider>
   </Router>

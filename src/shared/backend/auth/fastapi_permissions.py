@@ -357,13 +357,27 @@ async def get_current_user(request: Request):
 
     if token:
         try:
+            # 检查 token 黑名单（已登出的 token）
+            import hashlib
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            try:
+                from ..api.v1.auth_fastapi import _token_blacklist
+                if token_hash in _token_blacklist:
+                    return None
+            except ImportError:
+                pass
+
             # 尝试使用auth_manager验证令牌
             from .authentication import auth_manager
             payload = auth_manager.verify_token(token)
 
-            # 提取用户信息
-            user_id = int(payload.get("sub"))
-            username = payload.get("username")
+            # 提取用户信息（sub = username，user_id 单独字段）
+            username = payload.get("sub") or payload.get("username", "")
+            raw_uid = payload.get("user_id") or payload.get("sub", "0")
+            try:
+                user_id = int(raw_uid)
+            except (ValueError, TypeError):
+                user_id = 0
             role = payload.get("role", "user")
 
             # 从数据库获取完整用户信息（如果需要）

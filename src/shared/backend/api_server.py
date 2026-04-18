@@ -91,7 +91,8 @@ executor = UnifiedExecutor(
     max_retries=2,
     execution_strategy=ExecutionStrategy.INTELLIGENT,
     enable_security=True,
-    require_real_execution=False
+    require_real_execution=False,
+    use_tool_executor_api=False  # 8082 服务不存在，跳过避免超时
 )
 unified_executor = executor  # 保持向后兼容别名
 

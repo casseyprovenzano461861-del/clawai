@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1080px; height: 1080px; overflow: hidden;
+  background: #08050f;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+.bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 40% 60%, #1a0830 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 70% 30%, #0d1040 0%, transparent 60%),
+    #08050f;
+}
+/* 标题 */
+.title-area {
+  position: absolute; top: 60px; left: 0; right: 0; text-align: center;
+}
+.title { font-size: 52px; font-weight: 900; color: #fff; }
+.bullets {
+  display: flex; justify-content: center; gap: 40px; margin-top: 16px;
+}
+.bullet { font-size: 22px; color: #ff6633; font-weight: 700; }
+.bullet::before { content: '● '; color: #ff4444; }
+
+/* 主视觉：两个仪表板 */
+.dashboard-wrap {
+  position: absolute; top: 180px; left: 60px; right: 60px; bottom: 120px;
+  display: flex; gap: 30px;
+}
+
+/* 左侧：速度仪表盘 */
+.gauge-panel {
+  flex: 1;
+  background: rgba(10,5,30,0.8);
+  border: 1px solid #8844ff44;
+  border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 30px;
+  position: relative; overflow: hidden;
+}
+.gauge-panel::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 80%, #8844ff11 0%, transparent 60%);
+}
+.gauge-label { font-size: 16px; color: #8844ffaa; letter-spacing: 3px; margin-bottom: 30px; }
+.gauge-svg { width: 280px; height: 200px; }
+.gauge-center-text {
+  text-align: center; margin-top: 20px;
+}
+.gauge-value { font-size: 56px; font-weight: 900; color: #ff4444; text-shadow: 0 0 20px #ff444488; }
+.gauge-unit { font-size: 16px; color: #ffffff66; }
+.gauge-note { font-size: 14px; color: #8844ffaa; letter-spacing: 2px; margin-top: 8px; }
+
+/* 右侧：雷达图面板 */
+.radar-panel {
+  flex: 1;
+  background: rgba(5,10,30,0.8);
+  border: 1px solid #0066ff44;
+  border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 30px;
+  position: relative; overflow: hidden;
+}
+.radar-panel::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 50%, #0066ff11 0%, transparent 60%);
+}
+.radar-label { font-size: 16px; color: #0088ffaa; letter-spacing: 3px; margin-bottom: 20px; }
+.radar-svg { width: 280px; height: 280px; }
+
+/* 底部说明 */
+.bottom-text {
+  position: absolute; bottom: 30px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 80px;
+}
+.bottom-item { text-align: center; }
+.bottom-big { font-size: 36px; font-weight: 900; color: #ff6633; text-shadow: 0 0 12px #ff663344; }
+.bottom-small { font-size: 16px; color: #ffffff66; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="title-area">
+  <div class="title">行业痛点</div>
+  <div class="bullets">
+    <span class="bullet">效率低</span>
+    <span class="bullet">漏洞覆盖不全</span>
+  </div>
+</div>
+
+<div class="dashboard-wrap">
+  <!-- 左：仪表盘 -->
+  <div class="gauge-panel">
+    <div class="gauge-label">人工渗透测试效率</div>
+    <svg class="gauge-svg" viewBox="0 0 280 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#00aaff"/>
+          <stop offset="50%" stop-color="#ffaa00"/>
+          <stop offset="100%" stop-color="#ff2200"/>
+        </linearGradient>
+      </defs>
+      <!-- 背景弧 -->
+      <path d="M 30 170 A 110 110 0 0 1 250 170" stroke="#ffffff11" stroke-width="18" fill="none" stroke-linecap="round"/>
+      <!-- 进度弧（低效率区域：约20%） -->
+      <path d="M 30 170 A 110 110 0 0 1 74 82" stroke="url(#g1)" stroke-width="18" fill="none" stroke-linecap="round"/>
+      <!-- 刻度 -->
+      <text x="20" y="185" font-size="14" fill="#ffffff44" font-family="Arial">0</text>
+      <text x="124" y="40" font-size="14" fill="#ffffff44" font-family="Arial" text-anchor="middle">50</text>
+      <text x="248" y="185" font-size="14" fill="#ffffff44" font-family="Arial">100</text>
+      <!-- 指针 -->
+      <line x1="140" y1="170" x2="76" y2="85" stroke="#ff4444" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="140" cy="170" r="8" fill="#ff4444" />
+      <circle cx="140" cy="170" r="4" fill="#fff" />
+      <!-- 危险区域标注 -->
+      <text x="140" y="130" font-size="12" fill="#ff666666" font-family="Arial" text-anchor="middle">低效率区</text>
+    </svg>
+    <div class="gauge-center-text">
+      <div class="gauge-value">18%</div>
+      <div class="gauge-unit">漏洞发现效率</div>
+      <div class="gauge-note">人工平均覆盖率</div>
+    </div>
+  </div>
+
+  <!-- 右：雷达图 -->
+  <div class="radar-panel">
+    <div class="radar-label">漏洞覆盖能力对比</div>
+    <svg class="radar-svg" viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 背景网格 -->
+      <polygon points="140,20 230,80 230,200 140,260 50,200 50,80" stroke="#0066ff22" stroke-width="1" fill="none"/>
+      <polygon points="140,50 207,97 207,183 140,230 73,183 73,97" stroke="#0066ff22" stroke-width="1" fill="none"/>
+      <polygon points="140,80 184,114 184,166 140,200 96,166 96,114" stroke="#0066ff22" stroke-width="1" fill="none"/>
+      <polygon points="140,110 161,131 161,149 140,170 119,149 119,131" stroke="#0066ff22" stroke-width="1" fill="none"/>
+      <!-- 轴线 -->
+      <line x1="140" y1="140" x2="140" y2="20" stroke="#0066ff22" stroke-width="1"/>
+      <line x1="140" y1="140" x2="230" y2="80" stroke="#0066ff22" stroke-width="1"/>
+      <line x1="140" y1="140" x2="230" y2="200" stroke="#0066ff22" stroke-width="1"/>
+      <line x1="140" y1="140" x2="140" y2="260" stroke="#0066ff22" stroke-width="1"/>
+      <line x1="140" y1="140" x2="50" y2="200" stroke="#0066ff22" stroke-width="1"/>
+      <line x1="140" y1="140" x2="50" y2="80" stroke="#0066ff22" stroke-width="1"/>
+      <!-- 人工测试数据（红色，覆盖率低） -->
+      <polygon points="140,90 180,115 178,168 140,195 105,168 102,118"
+        stroke="#ff4444" stroke-width="2" fill="rgba(255,68,68,0.15)"/>
+      <!-- 标签 -->
+      <text x="140" y="14" font-size="12" fill="#ffffff88" font-family="Arial" text-anchor="middle">SQL注入</text>
+      <text x="238" y="78" font-size="12" fill="#ffffff88" font-family="Arial">XSS</text>
+      <text x="234" y="210" font-size="12" fill="#ffffff88" font-family="Arial">命令注入</text>
+      <text x="140" y="274" font-size="12" fill="#ffffff88" font-family="Arial" text-anchor="middle">文件包含</text>
+      <text x="20" y="210" font-size="12" fill="#ffffff88" font-family="Arial">XXE</text>
+      <text x="26" y="78" font-size="12" fill="#ffffff88" font-family="Arial">SSRF</text>
+      <!-- 图例 -->
+      <rect x="60" y="245" width="12" height="3" fill="#ff4444" rx="1"/>
+      <text x="78" y="250" font-size="12" fill="#ff4444aa" font-family="Arial">人工测试覆盖</text>
+    </svg>
+  </div>
+</div>
+
+<div class="bottom-text">
+  <div class="bottom-item">
+    <div class="bottom-big">72h+</div>
+    <div class="bottom-small">人工完成一次测试平均耗时</div>
+  </div>
+  <div class="bottom-item">
+    <div class="bottom-big">18%</div>
+    <div class="bottom-small">漏洞类型平均覆盖率</div>
+  </div>
+  <div class="bottom-item">
+    <div class="bottom-big">60%</div>
+    <div class="bottom-small">结果依赖个人经验比例</div>
+  </div>
+</div>
+</body>
+</html>

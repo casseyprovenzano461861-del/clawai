@@ -150,7 +150,8 @@ class AIAgentOrchestrator:
                     execution_strategy=ExecutionStrategy.INTELLIGENT if ExecutionStrategy else None,
                     enable_security=True,
                     require_real_execution=False,  # 允许回退到模拟
-                    enable_strict_security=False
+                    enable_strict_security=False,
+                    use_tool_executor_api=False  # 8082 服务不存在，跳过避免超时
                 )
                 logger.info("UnifiedExecutor 初始化成功")
             except Exception as e:

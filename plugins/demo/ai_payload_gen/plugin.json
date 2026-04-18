@@ -1,0 +1,60 @@
+{
+  "id": "ai_payload_gen",
+  "name": "AI 辅助 Payload 生成器",
+  "version": "2.0.0",
+  "description": "基于大语言模型的智能 Payload 生成器。根据目标技术栈、WAF 类型和漏洞类别，自动生成绕过 WAF 的变体 Payload，支持 SQLi/XSS/SSTI/SSRF/RCE 等10+ 漏洞类型",
+  "author": "ClawAI Demo Team",
+  "author_url": "https://github.com/clawai-demo/ai_payload_gen",
+  "license": "MIT",
+  "category": "ai_enhanced",
+  "tags": ["ai", "payload", "waf-bypass", "sqli", "xss", "ssti", "llm"],
+  "icon": "🤖",
+  "entry": "plugin.py",
+  "min_clawai_version": "2.0.0",
+  "permissions": [
+    "llm:call",
+    "finding:read",
+    "finding:update",
+    "skill:register"
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "type": "string",
+        "default": "auto",
+        "enum": ["auto", "gpt-4o", "deepseek-chat", "claude-3-5-sonnet"],
+        "description": "使用的 LLM 模型，auto 表示继承系统默认模型"
+      },
+      "vuln_types": {
+        "type": "array",
+        "default": ["sqli", "xss", "ssti", "ssrf", "rce", "lfi", "xxe"],
+        "description": "需要生成 Payload 的漏洞类型"
+      },
+      "variants_count": {
+        "type": "integer",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 20,
+        "description": "每个漏洞类型生成的变体 Payload 数量"
+      },
+      "waf_aware": {
+        "type": "boolean",
+        "default": true,
+        "description": "启用 WAF 感知模式：自动分析目标 WAF 并调整 Payload"
+      },
+      "context_aware": {
+        "type": "boolean",
+        "default": true,
+        "description": "读取当前 Findings 上下文，针对已发现漏洞优化 Payload"
+      }
+    }
+  },
+  "screenshot": "screenshot.png",
+  "readme": "README.md",
+  "changelog": [
+    {"version": "2.0.0", "date": "2026-04-11", "notes": "支持 context_aware 模式；新增 SSRF/XXE/LFI 类型；接入 DeepSeek 模型"},
+    {"version": "1.5.0", "date": "2026-02-20", "notes": "WAF 感知模式改进，新增 Cloudflare/ModSecurity 绕过策略"},
+    {"version": "1.0.0", "date": "2025-11-01", "notes": "初始版本，支持 SQLi/XSS/SSTI"}
+  ]
+}

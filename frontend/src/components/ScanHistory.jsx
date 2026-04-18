@@ -271,7 +271,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               className={`p-4 flex items-center cursor-pointer transition-colors ${darkMode ? 'hover:bg-[#111827]/50' : 'hover:bg-[#111827]'}`}
             >
               {/* 状态图标 */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.success ? 'bg-green-500/100/20' : 'bg-red-500/100/20'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.success ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
                 {item.success ? (
                   <CheckCircle className="w-5 h-5 text-green-500" />
                 ) : (
@@ -298,7 +298,7 @@ const ScanHistory = ({ onLoadScan, darkMode = true }) => {
               {/* 漏洞统计 */}
               <div className="hidden sm:flex items-center space-x-2 mr-4">
                 {item.vulnerabilities?.critical > 0 && (
-                  <div className="flex items-center px-2 py-1 rounded bg-red-500/100/20">
+                  <div className="flex items-center px-2 py-1 rounded bg-red-500/20">
                     <AlertTriangle className="w-3 h-3 text-red-500 mr-1" />
                     <span className="text-xs text-red-500">{item.vulnerabilities?.critical}</span>
                   </div>

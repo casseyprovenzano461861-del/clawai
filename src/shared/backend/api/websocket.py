@@ -122,9 +122,13 @@ class ConnectionManager:
         def _serialize_finding(event):
             return {
                 "type": "finding",
+                "vuln_type": event.data.get("vuln_type") or event.data.get("type", ""),
                 "title": event.data.get("title", ""),
                 "severity": event.data.get("severity", "info"),
                 "detail": event.data.get("detail", ""),
+                "skill_id": event.data.get("skill_id", ""),
+                "evidence": event.data.get("evidence", ""),
+                "target": event.data.get("target", ""),
                 "timestamp": datetime.now().isoformat(),
             }
 
@@ -187,7 +191,11 @@ async def per_events_endpoint(
         
         while True:
             # 接收客户端消息
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except (WebSocketDisconnect, RuntimeError, ValueError):
+                # 客户端主动断开、连接已关闭或 JSON 解析失败
+                break
             action = data.get("action")
             
             if action == "start_per":
@@ -199,7 +207,18 @@ async def per_events_endpoint(
                 if not target:
                     await manager.send_json(cid, {
                         "type": "error",
+                        "code": "invalid_target",
                         "message": "缺少目标地址",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    continue
+
+                target = target.strip()
+                if any(c in target for c in ('\x00', '\n', '\r')) or len(target) > 500:
+                    await manager.send_json(cid, {
+                        "type": "error",
+                        "code": "invalid_target",
+                        "message": "目标地址包含非法字符或过长",
                         "timestamp": datetime.now().isoformat()
                     })
                     continue
@@ -214,11 +233,19 @@ async def per_events_endpoint(
                     tool_executor = orchestrator.tool_bridge.execute if orchestrator.tool_bridge else None
                     llm_client = orchestrator.agent_core
 
+                    # 根据 mode 决定迭代次数
+                    _mode_iterations = {
+                        "recon": 2,
+                        "vuln":  3,
+                        "full":  5,
+                    }
+                    _max_iter = _mode_iterations.get(mode, 5)
+
                     # 创建 P-E-R Agent
                     agent = IntelligentPERAgent(
                         llm_client=llm_client,
                         tool_executor=tool_executor,
-                        max_iterations=5
+                        max_iterations=_max_iter
                     )
 
                     # 发送开始事件
@@ -230,21 +257,35 @@ async def per_events_endpoint(
                     })
 
                     # 执行 P-E-R 循环并推送事件
+                    # _disconnected 标志：任意 send 失败时设置，终止 generator 迭代
+                    _disconnected = False
+
+                    async def _send(data: dict):
+                        nonlocal _disconnected
+                        if _disconnected:
+                            return
+                        try:
+                            await manager.send_json(cid, data)
+                        except Exception:
+                            _disconnected = True
+
                     async for event in agent.run(target=target, goal=goal, mode=mode):
+                        if _disconnected:
+                            break
                         event["timestamp"] = datetime.now().isoformat()
-                        await manager.send_json(cid, event)
+                        await _send(event)
 
                         # task_start → 同时发 tool_event(start) + message，让前端时间线显示
                         if event.get("type") == "task_start":
                             tool_name = event.get("task", "unknown")
-                            await manager.send_json(cid, {
+                            await _send({
                                 "type": "tool_event",
                                 "status": "start",
                                 "name": tool_name,
                                 "args": {},
                                 "timestamp": event["timestamp"],
                             })
-                            await manager.send_json(cid, {
+                            await _send({
                                 "type": "message",
                                 "text": f"执行任务: {tool_name}",
                                 "msg_type": "info",
@@ -257,7 +298,7 @@ async def per_events_endpoint(
                             success = event.get("success", False)
                             raw_findings = event.get('findings') or []
                             findings_count = len(raw_findings)
-                            await manager.send_json(cid, {
+                            await _send({
                                 "type": "tool_event",
                                 "status": "complete" if success else "error",
                                 "name": tool_name,
@@ -265,23 +306,25 @@ async def per_events_endpoint(
                                 "result": raw_findings,
                                 "timestamp": event["timestamp"],
                             })
-                            await manager.send_json(cid, {
+                            await _send({
                                 "type": "message",
                                 "text": f"{tool_name} 完成 → 发现 {findings_count} 项" if success else f"{tool_name} 执行失败",
                                 "msg_type": "success" if success else "warning",
                                 "timestamp": event["timestamp"],
                             })
                             # 逐条发送 finding 事件，让前端 findings state 正确更新
+                            # 注意：用 vuln_type 存漏洞类型，避免与消息 type 字段冲突
                             for f in raw_findings:
-                                await manager.send_json(cid, {
+                                await _send({
                                     "type": "finding",
+                                    "vuln_type": f.get("type"),
+                                    **{k: v for k, v in f.items() if k != "type"},
                                     "timestamp": event["timestamp"],
-                                    **f,  # 直接展开 finding dict（type, ports, detail, severity 等）
                                 })
 
                         # phase → message
                         elif event.get("type") == "phase":
-                            await manager.send_json(cid, {
+                            await _send({
                                 "type": "message",
                                 "text": event.get("message", f"阶段: {event.get('phase')}"),
                                 "msg_type": "info",
@@ -292,7 +335,7 @@ async def per_events_endpoint(
                         elif event.get("type") == "reflection":
                             summary = event.get("summary", "")
                             if summary:
-                                await manager.send_json(cid, {
+                                await _send({
                                     "type": "message",
                                     "text": f"反思: {summary[:200]}",
                                     "msg_type": "info",
@@ -304,15 +347,18 @@ async def per_events_endpoint(
                             break
                     
                 except ImportError as e:
+                    logger.error(f"P-E-R 模块导入失败: {e}", exc_info=True)
                     await manager.send_json(cid, {
                         "type": "error",
+                        "code": "import_error",
                         "message": f"导入模块失败: {e}",
                         "timestamp": datetime.now().isoformat()
                     })
                 except Exception as e:
-                    logger.error(f"P-E-R 执行失败: {e}")
+                    logger.error(f"P-E-R 执行失败: {e}", exc_info=True)
                     await manager.send_json(cid, {
                         "type": "error",
+                        "code": "execution_error",
                         "message": str(e),
                         "timestamp": datetime.now().isoformat()
                     })
@@ -349,9 +395,18 @@ async def per_events_endpoint(
     except WebSocketDisconnect:
         manager.disconnect(cid)
         logger.info(f"客户端断开连接: {cid}")
-    
+
     except Exception as e:
-        logger.error(f"WebSocket 错误: {e}")
+        logger.error(f"WebSocket 未预期错误: {e}", exc_info=True)
+        try:
+            await manager.send_json(cid, {
+                "type": "error",
+                "code": "internal_error",
+                "message": "内部错误，连接已关闭",
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception:
+            pass
         manager.disconnect(cid)
 
 
@@ -375,7 +430,10 @@ async def monitoring_endpoint(
         })
         
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except (WebSocketDisconnect, RuntimeError, ValueError):
+                break
             action = data.get("action")
             
             if action == "get_budget":

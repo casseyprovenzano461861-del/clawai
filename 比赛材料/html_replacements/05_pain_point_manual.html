@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1080px; height: 1080px; overflow: hidden;
+  background: #04080f;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+.bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 50% 60% at 20% 70%, #0a1a2a 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 80% 30%, #001a40 0%, transparent 55%),
+    #04080f;
+}
+.grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,150,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,150,255,0.05) 1px, transparent 1px);
+  background-size: 55px 55px;
+}
+
+/* 标题 */
+.title-area {
+  position: absolute; top: 60px; left: 0; right: 0; text-align: center;
+}
+.title { font-size: 52px; font-weight: 900; color: #fff; }
+.sub-title { font-size: 20px; color: #ff6633; margin-top: 12px; font-weight: 700; }
+
+/* 左侧：工人 + AI 对比 */
+.main-content {
+  position: absolute; top: 190px; left: 60px; right: 60px; bottom: 60px;
+  display: flex; gap: 30px;
+}
+
+/* 左：痛点列表 */
+.left-panel {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.pain-card {
+  background: rgba(5,15,35,0.85);
+  border: 1px solid #ff444422;
+  border-left: 3px solid #ff4444;
+  border-radius: 10px;
+  padding: 20px 22px;
+  flex: 1;
+  display: flex; align-items: flex-start; gap: 16px;
+}
+.pain-icon {
+  width: 48px; height: 48px; border-radius: 10px;
+  background: rgba(255,68,68,0.15);
+  border: 1px solid #ff444433;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.pain-content {}
+.pain-title { font-size: 18px; color: #ff8866; font-weight: 700; margin-bottom: 6px; }
+.pain-desc { font-size: 14px; color: #ffffff66; line-height: 1.6; }
+.pain-stat { margin-top: 10px; }
+.stat-bar-bg { height: 6px; background: #ffffff11; border-radius: 3px; overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 3px; }
+
+/* 右：工人+AI界面 */
+.right-panel {
+  width: 440px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.scene-card {
+  flex: 1;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex; flex-direction: column;
+}
+.manual-scene {
+  background: rgba(30,10,10,0.8);
+  border: 1px solid #ff444433;
+}
+.ai-scene {
+  background: rgba(0,20,40,0.8);
+  border: 1px solid #00c8ff33;
+}
+.scene-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.scene-icon { font-size: 28px; }
+.scene-title { font-size: 18px; font-weight: 700; }
+.manual-scene .scene-title { color: #ff8866; }
+.ai-scene .scene-title { color: #00c8ff; }
+.scene-badge {
+  margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 10px;
+}
+.badge-slow { background: rgba(255,68,68,0.2); color: #ff6644; border: 1px solid #ff444433; }
+.badge-fast { background: rgba(0,200,255,0.15); color: #00c8ff; border: 1px solid #00c8ff33; }
+
+/* 终端输出模拟 */
+.mini-terminal {
+  background: rgba(0,0,0,0.4); border-radius: 8px; padding: 12px;
+  font-family: 'Courier New', monospace; font-size: 12px; flex: 1;
+  line-height: 1.8;
+}
+.mt-line { }
+.mt-cmd { color: #00ff88; }
+.mt-manual { color: #ffffff55; }
+.mt-comment { color: #ffffff33; }
+.mt-ai { color: #00c8ff; }
+.mt-ok { color: #00ff88; }
+.mt-err { color: #ff4444; }
+
+/* 时间对比 */
+.time-compare {
+  display: flex; gap: 20px; margin-top: 10px;
+}
+.time-box {
+  flex: 1; text-align: center; padding: 12px;
+  border-radius: 8px;
+}
+.manual-time { background: rgba(255,68,68,0.1); border: 1px solid #ff444433; }
+.ai-time { background: rgba(0,200,255,0.1); border: 1px solid #00c8ff33; }
+.time-num { font-size: 32px; font-weight: 900; }
+.manual-time .time-num { color: #ff4444; }
+.ai-time .time-num { color: #00c8ff; }
+.time-unit { font-size: 13px; color: #ffffff66; }
+.time-label { font-size: 12px; margin-top: 4px; }
+.manual-time .time-label { color: #ff6644aa; }
+.ai-time .time-label { color: #00c8ffaa; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="grid"></div>
+
+<div class="title-area">
+  <div class="title">行业痛点</div>
+  <div class="sub-title">严重依赖人工经验</div>
+</div>
+
+<div class="main-content">
+  <!-- 左：痛点列表 -->
+  <div class="left-panel">
+    <div class="pain-card">
+      <div class="pain-icon">⏱️</div>
+      <div class="pain-content">
+        <div class="pain-title">效率极低</div>
+        <div class="pain-desc">一次完整渗透测试平均需要 3-5 天，大量时间消耗在重复性手工操作上</div>
+        <div class="pain-stat">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff44;margin-bottom:4px"><span>人工效率</span><span>18%</span></div>
+          <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:18%;background:linear-gradient(90deg,#ff4444,#ff6633)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pain-card">
+      <div class="pain-icon">🧑‍💻</div>
+      <div class="pain-content">
+        <div class="pain-title">经验依赖严重</div>
+        <div class="pain-desc">渗透结果严重依赖测试人员个人经验和技能水平，质量参差不齐</div>
+        <div class="pain-stat">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff44;margin-bottom:4px"><span>经验依赖比例</span><span>60%</span></div>
+          <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:60%;background:linear-gradient(90deg,#ff4444,#ffaa00)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pain-card">
+      <div class="pain-icon">📊</div>
+      <div class="pain-content">
+        <div class="pain-title">覆盖面不足</div>
+        <div class="pain-desc">人工测试通常只能覆盖 20-30% 的漏洞类型，大量攻击面被遗漏</div>
+        <div class="pain-stat">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff44;margin-bottom:4px"><span>漏洞覆盖率</span><span>23%</span></div>
+          <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:23%;background:linear-gradient(90deg,#ff4444,#ff6633)"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右：对比 -->
+  <div class="right-panel">
+    <!-- 人工 -->
+    <div class="scene-card manual-scene">
+      <div class="scene-header">
+        <span class="scene-icon">👨‍🔧</span>
+        <span class="scene-title">传统人工渗透</span>
+        <span class="scene-badge badge-slow">效率低</span>
+      </div>
+      <div class="mini-terminal">
+        <div class="mt-line mt-comment"># 手动执行各项测试...</div>
+        <div class="mt-line mt-manual">nmap -sV 192.168.1.1  <span style="color:#ff444466">← 等待 30min</span></div>
+        <div class="mt-line mt-manual">nikto -h http://...   <span style="color:#ff444466">← 等待 15min</span></div>
+        <div class="mt-line mt-err">[×] SQL注入 — 未测试</div>
+        <div class="mt-line mt-err">[×] XXE — 遗漏</div>
+        <div class="mt-line mt-comment"># 手动整理报告... 2天后</div>
+      </div>
+    </div>
+    <!-- AI -->
+    <div class="scene-card ai-scene">
+      <div class="scene-header">
+        <span class="scene-icon">🤖</span>
+        <span class="scene-title">ClawAI 自动化</span>
+        <span class="scene-badge badge-fast">AI驱动</span>
+      </div>
+      <div class="mini-terminal">
+        <div class="mt-line mt-cmd">$ clawai scan 192.168.1.1</div>
+        <div class="mt-line mt-ai">[AI] 规划扫描策略...</div>
+        <div class="mt-line mt-ok">[✓] 端口扫描完成 (42s)</div>
+        <div class="mt-line mt-ok">[✓] 指纹识别完成 (18s)</div>
+        <div class="mt-line mt-ok">[✓] 27类漏洞全覆盖</div>
+        <div class="mt-line mt-ok">[✓] 报告自动生成</div>
+      </div>
+    </div>
+
+    <!-- 时间对比 -->
+    <div class="time-compare">
+      <div class="time-box manual-time">
+        <div class="time-num">72h</div>
+        <div class="time-unit">小时</div>
+        <div class="time-label">人工测试耗时</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:24px;color:#ffffff33">→</div>
+      <div class="time-box ai-time">
+        <div class="time-num">2h</div>
+        <div class="time-unit">小时</div>
+        <div class="time-label">AI自动化耗时</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

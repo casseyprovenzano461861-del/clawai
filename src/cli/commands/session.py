@@ -6,9 +6,9 @@ COMMAND_META = {
     "name": "session",
     "aliases": ["sessions", "会话"],
     "category": "local",
-    "description_zh": "会话管理：查看、保存、加载、导出、删除会话",
-    "description_en": "Session management: list, save, load, export, delete sessions",
-    "argument_hint": "[list|save|load|export|delete]",
+    "description_zh": "会话管理：查看、保存、加载、导出、对比、删除会话",
+    "description_en": "Session management: list, save, load, export, compare, delete sessions",
+    "argument_hint": "[list|save|load|export|compare|delete]",
 }
 
 
@@ -31,11 +31,13 @@ class SessionCommand:
             return self._load(rest.strip(), ctx, console)
         elif action == "export":
             return self._export(rest.strip(), console)
+        elif action == "compare":
+            return self._compare(rest.strip(), console)
         elif action == "delete":
             return self._delete(rest.strip(), console)
         else:
             console.print(f"[red]未知操作: {action}[/]")
-            console.print("用法: session [list|save|load|export|delete]")
+            console.print("用法: session [list|save|load|export|compare|delete]")
             return ""
 
     # -- sub-handlers ----------------------------------------------------------
@@ -75,6 +77,7 @@ class SessionCommand:
         console.print()
         console.print("[dim]session load <id>   加载会话[/]")
         console.print("[dim]session export <id> 导出报告[/]")
+        console.print("[dim]session compare <id1> <id2> 对比两次扫描[/]")
         console.print("[dim]session delete <id> 删除会话[/]")
         return ""
 
@@ -130,6 +133,34 @@ class SessionCommand:
             console.print(f"[green]报告已导出:[/] {path}")
         except Exception as e:
             console.print(f"[red]导出失败: {e}[/]")
+        return ""
+
+    def _compare(self, rest: str, console) -> str:
+        from src.cli.session_store import SessionStore
+        from src.cli.exporter import compare_sessions
+
+        parts = rest.split()
+        if len(parts) < 2:
+            console.print("[red]请指定两个会话 ID: session compare <id1> <id2>[/]")
+            return ""
+
+        id1, id2 = parts[0], parts[1]
+        store = SessionStore()
+        data1 = store.load(id1)
+        data2 = store.load(id2)
+
+        if data1 is None:
+            console.print(f"[red]未找到会话: {id1}[/]")
+            return ""
+        if data2 is None:
+            console.print(f"[red]未找到会话: {id2}[/]")
+            return ""
+
+        try:
+            path = compare_sessions(data1, data2)
+            console.print(f"[green]对比报告已生成:[/] {path}")
+        except Exception as e:
+            console.print(f"[red]对比失败: {e}[/]")
         return ""
 
     def _delete(self, session_id: str, console) -> str:

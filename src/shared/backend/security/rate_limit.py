@@ -125,6 +125,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not self.config.enabled:
             return await call_next(request)
 
+        # WebSocket 升级请求跳过限速
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
         # 跳过健康检查和指标端点
         path = request.url.path
         if path in ("/health", "/api/health", "/metrics"):

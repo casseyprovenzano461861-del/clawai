@@ -7,8 +7,19 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-const _wsBase = (import.meta.env.VITE_WS_URL as string)
-  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//localhost:8000`;
+// 从 VITE_WS_URL 或 VITE_API_BASE 提取 WebSocket base（不含路径）
+const _wsBase = (() => {
+  const wsUrl = import.meta.env.VITE_WS_URL as string;
+  if (wsUrl) {
+    // 取 ws://host:port 部分，去掉路径
+    try { return new URL(wsUrl).origin.replace(/^http/, 'ws'); } catch { /* fallback */ }
+  }
+  const apiBase = import.meta.env.VITE_API_BASE as string;
+  if (apiBase) {
+    return apiBase.replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '');
+  }
+  return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//localhost:8000`;
+})();
 const WS_URL = `${_wsBase}/ws/per-events`;
 
 export type ToolEventStatus = 'start' | 'complete' | 'error';
@@ -198,7 +209,7 @@ export const usePERAgent = (options = {}) => {
         break;
 
       case 'complete':
-        setStatus('connected');
+        setStatus('completed');
         setPhase('completed');
         setAgentState('completed');
         setProgress(1);
@@ -282,7 +293,9 @@ export const usePERAgent = (options = {}) => {
       case 'finding': {
         // 合并进 findings，支持带/不带 title 的格式
         // 后端 findings 格式：{ type, ports, ... } 或 { type, title, severity, detail }
-        const { type: _evType, timestamp: _ts, ...findingData } = event;
+        // vuln_type 是漏洞类型（避免和 WebSocket 消息的 type 字段冲突）
+        const { type: _evType, timestamp: _ts, vuln_type, ...restData } = event;
+        const findingData = vuln_type ? { ...restData, type: vuln_type } : restData;
         setFindings(prev => {
           // 去重：同类型且关键字段相同则跳过
           const ftype = findingData.type || '';
@@ -382,8 +395,9 @@ export const usePERAgent = (options = {}) => {
     stopPentest,
     
     // 工具方法
-    isConnected: status === 'connected' || status === 'running',
+    isConnected: status === 'connected' || status === 'running' || status === 'completed',
     isRunning: status === 'running',
+    isCompleted: status === 'completed',
     clearFindings: () => setFindings([]),
     clearLogs: () => setLogs([]),
   };

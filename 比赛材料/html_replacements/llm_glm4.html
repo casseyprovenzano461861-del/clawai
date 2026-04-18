@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width: 600px; height: 600px;
+  background: #050A14;
+  display: flex; align-items: center; justify-content: center;
+}
+.card {
+  width: 480px; height: 480px;
+  background: linear-gradient(145deg, #0d1f3c 0%, #0a1528 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 28px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 28px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.logo-wrap { width: 120px; height: 120px; }
+.logo-wrap svg { width: 100%; height: 100%; }
+.brand-name {
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 36px; font-weight: 900;
+  color: #3B82F6;
+  letter-spacing: -1px;
+}
+.model-tag {
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 20px; padding: 6px 20px;
+  font-family: Arial, sans-serif; font-size: 16px;
+  color: rgba(59,130,246,0.6); letter-spacing: 1px;
+}
+.desc {
+  font-family: Arial, sans-serif; font-size: 14px;
+  color: rgba(255,255,255,0.3); text-align: center;
+  line-height: 1.6; max-width: 320px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <!-- 智谱 GLM 官方风格 Logo -->
+  <div class="logo-wrap">
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 智谱官方：蓝色几何三角形组合 -->
+      <polygon points="50,10 85,72 15,72" stroke="#3B82F6" stroke-width="3.5" fill="rgba(59,130,246,0.12)"/>
+      <polygon points="50,28 70,62 30,62" fill="#3B82F6" opacity="0.8"/>
+      <polygon points="50,44 62,64 38,64" fill="white" opacity="0.9"/>
+    </svg>
+  </div>
+  <div class="brand-name">智谱 GLM-4</div>
+  <div class="model-tag">智谱 AI · 国产 &amp; 合规部署</div>
+  <div class="desc">国内合规部署首选<br>中文安全场景深度优化</div>
+</div>
+</body>
+</html>

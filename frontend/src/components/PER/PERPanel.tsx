@@ -144,12 +144,21 @@ export const FindingCard = ({ finding, className = '' }) => {
   
   const severity = finding.severity || 'info';
   const borderColor = severityColors[severity] || severityColors.info;
+
+  // RCE / CVE Skill 确认漏洞高亮
+  const isRCEConfirmed = finding.type === 'cve_skill' && finding.vulnerable;
+  const evidence = finding.evidence || finding.output_preview || '';
   
   return (
-    <div className={`p-3 rounded-lg border-l-4 ${borderColor} ${className}`}>
+    <div className={`p-3 rounded-lg border-l-4 ${borderColor} ${className} ${
+      isRCEConfirmed ? 'ring-2 ring-red-500/60 shadow-lg shadow-red-500/20' : ''
+    }`}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-white">
-          {finding.type || finding.title || 'Finding'}
+        <span className={`text-sm font-medium ${
+          isRCEConfirmed ? 'text-red-300' : 'text-white'
+        }`}>
+          {isRCEConfirmed && '🔴 '}{finding.type || finding.title || 'Finding'}
+          {isRCEConfirmed && ' — RCE 已确认'}
         </span>
         <span className={`text-xs px-2 py-0.5 rounded capitalize ${
           severity === 'critical' ? 'bg-red-500/20 text-red-400' :
@@ -162,6 +171,11 @@ export const FindingCard = ({ finding, className = '' }) => {
       </div>
       {(finding.description || finding.detail) && (
         <p className="text-xs text-gray-400">{finding.description || finding.detail}</p>
+      )}
+      {isRCEConfirmed && evidence && (
+        <pre className="mt-1.5 text-xs font-mono text-green-400 bg-black/40 rounded p-1.5 overflow-x-auto max-h-24">
+          {String(evidence).slice(0, 300)}
+        </pre>
       )}
     </div>
   );
@@ -282,12 +296,13 @@ const ColoredLog = ({ logs }: { logs: LogEntry[] }) => {
 const PERPanel = ({ 
   onSessionEnd,
   initialTarget = '',
+  initialMode = 'full',
   autoStart = false,
   className = '' 
 }) => {
   const [target, setTarget] = useState(initialTarget);
   const [goal, setGoal] = useState('');
-  const [mode, setMode] = useState('full');
+  const [mode, setMode] = useState(initialMode);
   const [activeTaskIndex, setActiveTaskIndex] = useState(-1);
   const [summary, setSummary] = useState<string | null>(null);
 
@@ -308,6 +323,7 @@ const PERPanel = ({
     startPentest,
     stopPentest,
     isRunning,
+    isCompleted,
   } = usePERAgentContext();
 
   // 监听 report 变化（完成时）：通知父组件（保存已由 PERAgentContext 统一处理）
@@ -318,9 +334,16 @@ const PERPanel = ({
   }, [tasks]);
 
   // 监听 report 变化（完成时）：通知父组件（保存已由 PERAgentContext 统一处理）
+  // 用 ref 存 onSessionEnd，避免父组件每次 re-render 重建函数引用导致重复触发
+  const onSessionEndRef = useRef(onSessionEnd);
+  useEffect(() => { onSessionEndRef.current = onSessionEnd; }, [onSessionEnd]);
+  const reportNotifiedRef = useRef<unknown>(null);
   useEffect(() => {
     if (!report) return;
-    if (onSessionEnd) onSessionEnd({ type: 'complete', report });
+    // 同一份报告只通知一次，防止父组件 re-render 重复触发
+    if (reportNotifiedRef.current === report) return;
+    reportNotifiedRef.current = report;
+    if (onSessionEndRef.current) onSessionEndRef.current({ type: 'complete', report });
   }, [report]);
 
   const handleStart = useCallback(() => {
@@ -330,33 +353,92 @@ const PERPanel = ({
     startPentest(target.trim(), goal.trim(), mode);
   }, [target, goal, mode, startPentest]);
 
-  // 当外部传入新目标时同步到本地 state
+  // 当外部传入新目标或模式时同步到本地 state
   useEffect(() => {
     if (initialTarget && initialTarget !== target) {
       setTarget(initialTarget);
     }
   }, [initialTarget]);
 
+  useEffect(() => {
+    if (initialMode && initialMode !== mode) {
+      setMode(initialMode);
+    }
+  }, [initialMode]);
+
   // autoStart：外部触发扫描，直接调用 startPentest（内部会处理连接等待）
   const autoStartFiredRef = useRef(false);
+  // 记录当前 autoStart 对应的目标，用于折叠逻辑判断
+  const autoStartTargetRef = useRef('');
+
+  // 记录上次 autoStart 触发时的目标，只有目标真正改变时才重置 fired 标记
+  const prevAutoStartTargetRef = useRef('');
   useEffect(() => {
     if (autoStart && initialTarget) {
-      autoStartFiredRef.current = false; // 重置，允许本次触发
+      // 目标变了才允许重新触发，已完成的同一目标不重置
+      if (!isCompleted && initialTarget !== prevAutoStartTargetRef.current) {
+        autoStartFiredRef.current = false;
+        prevAutoStartTargetRef.current = initialTarget;
+      }
+      autoStartTargetRef.current = initialTarget;
     }
-  }, [autoStart, initialTarget]);
+  }, [autoStart, initialTarget, isCompleted]);
 
   useEffect(() => {
-    if (autoStart && initialTarget && !autoStartFiredRef.current && !isRunning) {
+    // 已完成状态下不触发新扫描，防止报告被覆盖
+    if (autoStart && initialTarget && !autoStartFiredRef.current && !isCompleted) {
       autoStartFiredRef.current = true;
       setSummary(null);
       setActiveTaskIndex(-1);
-      startPentest(initialTarget.trim(), '', mode);
+      // 如果当前正在运行，先停止再重新开始
+      if (isRunning) stopPentest();
+      // 使用 initialMode（Dashboard 传入的模式），而非内部 mode state
+      startPentest(initialTarget.trim(), '', initialMode || mode);
     }
-  }, [autoStart, initialTarget, isRunning, startPentest, mode]);
+  }, [autoStart, initialTarget, isCompleted, startPentest, stopPentest, initialMode, mode]);
+
+  // 折叠逻辑：autoStart 触发且（运行中 或 已完成）时折叠，显示紧凑目标行
+  const isAutoRunning = autoStart && (isRunning || isCompleted) && autoStartTargetRef.current === initialTarget;
+
+  // 报告区展开：扫描完成时自动滚动到报告
+  const reportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (report) {
+      setTimeout(() => reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
+    }
+  }, [report]);
 
   return (
     <div className={`bg-gray-900 rounded-xl border border-gray-800 ${className}`}>
-      {/* 输入区域 */}
+      {/* 输入区域：autoStart 且目标匹配时折叠，只保留目标显示和停止按钮 */}
+      {isAutoRunning ? (
+        <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Target size={13} className={isCompleted ? "text-green-400" : "text-cyan-400"} />
+            <span className="font-mono text-cyan-300">{target}</span>
+            <span className="text-gray-600">·</span>
+            <span className="capitalize">{mode}</span>
+            {isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">已完成</span>}
+          </div>
+          {isRunning ? (
+            <button
+              onClick={stopPentest}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-colors"
+            >
+              <Square size={13} />
+              停止
+            </button>
+          ) : (
+            <button
+              onClick={() => startPentest(target.trim(), goal.trim(), mode)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
+            >
+              <Play size={13} />
+              重新扫描
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="p-4 border-b border-gray-800">
         <div className="flex gap-4 mb-4">
           <div className="flex-1">
@@ -415,7 +497,23 @@ const PERPanel = ({
           </button>
         </div>
       </div>
+      )}
       
+      {/* 完成横幅 */}
+      {isCompleted && (
+        <div className="px-4 py-2.5 bg-green-500/10 border-b border-green-500/30 flex items-center gap-2">
+          <CheckCircle size={14} className="text-green-400 shrink-0" />
+          <span className="text-sm text-green-300 font-medium">扫描完成</span>
+          <span className="text-xs text-green-500/70 ml-1">共 {iteration} 次迭代 · 发现 {findings.length} 项</span>
+          <button
+            onClick={() => startPentest(target.trim(), goal.trim(), mode)}
+            className="ml-auto text-xs px-3 py-1 rounded bg-green-500/20 hover:bg-green-500/30 text-green-300 transition-colors"
+          >
+            重新扫描
+          </button>
+        </div>
+      )}
+
       {/* 状态指示器 + 进度条 */}
       <div className="p-4 border-b border-gray-800">
         <div className="flex items-center justify-between mb-3">
@@ -425,16 +523,17 @@ const PERPanel = ({
             <span>发现: {findings.length}</span>
             <span className={`capitalize ${
               status === 'running' ? 'text-yellow-400' :
+              status === 'completed' ? 'text-green-400' :
               status === 'connected' ? 'text-green-400' :
               status === 'error' ? 'text-red-400' : 'text-gray-500'
             }`}>
-              {status}
+              {status === 'completed' ? '已完成' : status}
             </span>
           </div>
         </div>
-        {/* 进度条（仅执行中显示） */}
-        {isRunning && (
-          <ProgressBar percent={progress} description={currentTask} />
+        {/* 进度条（执行中显示；完成时显示满格） */}
+        {(isRunning || isCompleted) && (
+          <ProgressBar percent={isCompleted ? 1 : progress} description={isCompleted ? '扫描已完成' : currentTask} />
         )}
       </div>
       
@@ -469,10 +568,11 @@ const PERPanel = ({
       
       {/* 底部：摘要 / 报告 */}
       {(summary || report) && (
-        <div className="p-4 border-t border-gray-800 bg-gray-800/50">
+        <div ref={reportRef} className="p-4 border-t border-gray-800 bg-gray-800/50">
           <h4 className="text-sm font-medium text-gray-400 mb-2 flex items-center gap-1.5">
             <FileText size={13} />
             {report ? '最终报告' : '分析摘要'}
+            {report && <span className="ml-2 text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">扫描完成</span>}
           </h4>
           <p className="text-sm text-gray-300 whitespace-pre-wrap">
             {report || summary}

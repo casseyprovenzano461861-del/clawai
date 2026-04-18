@@ -4,70 +4,70 @@
       "name": "admin",
       "description": "系统管理员，拥有所有权限",
       "permissions": [
-        "report:write",
-        "tool:read",
-        "tool:write",
-        "attack:execute",
-        "tool:execute",
-        "system:read",
-        "audit:write",
-        "attack:read",
-        "user:read",
         "audit:read",
-        "report:read",
         "attack:write",
+        "tool:execute",
+        "system:config",
+        "tool:write",
+        "report:export",
+        "tool:read",
+        "user:write",
+        "attack:read",
+        "report:write",
+        "system:read",
+        "user:read",
+        "audit:write",
         "system:write",
         "user:delete",
-        "system:config",
-        "report:export",
-        "user:write"
+        "report:read",
+        "attack:execute"
       ]
     },
     {
       "name": "analyst",
       "description": "安全分析师，可以进行攻击测试和查看报告",
       "permissions": [
-        "tool:read",
-        "attack:execute",
+        "attack:write",
+        "audit:read",
         "tool:execute",
+        "report:export",
+        "tool:read",
+        "attack:read",
+        "report:write",
         "user:read",
         "report:read",
-        "attack:read",
-        "audit:read",
-        "attack:write",
-        "report:write",
-        "report:export"
+        "attack:execute"
       ]
     },
     {
       "name": "user",
       "description": "普通用户，可以使用工具和执行攻击",
       "permissions": [
-        "tool:read",
-        "attack:execute",
         "tool:execute",
+        "tool:read",
+        "attack:read",
         "report:read",
-        "attack:read"
+        "attack:execute"
       ]
     },
     {
       "name": "guest",
       "description": "访客，只能查看信息",
       "permissions": [
-        "report:read",
+        "tool:read",
         "attack:read",
-        "tool:read"
+        "report:read"
       ]
     },
     {
       "name": "auditor",
       "description": "审计员，可以查看所有审计日志",
       "permissions": [
+        "audit:read",
+        "system:read",
         "user:read",
         "audit:write",
-        "report:read",
-        "system:read",
-        "audit:read"
+        "report:read"
       ]
     }
   ],

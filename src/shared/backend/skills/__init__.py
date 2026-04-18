@@ -4,11 +4,6 @@ Skills 库模块
 
 提供 AI 可自动调用的渗透测试技能
 包括：POC、Exploit 脚本、利用方法等
-
-整合自优秀项目:
-- CyberStrikeAI: 知识型 Skills (XXE, SSRF, 文件上传等)
-- PentestGPT: 实战 Exploit (Flag检测, OpenSSH枚举)
-- NeuroSploit: PoC生成器, WAF绕过, Payload变异
 """
 
 from .core import (
@@ -19,9 +14,16 @@ from .core import (
     SkillExecutor,
 )
 
+from .context import SkillContext
+
 from .registry import (
     SkillRegistry,
     get_skill_registry,
+)
+
+from .markdown_loader import (
+    parse_skill_markdown,
+    load_skills_from_dir,
 )
 
 from .extended_skills import (
@@ -38,9 +40,14 @@ __all__ = [
     "SkillCategory",
     "SkillParameter",
     "SkillExecutor",
+    # 依赖注入上下文
+    "SkillContext",
     # 注册表
     "SkillRegistry",
     "get_skill_registry",
+    # Markdown 加载器
+    "parse_skill_markdown",
+    "load_skills_from_dir",
     # 扩展功能
     "PayloadMutator",
     "WAF_SIGNATURES",

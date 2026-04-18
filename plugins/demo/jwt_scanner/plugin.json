@@ -1,0 +1,48 @@
+{
+  "id": "jwt_scanner",
+  "name": "JWT 安全检测器",
+  "version": "1.0.0",
+  "description": "自动检测 JSON Web Token 的安全漏洞：算法混淆（alg:none）、弱密钥、过期验证缺失、敏感信息泄露等",
+  "author": "ClawAI Demo Team",
+  "author_url": "https://github.com/clawai-demo/jwt_scanner",
+  "license": "MIT",
+  "category": "exploit",
+  "tags": ["jwt", "authentication", "web", "token"],
+  "icon": "🔐",
+  "entry": "plugin.py",
+  "min_clawai_version": "2.0.0",
+  "permissions": [
+    "http:request",
+    "finding:report"
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "check_alg_none": {
+        "type": "boolean",
+        "default": true,
+        "description": "检测 alg:none 算法混淆攻击"
+      },
+      "check_weak_secret": {
+        "type": "boolean",
+        "default": true,
+        "description": "使用内置字典检测弱签名密钥"
+      },
+      "wordlist": {
+        "type": "string",
+        "default": "builtin",
+        "description": "弱密钥字典路径，builtin 表示使用内置字典（500+ 常见密钥）"
+      },
+      "timeout": {
+        "type": "integer",
+        "default": 10,
+        "description": "HTTP 请求超时秒数"
+      }
+    }
+  },
+  "screenshot": "screenshot.png",
+  "readme": "README.md",
+  "changelog": [
+    {"version": "1.0.0", "date": "2026-04-11", "notes": "初始版本，支持 alg:none / 弱密钥 / 敏感声明泄露检测"}
+  ]
+}

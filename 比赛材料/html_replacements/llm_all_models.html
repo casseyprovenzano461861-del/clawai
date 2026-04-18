@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width: 1280px; height: 720px;
+  background: #050A14;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Arial Black', 'Microsoft YaHei', Arial, sans-serif;
+}
+
+/* 中心标题 */
+.center-title {
+  position: absolute;
+  top: 48px; left: 0; right: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+
+/* 四卡片网格 */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 20px;
+  padding: 80px 60px 40px;
+  width: 100%;
+}
+
+.card {
+  background: linear-gradient(160deg, #0e1e38 0%, #091424 100%);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  padding: 36px 24px 30px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 16px;
+  position: relative; overflow: hidden;
+  transition: border-color 0.3s;
+}
+/* 顶部色条 */
+.card::before {
+  content: '';
+  position: absolute; top: 0; left: 24px; right: 24px;
+  height: 2px; border-radius: 0 0 2px 2px;
+}
+.card.gpt::before   { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); }
+.card.claude::before{ background: linear-gradient(90deg, transparent, #CC9B7A, transparent); }
+.card.deepseek::before { background: linear-gradient(90deg, transparent, #4D9EFF, transparent); }
+.card.glm::before   { background: linear-gradient(90deg, transparent, #3B82F6, transparent); }
+
+.logo-area {
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+}
+.logo-area svg { width: 100%; height: 100%; }
+
+.brand {
+  font-size: 22px; font-weight: 900; letter-spacing: -0.5px;
+  text-align: center; line-height: 1.2;
+}
+.card.gpt    .brand { color: #ffffff; }
+.card.claude .brand { color: #CC9B7A; }
+.card.deepseek .brand { color: #4D9EFF; }
+.card.glm    .brand { color: #3B82F6; }
+
+.tag {
+  font-size: 11px; letter-spacing: 1px;
+  padding: 4px 14px; border-radius: 12px;
+  font-weight: 400;
+  font-family: Arial, sans-serif;
+}
+.card.gpt    .tag { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.35); border: 1px solid rgba(255,255,255,0.1); }
+.card.claude .tag { background: rgba(204,155,122,0.08); color: rgba(204,155,122,0.5); border: 1px solid rgba(204,155,122,0.15); }
+.card.deepseek .tag { background: rgba(77,158,255,0.08); color: rgba(77,158,255,0.5); border: 1px solid rgba(77,158,255,0.15); }
+.card.glm    .tag { background: rgba(59,130,246,0.08); color: rgba(59,130,246,0.5); border: 1px solid rgba(59,130,246,0.15); }
+
+.use-case {
+  font-size: 12px; color: rgba(255,255,255,0.3);
+  text-align: center; line-height: 1.7;
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-weight: 400; letter-spacing: 0;
+}
+</style>
+</head>
+<body>
+
+<div style="width:100%;position:relative;">
+  <div class="center-title">大模型支持矩阵 · LLM Backend</div>
+
+  <div class="grid">
+    <!-- GPT-4 -->
+    <div class="card gpt">
+      <div class="logo-area">
+        <svg viewBox="0 0 41 41" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M37.532 16.87a9.963 9.963 0 0 0-.856-8.184 10.078 10.078 0 0 0-10.855-4.835 9.964 9.964 0 0 0-6.214-2.874 10.079 10.079 0 0 0-10.733 4.963 9.967 9.967 0 0 0-6.466 4.92 10.079 10.079 0 0 0 1.24 11.817 9.965 9.965 0 0 0 .856 8.185 10.079 10.079 0 0 0 10.855 4.835 9.965 9.965 0 0 0 6.214 2.874 10.079 10.079 0 0 0 10.733-4.963 9.967 9.967 0 0 0 6.466-4.92 10.079 10.079 0 0 0-1.24-11.817zm-17.963 14.0a7.474 7.474 0 0 1-4.798-1.735l.237-.134 7.964-4.6a1.305 1.305 0 0 0 .655-1.134v-11.24l3.366 1.944a.12.12 0 0 1 .066.092v9.299a7.505 7.505 0 0 1-7.49 7.508zm-16.134-6.892a7.472 7.472 0 0 1-.894-5.034l.237.143 7.964 4.6a1.297 1.297 0 0 0 1.308 0l9.724-5.614v3.888a.12.12 0 0 1-.048.103l-8.051 4.649a7.504 7.504 0 0 1-10.24-2.735zm-2.09-17.387a7.471 7.471 0 0 1 3.918-3.287V13.6a1.297 1.297 0 0 0 .654 1.132l9.723 5.614-3.366 1.944a.12.12 0 0 1-.114.012L4.158 17.205a7.504 7.504 0 0 1-.813-9.614zm27.16 6.45l-9.724-5.615 3.367-1.943a.121.121 0 0 1 .114-.012l8.048 4.648a7.498 7.498 0 0 1-1.158 13.528v-9.476a1.3 1.3 0 0 0-.647-1.13zm3.35-5.043l-.237-.143-7.965-4.6a1.298 1.298 0 0 0-1.308 0L13.64 19.864v-3.888a.12.12 0 0 1 .048-.103l8.051-4.648a7.498 7.498 0 0 1 11.135 7.765zm-21.063 6.929l-3.367-1.944a.12.12 0 0 1-.065-.092v-9.299a7.497 7.497 0 0 1 12.293-5.756l-.238.134-7.965 4.6a1.304 1.304 0 0 0-.654 1.132l-.004 11.225zm1.829-3.943l4.33-2.501 4.332 2.497v4.998l-4.331 2.5-4.331-2.5V21.984z" fill="white" opacity="0.85"/>
+        </svg>
+      </div>
+      <div class="brand">GPT-4<br>GPT-4o</div>
+      <div class="tag">OpenAI</div>
+      <div class="use-case">复杂推理与<br>攻击策略规划</div>
+    </div>
+
+    <!-- Claude 3.5 -->
+    <div class="card claude">
+      <div class="logo-area">
+        <svg viewBox="0 0 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M46 4L12 76h16l6.5-17h27l6.5 17h16L54 4H46zm-7 42l11-29 11 29H39z" fill="#CC9B7A"/>
+        </svg>
+      </div>
+      <div class="brand">Claude<br>3.5 Sonnet</div>
+      <div class="tag">Anthropic</div>
+      <div class="use-case">代码生成与<br>漏洞分析报告</div>
+    </div>
+
+    <!-- DeepSeek -->
+    <div class="card deepseek">
+      <div class="logo-area">
+        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- 简洁鲸鱼/波浪形 -->
+          <path d="M18 38 C12 26 4 24 3 32 C2 40 10 46 20 42 C24 40.5 27 37 28 33 L32 25 C34 19 40 15 46 18 C56 22 57 36 50 42 C46 45 40 43.5 37 40.5"
+            stroke="#4D9EFF" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M37 40.5 L43 50 M37 40.5 L31 50"
+            stroke="#4D9EFF" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+          <circle cx="9" cy="32" r="3" fill="#4D9EFF"/>
+          <circle cx="10" cy="31" r="1" fill="white" opacity="0.9"/>
+        </svg>
+      </div>
+      <div class="brand">DeepSeek<br>R1 / V3</div>
+      <div class="tag">深度求索</div>
+      <div class="use-case">高性价比首选<br>中文语境优化</div>
+    </div>
+
+    <!-- GLM-4 -->
+    <div class="card glm">
+      <div class="logo-area">
+        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="36,8 62,54 10,54" stroke="#3B82F6" stroke-width="2.5" fill="rgba(59,130,246,0.1)"/>
+          <polygon points="36,22 54,50 18,50" fill="#3B82F6" opacity="0.75"/>
+          <polygon points="36,34 46,50 26,50" fill="white" opacity="0.85"/>
+        </svg>
+      </div>
+      <div class="brand">智谱<br>GLM-4</div>
+      <div class="tag">智谱 AI</div>
+      <div class="use-case">国内合规部署<br>中文安全场景</div>
+    </div>
+  </div>
+
+  <!-- 底部说明 -->
+  <div style="text-align:center; padding-bottom:32px; font-size:12px; color:rgba(255,255,255,0.18); letter-spacing:3px; font-family:Arial,sans-serif;">
+    通过 LLMBackend 统一接口层接入 · 支持一键切换
+  </div>
+</div>
+
+</body>
+</html>

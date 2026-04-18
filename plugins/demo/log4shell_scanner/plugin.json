@@ -1,0 +1,57 @@
+{
+  "id": "log4shell_scanner",
+  "name": "Log4Shell 漏洞检测",
+  "version": "1.2.0",
+  "description": "专项检测 CVE-2021-44228 (Log4Shell) 及其变体（CVE-2021-45046、CVE-2021-45105）。通过 JNDI payload 注入检测 Log4j RCE，支持 DNS/HTTP 回调验证",
+  "author": "ClawAI Demo Team",
+  "author_url": "https://github.com/clawai-demo/log4shell_scanner",
+  "license": "MIT",
+  "category": "exploit",
+  "tags": ["log4j", "log4shell", "rce", "cve-2021-44228", "jndi"],
+  "icon": "🔥",
+  "entry": "plugin.py",
+  "min_clawai_version": "2.0.0",
+  "permissions": [
+    "http:request",
+    "dns:listen",
+    "finding:report",
+    "network:callback"
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "callback_server": {
+        "type": "string",
+        "default": "",
+        "description": "DNSLOG 或 HTTP 回调服务地址（留空使用内置临时监听）"
+      },
+      "inject_headers": {
+        "type": "array",
+        "default": ["User-Agent", "X-Forwarded-For", "Referer", "X-Api-Version"],
+        "description": "注入 Payload 的 HTTP Header 列表"
+      },
+      "check_variants": {
+        "type": "boolean",
+        "default": true,
+        "description": "同时检测 CVE-2021-45046 和 CVE-2021-45105 变体"
+      },
+      "timeout": {
+        "type": "integer",
+        "default": 15,
+        "description": "等待回调的超时秒数"
+      }
+    }
+  },
+  "cve_references": [
+    "CVE-2021-44228",
+    "CVE-2021-45046",
+    "CVE-2021-45105"
+  ],
+  "screenshot": "screenshot.png",
+  "readme": "README.md",
+  "changelog": [
+    {"version": "1.2.0", "date": "2026-04-11", "notes": "支持变体检测，改进回调验证逻辑"},
+    {"version": "1.1.0", "date": "2026-01-15", "notes": "增加 CVE-2021-45046 检测"},
+    {"version": "1.0.0", "date": "2025-12-01", "notes": "初始版本，覆盖 CVE-2021-44228"}
+  ]
+}

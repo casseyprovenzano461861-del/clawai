@@ -46,16 +46,16 @@ export const SeverityLevel = {
  */
 export const connectWebSocket = (onMessage, onError) => {
   try {
-    // WebSocket URL（假设后端支持WebSocket）
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname || 'localhost';
-    const port = window.location.port || '8000';
-    const wsUrl = `${protocol}//${host}:${port}/ws/monitor`;
+    // WebSocket URL - 直接连接后端，不依赖前端端口
+    const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1')
+      .replace(/^http/, 'ws')
+      .replace(/\/api\/v1\/?$/, '');
+    const wsUrl = `${apiBase}/ws/monitoring`;
 
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log('WebSocket连接已建立');
+      // WebSocket 连接建立
       // 发送认证信息（如果需要）
       const token = localStorage.getItem('access_token');
       if (token) {
@@ -85,7 +85,7 @@ export const connectWebSocket = (onMessage, onError) => {
     };
 
     ws.onclose = () => {
-      console.log('WebSocket连接已关闭');
+      // WebSocket 连接关闭，5秒后重连
       // 5秒后尝试重连
       setTimeout(() => {
         if (ws.readyState === WebSocket.CLOSED) {

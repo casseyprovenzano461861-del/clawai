@@ -263,7 +263,7 @@ def main():
 
 预估检测率: {estimated_rate:.1f}%
 
-比赛要求对比:
+指标对比:
   - 基础要求 (≥90%): {'✓ 达标' if estimated_rate >= 90 else '✗ 未达标'}
   - 进阶要求 (≥95%): {'✓ 达标' if estimated_rate >= 95 else '✗ 未达标'}
 

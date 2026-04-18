@@ -55,6 +55,10 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # WebSocket 升级请求跳过（BaseHTTPMiddleware 无法处理 WS upgrade，会返回 403）
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
         # 优先复用客户端传入的 request_id（链路追踪场景）
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
 

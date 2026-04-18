@@ -55,9 +55,9 @@ export const login = async (credentials) => {
 
     return response;
   } catch (error) {
-    if (USE_MOCK_DATA) {
-      // API失败时使用模拟登录（仅用于开发）
-      console.warn('API登录失败，使用模拟用户:', error.message);
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
+      // API失败时使用模拟登录（仅限开发环境）
+      console.warn('[DEV ONLY] API登录失败，使用模拟用户:', error.message);
 
       // 模拟登录逻辑
       if (credentials.username === 'admin' && credentials.password === 'admin123') {
@@ -138,8 +138,8 @@ export const register = async (userData) => {
   try {
     return await request.post('/auth/register', userData);
   } catch (error) {
-    if (USE_MOCK_DATA) {
-      console.warn('API注册失败，使用模拟注册:', error.message);
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
+      console.warn('[DEV ONLY] API注册失败，使用模拟注册:', error.message);
 
       // 模拟注册逻辑
       const mockUser = {
@@ -177,7 +177,7 @@ export const getMe = async () => {
   try {
     return await request.get('/auth/me');
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('API获取用户信息失败，使用本地存储:', error.message);
 
       // 返回本地存储的用户信息
@@ -200,7 +200,7 @@ export const updateMe = async (userData) => {
   try {
     return await request.put('/auth/me', userData);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('API更新用户信息失败，更新本地存储:', error.message);
 
       // 更新本地存储的用户信息
@@ -230,7 +230,7 @@ export const getUsers = async (params = {}) => {
     // 尝试调用用户管理API
     return await request.get('/auth/users', { params });
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('用户列表API不可用，使用模拟数据:', error.message);
 
       // 模拟用户数据
@@ -347,7 +347,7 @@ export const getUser = async (userId) => {
   try {
     return await request.get(`/auth/users/${userId}`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('用户详情API不可用，使用模拟数据:', error.message);
 
       // 从模拟用户列表中查找
@@ -372,7 +372,7 @@ export const createUser = async (userData) => {
   try {
     return await request.post('/auth/users', userData);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('创建用户API不可用，使用模拟创建:', error.message);
 
       // 模拟创建用户
@@ -405,7 +405,7 @@ export const updateUser = async (userId, userData) => {
   try {
     return await request.put(`/auth/users/${userId}`, userData);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('更新用户API不可用，使用模拟更新:', error.message);
 
       // 模拟更新用户
@@ -432,7 +432,7 @@ export const deleteUser = async (userId) => {
   try {
     return await request.delete(`/auth/users/${userId}`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('删除用户API不可用，使用模拟删除:', error.message);
 
       // 模拟删除
@@ -455,7 +455,7 @@ export const getPermissions = async () => {
   try {
     return await request.get('/rbac/permissions');
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('权限API不可用，使用模拟权限数据:', error.message);
 
       // 模拟权限数据

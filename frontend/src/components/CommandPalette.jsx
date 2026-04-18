@@ -97,8 +97,7 @@ const CommandPalette = ({ isOpen, onClose, onNavigate, darkMode = true }) => {
       icon: darkMode ? Sun : Moon,
       shortcut: 'Ctrl+T',
       action: () => {
-        // 切换主题逻辑
-        console.log('Toggle theme');
+        // 切换主题逻辑（待接入 ThemeContext）
       }
     },
   ];

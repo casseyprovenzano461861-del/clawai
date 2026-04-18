@@ -176,11 +176,9 @@ const RealTimeMonitor = () => {
     // 添加连接状态监听
     if (ws) {
       ws.addEventListener('open', () => {
-        console.log('WebSocket连接已建立');
         setIsConnected(true);
       });
       ws.addEventListener('close', () => {
-        console.log('WebSocket连接已关闭');
         setIsConnected(false);
       });
     }
@@ -208,7 +206,6 @@ const RealTimeMonitor = () => {
 
   // 处理WebSocket消息
   const handleWebSocketMessage = (data) => {
-    console.log('收到WebSocket消息:', data);
 
     // 根据消息类型处理
     switch (data.type) {

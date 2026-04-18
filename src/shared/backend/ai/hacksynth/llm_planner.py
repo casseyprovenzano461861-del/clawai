@@ -265,7 +265,7 @@ class LLMHackSynthPlanner(HackSynthPlanner):
 预期输出: Web服务器、框架、CMS、技术栈信息
 
 3. **目录暴力破解**
-命令: `dirsearch -u {target} -e php,html,js -t 50`
+命令: `dirsearch -u {target} -e php,html,txt,zip,bak -r -R 3 -t 50`
 工具: dirsearch
 阶段: reconnaissance
 复杂性: medium
@@ -667,7 +667,7 @@ class LLMHackSynthPlanner(HackSynthPlanner):
             commands = [
                 ("nmap -sS -sV -O {target}", "nmap", 60.0, 0.95),
                 ("whatweb {target}", "whatweb", 30.0, 0.90),
-                ("dirsearch -u {target} -e php,html,js -t 50", "dirsearch", 90.0, 0.80)
+                ("dirsearch -u {target} -e php,html,txt,zip,bak -r -R 3 -t 50", "dirsearch", 90.0, 0.80)
             ]
         elif context.current_phase == PlanningPhase.SCANNING:
             commands = [

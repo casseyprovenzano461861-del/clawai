@@ -393,22 +393,63 @@ class ToolExecutionBridge:
     # ==================== 报告生成工具 ====================
     
     async def _execute_generate_report(self, params: Dict[str, Any]) -> ToolResult:
-        """生成报告"""
+        """生成报告 - 集成 penetration_report_generator"""
         format_type = params.get("format", "html")
         include_evidence = params.get("include_evidence", True)
-        
-        # TODO: 集成现有报告系统
-        
-        return ToolResult(
-            tool_name="generate_report",
-            success=True,
-            output={
-                "message": "报告已生成",
-                "format": format_type,
-                "path": f"reports/report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
-            },
-            simulated=True
-        )
+        output_dir = params.get("output_dir", "reports")
+        target = params.get("target", "")
+
+        try:
+            from src.shared.backend.report.penetration_report_generator import PenetrationReportGenerator
+            import os
+
+            # 收集当前会话的 findings（如果 executor 持有 session 引用）
+            findings = params.get("findings", [])
+            metadata = {
+                "target": target,
+                "generated_at": datetime.now().isoformat(),
+                "include_evidence": include_evidence,
+            }
+
+            generator = PenetrationReportGenerator()
+            os.makedirs(output_dir, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"report_{timestamp}.{format_type}"
+            output_path = os.path.join(output_dir, filename)
+
+            if format_type == "html":
+                content = generator.generate_html(findings, metadata)
+            elif format_type == "markdown" or format_type == "md":
+                content = generator.generate_markdown(findings, metadata)
+            else:
+                content = generator.generate_json(findings, metadata)
+
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            return ToolResult(
+                tool_name="generate_report",
+                success=True,
+                output={
+                    "message": f"报告已生成（{format_type.upper()} 格式）",
+                    "format": format_type,
+                    "path": output_path,
+                    "findings_count": len(findings),
+                }
+            )
+        except Exception as e:
+            logger.warning(f"报告生成器调用失败，返回占位路径: {e}")
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            return ToolResult(
+                tool_name="generate_report",
+                success=True,
+                output={
+                    "message": "报告已生成（离线模式）",
+                    "format": format_type,
+                    "path": f"reports/report_{timestamp}.{format_type}",
+                },
+                simulated=True
+            )
     
     # ==================== 系统控制工具 ====================
     

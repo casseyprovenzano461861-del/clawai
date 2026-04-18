@@ -2,7 +2,7 @@
 """
 P-E-R架构：统一提示词库
 
-参考 PentestGPT 的提示词设计模式，为 ClawAI 的 Planner / Executor / Reflector
+为 ClawAI 的 Planner / Executor / Reflector
 三个角色提供高质量、一致性强的系统提示词。
 
 设计原则：

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width: 600px; height: 600px;
+  background: #050A14;
+  display: flex; align-items: center; justify-content: center;
+}
+.card {
+  width: 480px; height: 480px;
+  background: linear-gradient(145deg, #0d1f3c 0%, #0a1528 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 28px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 28px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.logo-wrap { width: 130px; height: 80px; }
+.logo-wrap svg { width: 100%; height: 100%; }
+.brand-name {
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 42px; font-weight: 900;
+  color: #4D9EFF;
+  letter-spacing: -1px;
+}
+.model-tag {
+  background: rgba(77,158,255,0.08);
+  border: 1px solid rgba(77,158,255,0.2);
+  border-radius: 20px; padding: 6px 20px;
+  font-family: Arial, sans-serif; font-size: 16px;
+  color: rgba(77,158,255,0.6); letter-spacing: 1px;
+}
+.desc {
+  font-family: Arial, sans-serif; font-size: 14px;
+  color: rgba(255,255,255,0.3); text-align: center;
+  line-height: 1.6; max-width: 320px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <!-- DeepSeek 官方 Logo SVG（蓝色鲸鱼/波浪形） -->
+  <div class="logo-wrap">
+    <svg viewBox="0 0 200 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- DeepSeek 官方双色鲸鱼图标简化版 -->
+      <g transform="translate(8, 5)">
+        <!-- 鲸鱼身体 -->
+        <path d="M28 35 C20 22 8 20 6 30 C4 40 14 48 26 44 C30 43 33 40 34 36 L38 28 C40 22 46 18 52 20 C62 24 64 38 56 44 C52 47 46 46 43 43"
+          stroke="#4D9EFF" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <!-- 尾巴 -->
+        <path d="M43 43 L50 52 M43 43 L38 53"
+          stroke="#4D9EFF" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <!-- 眼睛高亮 -->
+        <circle cx="14" cy="29" r="3.5" fill="#4D9EFF"/>
+        <circle cx="15.2" cy="28" r="1.2" fill="white" opacity="0.9"/>
+      </g>
+      <!-- 文字 -->
+      <text x="82" y="52" font-family="Arial Black, Arial" font-weight="900" font-size="32" fill="#4D9EFF" letter-spacing="-0.5">DeepSeek</text>
+    </svg>
+  </div>
+  <div class="brand-name">DeepSeek</div>
+  <div class="model-tag">深度求索 · 高性价比 &amp; 中文优化</div>
+  <div class="desc">高性价比首选，中文语境优化<br>适合本地部署与离线场景</div>
+</div>
+</body>
+</html>

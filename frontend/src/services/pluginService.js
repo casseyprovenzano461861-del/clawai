@@ -34,7 +34,7 @@ export const getPlugins = async (params = {}) => {
   try {
     return await request.get('/plugins', { params });
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('获取插件列表API失败，使用模拟数据:', error.message);
 
       // 模拟插件数据（与后端 _PLUGINS 保持一致）
@@ -126,7 +126,7 @@ export const getPlugin = async (pluginId) => {
   try {
     return await request.get(`/plugins/${pluginId}`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('获取插件详情API失败，使用模拟数据:', error.message);
 
       // 从模拟插件列表中查找
@@ -152,7 +152,7 @@ export const installPlugin = async (pluginId, config = {}) => {
   try {
     return await request.post(`/plugins/${pluginId}/install`, config);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('安装插件API失败，使用模拟响应:', error.message);
 
       // 模拟安装响应
@@ -178,7 +178,7 @@ export const enablePlugin = async (pluginId) => {
   try {
     return await request.post(`/plugins/${pluginId}/enable`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('启用插件API失败，使用模拟响应:', error.message);
 
       // 模拟启用响应
@@ -204,7 +204,7 @@ export const disablePlugin = async (pluginId) => {
   try {
     return await request.post(`/plugins/${pluginId}/disable`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('禁用插件API失败，使用模拟响应:', error.message);
 
       // 模拟禁用响应
@@ -230,7 +230,7 @@ export const uninstallPlugin = async (pluginId) => {
   try {
     return await request.delete(`/plugins/${pluginId}`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('卸载插件API失败，使用模拟响应:', error.message);
 
       // 模拟卸载响应
@@ -256,7 +256,7 @@ export const updatePlugin = async (pluginId, version = 'latest') => {
   try {
     return await request.post(`/plugins/${pluginId}/update`, { version });
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('更新插件API失败，使用模拟响应:', error.message);
 
       // 模拟更新响应
@@ -282,7 +282,7 @@ export const getPluginSettings = async (pluginId) => {
   try {
     return await request.get(`/plugins/${pluginId}/settings`);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('获取插件设置API失败，使用模拟数据:', error.message);
 
       // 模拟插件设置
@@ -304,7 +304,7 @@ export const updatePluginSettings = async (pluginId, settings) => {
   try {
     return await request.put(`/plugins/${pluginId}/settings`, settings);
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('更新插件设置API失败，使用模拟响应:', error.message);
 
       // 模拟更新响应
@@ -329,7 +329,7 @@ export const getPluginMarketplace = async () => {
   try {
     return await request.get('/plugins/marketplace');
   } catch (error) {
-    if (USE_MOCK_DATA) {
+    if (USE_MOCK_DATA && import.meta.env.DEV) {
       console.warn('获取插件市场API失败，使用模拟数据:', error.message);
 
       // 模拟插件市场

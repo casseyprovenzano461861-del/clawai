@@ -22,6 +22,10 @@ router = APIRouter(prefix="/api/v1/auth", tags=["认证管理"])
 
 _bearer = HTTPBearer(auto_error=False)
 
+# 内存 Token 黑名单（存储已登出的 token hash）
+# 生产环境应迁移到 Redis；进程内 set 在重启后清空，旧 token 届时已自然过期
+_token_blacklist: set = set()
+
 # ---------------------------------------------------------------------------
 # 请求 / 响应模型
 # ---------------------------------------------------------------------------
@@ -136,7 +140,12 @@ async def login(body: LoginRequest, request: Request, db=Depends(get_db)):
 async def logout(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ):
-    """登出（客户端丢弃令牌即可；服务端无状态，此端点返回成功确认）。"""
+    """登出：将当前 access_token 加入黑名单，使其立即失效。"""
+    if credentials and credentials.credentials:
+        # 使用 token 的哈希值节省内存（避免存储完整 token 字符串）
+        import hashlib
+        token_hash = hashlib.sha256(credentials.credentials.encode()).hexdigest()
+        _token_blacklist.add(token_hash)
     return {"success": True, "message": "已登出"}
 
 

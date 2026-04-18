@@ -36,23 +36,29 @@ class ScanStartResponse(BaseModel):
 @router.post("/start", response_model=ScanStartResponse)
 async def start_scan(req: ScanStartRequest) -> ScanStartResponse:
     """启动扫描任务，通过 EventBus → WebSocket 实时推送进度"""
+    # 基础输入校验
+    if not req.target or not req.target.strip():
+        raise HTTPException(status_code=400, detail="target 不能为空")
+    target = req.target.strip()
+    if any(c in target for c in ('\x00', '\n', '\r')):
+        raise HTTPException(status_code=400, detail="target 包含非法字符")
+
     scan_id = str(uuid.uuid4())[:8]
 
     _scan_tasks[scan_id] = {
         "scan_id": scan_id,
-        "target": req.target,
+        "target": target,
         "profile": req.profile,
         "status": "starting",
         "findings": [],
         "flags": [],
     }
 
-    # 后台异步运行，不阻塞 HTTP 响应
-    asyncio.create_task(_run_scan(scan_id, req.target, req.profile, req.vuln_hint))
+    asyncio.create_task(_run_scan(scan_id, target, req.profile, req.vuln_hint))
 
     return ScanStartResponse(
         scan_id=scan_id,
-        target=req.target,
+        target=target,
         profile=req.profile,
         message=f"扫描已启动 (id: {scan_id})，通过 WebSocket /ws/per-events 接收实时进度",
     )
@@ -63,7 +69,9 @@ async def get_scan_status(scan_id: str) -> Dict[str, Any]:
     """查询扫描状态"""
     if scan_id not in _scan_tasks:
         raise HTTPException(status_code=404, detail=f"扫描任务 {scan_id} 不存在")
-    return _scan_tasks[scan_id]
+    # 过滤掉不可序列化的内部引用字段（如 _cli_ref）
+    task = _scan_tasks[scan_id]
+    return {k: v for k, v in task.items() if not k.startswith("_")}
 
 
 @router.delete("/{scan_id}")
@@ -78,8 +86,8 @@ async def stop_scan(scan_id: str) -> Dict[str, Any]:
         try:
             from src.cli.scan_state import ScanState
             cli._scan_state.transition(ScanState.CANCELLED)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"扫描 {scan_id} 取消信号发送失败: {exc}")
 
     task_info["status"] = "cancelled"
     return {"scan_id": scan_id, "status": "cancelled"}

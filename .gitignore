@@ -66,3 +66,7 @@ htmlcov/
 .mypy_cache/references/PentestGPT
 references/
 tools/penetration/
+
+# Skill 临时执行文件（避免触发热重载）
+src/shared/backend/skills/_tmp/
+**/skills/_tmp/

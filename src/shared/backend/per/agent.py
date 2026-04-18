@@ -82,7 +82,7 @@ class PERAgent:
         self.executor = PERExecutor(
             skill_registry=skill_registry,
             llm_client=llm_client,
-            max_retries=3,
+            max_retries=1,
             use_llm=self.use_llm
         )
         
@@ -227,29 +227,68 @@ class PERAgent:
                 else:
                     self.session_stats["failed_executions"] += 1
             
-            # 阶段3: 反思
+            # 阶段3: 反思（并行）
             logger.info("阶段3: 反思")
-            reflections = []
-            for result in execution_results:
-                # 获取子任务数据
+
+            async def _reflect_one(result):
+                # 空结果/超时结果跳过 LLM 反思，直接返回轻量占位
+                if not result.success and not result.output:
+                    return {
+                        "subtask_id": result.subtask_id,
+                        "insights": [],
+                        "replan_needed": False,
+                        "hard_action": None,
+                        "_skipped": True,
+                    }
                 subtask_data = self._get_subtask_data(result.subtask_id)
-                
-                # 执行反思
-                reflection = await self.reflector.analyze_execution_result(
+                return await self.reflector.analyze_execution_result(
                     result.subtask_id,
                     result.output,
-                    subtask_data
+                    subtask_data,
                 )
-                reflections.append(reflection)
-                all_reflections.append(reflection)
+
+            reflections = await asyncio.gather(
+                *[_reflect_one(r) for r in execution_results],
+                return_exceptions=False,
+            )
+            all_reflections.extend(reflections)
+
+                # ✅ 处理 hard_action：reflector 硬规则触发的动作
+                hard_action = reflection.get("hard_action")
+                if hard_action == "trigger_validation":
+                    # 发现漏洞，注入验证任务
+                    validate_id = f"validate_{result.subtask_id}"
+                    logger.info(f"[hard_action] 注入验证任务: {validate_id}")
+                    validate_task = {
+                        "id": validate_id,
+                        "data": {
+                            "task_type": "validation",
+                            "description": f"验证 {result.subtask_id} 发现的漏洞",
+                            "original_subtask_id": result.subtask_id,
+                            "original_result": result.output,
+                        },
+                        "priority": 1,
+                        "status": "pending",
+                    }
+                    if self.graph_manager and hasattr(self.graph_manager, "add_node"):
+                        self.graph_manager.add_node(validate_id, validate_task["data"])
+                    elif hasattr(self, "_pending_inject"):
+                        self._pending_inject.append(validate_task)
+                elif hard_action == "switch_tool":
+                    logger.info(f"[hard_action] 工具失败，重规划将切换工具: {result.subtask_id}")
             
             self.session_stats["total_reflections"] += len(reflections)
             
             # 阶段4: 动态重规划
             logger.info("阶段4: 动态重规划")
             
-            # 生成情报摘要
-            intelligence_summary = await self.reflector.generate_intelligence_summary(reflections)
+            # 全部反思被跳过时（均为空结果），跳过 LLM 情报摘要，避免无效调用
+            all_skipped = all(r.get("_skipped") for r in reflections if isinstance(r, dict))
+            if all_skipped:
+                intelligence_summary = {"audit_result": {"status": "in_progress"}}
+                logger.debug("本轮反思全部跳过，跳过 LLM intelligence_summary 调用")
+            else:
+                intelligence_summary = await self.reflector.generate_intelligence_summary(reflections)
             
             # 检查是否达成目标
             if intelligence_summary.get("audit_result", {}).get("status") == "goal_achieved":
@@ -281,46 +320,57 @@ class PERAgent:
         return final_report
     
     async def _execute_pending_tasks(self) -> List[Any]:
-        """执行待处理任务
-        
+        """执行待处理任务（并行加速版）
+
+        无依赖关系的任务通过 asyncio.gather 并发执行，
+        有显式依赖的任务按依赖顺序串行。
+
         Returns:
             List[ExecutionResult]: 执行结果列表
         """
-        results = []
-        
-        # 获取待处理任务
         pending_tasks = self._get_pending_tasks()
-        
         if not pending_tasks:
-            return results
-        
+            return []
+
         # 按优先级排序
         pending_tasks.sort(key=lambda x: x.get("priority", 99))
-        
-        # 执行任务
+
+        # 将任务分为「无依赖」和「有依赖」两批
+        independent, dependent = [], []
         for task in pending_tasks:
+            deps = task.get("data", {}).get("dependencies", []) or task.get("dependencies", [])
+            if deps:
+                dependent.append(task)
+            else:
+                independent.append(task)
+
+        # 并行执行无依赖任务（最多 5 个同时跑，避免资源耗尽）
+        MAX_PARALLEL = 5
+        results = []
+
+        async def _run_one(task):
             task_id = task.get("id")
             task_data = task.get("data", {})
-            
-            logger.debug(f"执行任务: {task_id}")
-            
-            # 执行子任务
-            result = await self.executor.execute_subtask(
-                task_id,
-                task_data,
-                self.graph_manager
-            )
-            
-            results.append(result)
-            
-            # 记录执行历史
+            logger.debug(f"并行执行任务: {task_id}")
+            result = await self.executor.execute_subtask(task_id, task_data, self.graph_manager)
             self.session_history.append({
                 "timestamp": datetime.now().isoformat(),
                 "type": "execution",
                 "task_id": task_id,
-                "success": result.success
+                "success": result.success,
             })
-        
+            return result
+
+        # 分批并行（每批 MAX_PARALLEL 个）
+        for i in range(0, len(independent), MAX_PARALLEL):
+            batch = independent[i:i + MAX_PARALLEL]
+            batch_results = await asyncio.gather(*[_run_one(t) for t in batch], return_exceptions=False)
+            results.extend(batch_results)
+
+        # 有依赖的任务仍串行执行（依赖已满足才能跑）
+        for task in dependent:
+            results.append(await _run_one(task))
+
         return results
     
     def _get_pending_tasks(self) -> List[Dict[str, Any]]:

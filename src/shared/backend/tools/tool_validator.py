@@ -159,10 +159,10 @@ class ToolValidator:
         # 建议
         report_lines.append(f"\n建议:")
         if stats["implemented"] < 30:
-            report_lines.append(f"  ❌ 当前只有 {stats['implemented']} 个工具完整实现，未达到比赛要求的 ≥30 个")
+            report_lines.append(f"  ❌ 当前只有 {stats['implemented']} 个工具完整实现，未达到目标数量 ≥30 个")
             report_lines.append(f"  ✅ 需要至少修复 {30-stats['implemented']} 个工具")
         else:
-            report_lines.append(f"  ✅ 已有 {stats['implemented']} 个工具完整实现，满足比赛要求")
+            report_lines.append(f"  ✅ 已有 {stats['implemented']} 个工具完整实现，满足工具数量要求")
         
         if stats["generic_template"] > 0:
             report_lines.append(f"  ⚠ 有 {stats['generic_template']} 个通用模板文件需要具体实现")
@@ -253,7 +253,7 @@ def main():
     # 返回状态码
     validation = validator.validate_all_tools()
     if validation["stats"]["implemented"] >= 30:
-        print("\n✅ 工具数量满足比赛要求!")
+        print("\n✅ 工具数量满足工具数量要求!")
         return 0
     else:
         print(f"\n❌ 工具数量不足: {validation['stats']['implemented']}/30")

@@ -247,6 +247,8 @@ def start_backend(args) -> Optional[subprocess.Popen]:
     ]
     if args.mode == "dev":
         cmd.append("--reload")
+        cmd.extend(["--reload-exclude", "*/_tmp/*"])
+        cmd.extend(["--reload-exclude", "*/skills/_tmp*"])
 
     proc = run_command(cmd, cwd=backend_cwd, env=env)
     print_service("后端 API", f"http://127.0.0.1:{args.backend_port}")
@@ -278,7 +280,11 @@ def start_frontend(args) -> Optional[subprocess.Popen]:
         print_ok("前端依赖安装完成")
 
     cmd = "npm run dev" if args.mode == "dev" else "npm run build && npm run preview"
-    proc = run_command(cmd, cwd=str(frontend_dir))
+    # 将实际后端端口注入给 Vite，代理目标动态跟随
+    frontend_env = {
+        "VITE_BACKEND_PORT": str(args.backend_port),
+    }
+    proc = run_command(cmd, cwd=str(frontend_dir), env=frontend_env)
     print_service("前端 UI", f"http://localhost:{args.frontend_port}")
     return proc
 

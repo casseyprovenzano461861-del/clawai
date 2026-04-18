@@ -3,6 +3,7 @@
 """
 Nmap扫描工具模块（基于BaseTool的新版本）
 封装nmap扫描功能，提供端口扫描接口
+支持：单主机扫描、全端口扫描、子网主机发现
 """
 
 import subprocess
@@ -18,6 +19,21 @@ from backend.tools.base_tool import (
     BaseTool, ToolExecutionMode, ToolCategory, 
     ToolPriority, ToolExecutionResult, register_tool
 )
+
+
+def _is_network_target(target: str) -> bool:
+    """判断目标是否为子网/范围（而非单个主机）"""
+    t = target.strip()
+    # CIDR 表示法：192.168.1.0/24
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$', t):
+        return True
+    # IP 范围：192.168.1.1-254 或 192.168.1-5.1
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}-\d{1,3}$', t):
+        return True
+    # 通配符：192.168.1.*
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\*$', t):
+        return True
+    return False
 
 
 @register_tool
@@ -92,15 +108,65 @@ class NmapTool(BaseTool):
                     })
         
         return ports
-    
+
+    def _parse_host_discovery(self, output: str) -> List[str]:
+        """从 nmap -sn 输出中解析存活主机 IP 列表"""
+        hosts = []
+        for line in output.splitlines():
+            # "Nmap scan report for 192.168.1.5" 或含括号的 hostname
+            m = re.search(r'Nmap scan report for (?:\S+ )?\(?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\)?', line)
+            if m:
+                hosts.append(m.group(1))
+        return hosts
+
+    def discover_hosts(self, network: str, timeout: int = 120) -> Dict[str, Any]:
+        """
+        主机发现：对给定子网执行 nmap -sn（Ping 扫描），返回存活主机列表。
+        支持 CIDR（192.168.1.0/24）、范围（192.168.1.1-50）等格式。
+        """
+        cmd = [
+            self.command,
+            "-sn",          # 仅做 Ping 扫描，不扫端口
+            "-T4",
+            "--host-timeout", "10s",
+            network
+        ]
+        result = self._run_command(cmd, timeout=timeout)
+
+        if result.returncode != 0 and not result.stdout:
+            return {
+                "network": network,
+                "alive_hosts": [],
+                "error": result.stderr[:300] if result.stderr else "主机发现失败",
+                "execution_mode": "real",
+                "command": " ".join(cmd),
+            }
+
+        hosts = self._parse_host_discovery(result.stdout)
+        return {
+            "network": network,
+            "alive_hosts": hosts,
+            "total_alive": len(hosts),
+            "raw_output": result.stdout[:2000],
+            "execution_mode": "real",
+            "command": " ".join(cmd),
+        }
+
     def _execute_real(self, target: str, options: Optional[Dict] = None) -> Dict[str, Any]:
         """真实执行nmap扫描"""
         if options is None:
             options = {}
-        
+
+        # ── 子网/网段：先做主机发现，再汇总 ──────────────────────────────
+        if _is_network_target(target):
+            return self._execute_network_discovery(target, options)
+
         # 提取选项参数
+        full_port = options.get("full_port", False)   # 全端口扫描
         ports = options.get("ports", None)
-        if not ports:
+        if full_port:
+            ports = "1-65535"
+        elif not ports:
             ports_list = self.common_ports
             ports = ",".join(str(p) for p in ports_list)
         
@@ -110,9 +176,9 @@ class NmapTool(BaseTool):
         # 清理目标格式
         clean_target = target
         if target.startswith("http://"):
-            clean_target = target.replace("http://", "")
+            clean_target = target.replace("http://", "").split("/")[0]
         elif target.startswith("https://"):
-            clean_target = target.replace("https://", "")
+            clean_target = target.replace("https://", "").split("/")[0]
         
         # 构建命令
         cmd = [
@@ -125,6 +191,11 @@ class NmapTool(BaseTool):
             '--host-timeout', '2m',
             clean_target
         ]
+
+        # 全端口扫描加 -sV（服务版本检测）
+        if full_port:
+            cmd.insert(1, "-sV")
+            cmd[cmd.index("--host-timeout") + 1] = "5m"
         
         # 执行命令
         result = self._run_command(cmd, timeout=timeout)
@@ -151,63 +222,141 @@ class NmapTool(BaseTool):
             "clean_target": clean_target,
             "ports": ports_found,
             "total_open_ports": len(ports_found),
-            "raw_output": result.stdout[:1000],
+            "raw_output": result.stdout[:2000],
             "execution_mode": "real",
-            "command": " ".join(cmd)
+            "command": " ".join(cmd),
+            "full_port_scan": full_port,
         }
-    
+
+    def _execute_network_discovery(self, network: str, options: Dict) -> Dict[str, Any]:
+        """
+        子网扫描：先主机发现，再对每个存活主机做端口扫描（最多 20 台）。
+        返回结构：
+          {
+            "network": "192.168.1.0/24",
+            "alive_hosts": [...],
+            "host_scan_results": { ip: {ports:[...]} },
+            "summary": "发现 N 台存活主机，共 M 个开放端口",
+          }
+        """
+        timeout = options.get("timeout", 300)
+
+        # Step 1: Ping 扫描
+        discovery = self.discover_hosts(network, timeout=min(timeout, 60))
+        alive = discovery.get("alive_hosts", [])
+
+        if not alive:
+            return {
+                "network": network,
+                "alive_hosts": [],
+                "host_scan_results": {},
+                "summary": f"网段 {network} 内未发现存活主机",
+                "raw_output": discovery.get("raw_output", ""),
+                "execution_mode": "real",
+            }
+
+        # Step 2: 对存活主机逐一扫描（最多 20 台）
+        scan_targets = alive[:20]
+        host_results: Dict[str, Any] = {}
+        total_ports = 0
+
+        ports_str = ",".join(str(p) for p in self.common_ports)
+        for ip in scan_targets:
+            cmd = [
+                self.command, "-sT",
+                "-p", ports_str,
+                "-T4", "--open", "-n",
+                "--host-timeout", "90s",
+                ip
+            ]
+            r = self._run_command(cmd, timeout=120)
+            ports_found = self._parse_nmap_output(r.stdout) if r.returncode == 0 else []
+            total_ports += len(ports_found)
+            host_results[ip] = {
+                "ports": ports_found,
+                "total_open_ports": len(ports_found),
+            }
+
+        summary = (
+            f"网段 {network} 发现 {len(alive)} 台存活主机"
+            + (f"（仅扫描前 {len(scan_targets)} 台）" if len(alive) > 20 else "")
+            + f"，共 {total_ports} 个开放端口"
+        )
+
+        return {
+            "network": network,
+            "alive_hosts": alive,
+            "total_alive": len(alive),
+            "host_scan_results": host_results,
+            "summary": summary,
+            "execution_mode": "real",
+            "scan_type": "network_discovery",
+        }
+
     def _simulate_execution(self, target: str, options: Optional[Dict] = None) -> Dict[str, Any]:
         """模拟nmap执行（当工具不可用时）"""
         import random
         
+        # 子网模拟
+        if _is_network_target(target):
+            fake_hosts = [
+                target.rsplit(".", 1)[0] + "." + str(i)
+                for i in [1, 10, 20, 100, 200]
+                if not target.endswith("*")
+            ] or ["192.168.1.1", "192.168.1.10", "192.168.1.100"]
+
+            host_results = {}
+            for ip in fake_hosts[:3]:
+                ports_sim = []
+                for p in random.sample(self.common_ports, 3):
+                    ports_sim.append({"port": p, "service": self._guess_service(p), "state": "open", "simulated": True})
+                host_results[ip] = {"ports": ports_sim, "total_open_ports": len(ports_sim)}
+
+            return {
+                "network": target,
+                "alive_hosts": fake_hosts[:3],
+                "total_alive": 3,
+                "host_scan_results": host_results,
+                "summary": f"[模拟] 网段 {target} 发现 3 台存活主机",
+                "execution_mode": "simulated",
+                "simulated": True,
+            }
+
         # 清理目标格式
         clean_target = target
         if target.startswith("http://"):
-            clean_target = target.replace("http://", "")
+            clean_target = target.replace("http://", "").split("/")[0]
         elif target.startswith("https://"):
-            clean_target = target.replace("https://", "")
+            clean_target = target.replace("https://", "").split("/")[0]
         
         # 模拟开放端口
-        simulated_ports = []
-        
-        # 随机选择3-6个端口作为开放端口
         open_count = random.randint(3, 6)
         open_ports = random.sample(self.common_ports, min(open_count, len(self.common_ports)))
-        
+        simulated_ports = []
         for port in sorted(open_ports):
             service = self._guess_service(port)
             simulated_ports.append({
-                "port": port,
-                "service": service,
-                "state": "open",
-                "service_guess": service,
-                "simulated": True
+                "port": port, "service": service,
+                "state": "open", "service_guess": service, "simulated": True
             })
         
-        # 生成模拟输出
         output_lines = [
             f"Starting Nmap 7.94 ( https://nmap.org ) at 2024-01-01 12:00:00 UTC",
             f"Nmap scan report for {clean_target}",
             f"Host is up (0.0010s latency).",
-            f"Not shown: {len(self.common_ports) - open_count} closed ports",
             f"PORT     STATE SERVICE",
             f"{'-' * 60}"
         ]
-        
         for port_info in simulated_ports:
             output_lines.append(f"{port_info['port']}/tcp open  {port_info['service']}")
-        
-        output_lines.append("")
         output_lines.append(f"Nmap done: 1 IP address (1 host up) scanned in 2.34 seconds")
-        
-        simulated_output = "\n".join(output_lines)
         
         return {
             "target": target,
             "clean_target": clean_target,
             "ports": simulated_ports,
             "total_open_ports": len(simulated_ports),
-            "raw_output": simulated_output,
+            "raw_output": "\n".join(output_lines),
             "execution_mode": "simulated",
             "simulated": True,
             "note": "这是模拟数据，实际环境中请安装nmap进行真实扫描"

@@ -1028,6 +1028,8 @@ class UnifiedExecutor(BaseExecutor):
             return self._execute_httpx_real(target, options)
         elif tool_name == "sqlmap":
             return self._execute_sqlmap_real(target, options)
+        elif tool_name == "nikto":
+            return self._execute_nikto_real(target, options)
         else:
             # 使用BaseTool架构
             return self._execute_with_base_tool(tool_name, target, options)
@@ -1065,9 +1067,10 @@ class UnifiedExecutor(BaseExecutor):
             # 获取端口范围
             ports = options.get("ports", "21,22,23,25,53,80,110,111,135,139,143,443,445,993,995,1433,1521,3306,3389,5432,5900,6379,8080,8443,27017")
             
-            # 执行nmap命令
+            # 执行nmap命令（使用完整路径避免 Windows 空格问题）
+            nmap_exe = shutil.which("nmap") or "nmap"
             cmd = [
-                "nmap",
+                nmap_exe,
                 "-sT",           # TCP连接扫描
                 "-p", ports,
                 "-T4",           # 较快扫描速度
@@ -1109,6 +1112,94 @@ class UnifiedExecutor(BaseExecutor):
         except Exception as e:
             raise RuntimeError(f"nmap执行错误: {str(e)}")
     
+    def _execute_nikto_real(self, target: str, options: Dict) -> Dict[str, Any]:
+        """真实执行nikto扫描（Windows 进程树强制超时）"""
+        NIKTO_TIMEOUT = 60  # 秒，Windows 下 -maxtime 不可靠，用 Python 层超时保底
+
+        try:
+            # 优先使用项目内 nikto.pl（系统 nikto.bat 路径硬编码错误）
+            _this_file = os.path.abspath(__file__)
+            _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_this_file)))))
+            _nikto_pl = os.path.join(_project_root, "tools", "penetration", "nikto", "program", "nikto.pl")
+            _strawberry = "C:/Strawberry/perl/bin/perl.exe"
+            perl_exe = _strawberry if os.path.exists(_strawberry) else shutil.which("perl")
+            if perl_exe and os.path.exists(_nikto_pl):
+                cmd = [perl_exe, _nikto_pl, "-h", target, "-nointeractive", "-maxtime", f"{NIKTO_TIMEOUT}s"]
+            else:
+                nikto_exe = shutil.which("nikto") or "nikto"
+                cmd = [nikto_exe, "-h", target, "-nointeractive", "-maxtime", f"{NIKTO_TIMEOUT}s"]
+            tuning = options.get("tuning")
+            if tuning:
+                cmd.extend(["-Tuning", str(tuning)])
+
+            self.logger.info(f"执行nikto命令: {' '.join(cmd)}")
+            _nikto_cwd = os.path.dirname(_nikto_pl) if os.path.exists(_nikto_pl) else None
+            _env = os.environ.copy()
+            if _nikto_cwd:
+                _env["PWD"] = _nikto_cwd
+
+            # Windows 下用 Popen + taskkill 杀整个进程树，确保超时生效
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=_nikto_cwd,
+                env=_env,
+                encoding="utf-8",
+                errors="ignore",
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+            )
+            try:
+                stdout, stderr = proc.communicate(timeout=NIKTO_TIMEOUT + 5)
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"nikto 超时（{NIKTO_TIMEOUT}s），强制终止进程树")
+                try:
+                    if sys.platform == "win32":
+                        subprocess.call(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            timeout=10
+                        )
+                    else:
+                        import signal as _signal
+                        os.killpg(os.getpgid(proc.pid), _signal.SIGKILL)
+                    proc.wait(timeout=10)
+                except Exception as _kill_err:
+                    self.logger.debug(f"nikto 进程清理: {_kill_err}")
+                # communicate() 超时后管道已关闭，不能再读；直接用空字符串
+                stdout, stderr = "", ""
+
+            output = stdout + stderr
+            findings = self._parse_nikto_output(output)
+
+            return {
+                "target": target,
+                "findings": findings,
+                "raw_output": output[:2000],
+                "execution_mode": "real"
+            }
+        except Exception as e:
+            raise RuntimeError(f"nikto执行错误: {str(e)}")
+
+    def _parse_nikto_output(self, output: str) -> List[Dict[str, Any]]:
+        """解析nikto输出"""
+        findings = []
+        for line in output.split("\n"):
+            line = line.strip()
+            if line.startswith("+ ") and len(line) > 3:
+                finding_text = line[2:].strip()
+                severity = "medium"
+                if any(k in finding_text.lower() for k in ["osvdb", "cve", "xss", "sql", "inject"]):
+                    severity = "high"
+                elif any(k in finding_text.lower() for k in ["server", "header", "cookie", "allow"]):
+                    severity = "info"
+                findings.append({
+                    "type": "nikto_finding",
+                    "description": finding_text,
+                    "severity": severity
+                })
+        return findings
+
     def _parse_nmap_output(self, output: str) -> List[Dict[str, Any]]:
         """解析nmap输出"""
         ports = []

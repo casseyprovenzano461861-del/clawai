@@ -18,55 +18,17 @@ from backend.database import get_db
 from backend.models.report import Report, ReportStatus, ReportFormat
 from backend.auth.fastapi_permissions import require_authentication, get_current_user
 from backend.schemas.error import APIError, ErrorCode
-# 尝试导入真实报告生成器，失败时使用模拟生成器
+# 尝试导入真实报告生成器
 try:
     from backend.report.penetration_report_generator import PenetrationReportGenerator
     REPORT_GENERATOR_AVAILABLE = True
 except ImportError:
-    REPORT_GENERATOR_AVAILABLE = False
-    # 模拟报告生成器
-    class PenetrationReportGenerator:
-        def generate_report(self, target, findings, report_format, template, **kwargs):
-            return {
-                "id": f"report_{int(datetime.now().timestamp())}",
-                "title": f"安全评估报告 - {target}",
-                "target": target,
-                "date": datetime.now().isoformat(),
-                "findings": findings,
-                "format": report_format,
-                "template": template,
-                "executive_summary": {
-                    "overview": f"本次安全评估发现目标系统 {target} 存在 {len(findings)} 个安全漏洞。",
-                    "risk_level": "高" if any(f.get('severity') == 'high' for f in findings) else "中",
-                    "recommendations_count": len(findings)
-                }
-            }
-
-        def generate_html_report(self, report_dict):
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>{report_dict.get('title', '安全评估报告')}</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                    h1 {{ color: #333; }}
-                    .finding {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; }}
-                    .high {{ border-left: 5px solid red; }}
-                    .medium {{ border-left: 5px solid orange; }}
-                    .low {{ border-left: 5px solid green; }}
-                </style>
-            </head>
-            <body>
-                <h1>{report_dict.get('title', '安全评估报告')}</h1>
-                <p>生成时间: {datetime.now().isoformat()}</p>
-                <h2>执行摘要</h2>
-                <p>{report_dict.get('executive_summary', {}).get('overview', '')}</p>
-                <h2>漏洞发现</h2>
-                {''.join(f'<div class="finding {f.get("severity", "medium")}"><h3>{f.get("name")}</h3><p>{f.get("description")}</p></div>' for f in report_dict.get('findings', []))}
-            </body>
-            </html>
-            """
+    try:
+        from src.shared.backend.report.penetration_report_generator import PenetrationReportGenerator
+        REPORT_GENERATOR_AVAILABLE = True
+    except ImportError:
+        REPORT_GENERATOR_AVAILABLE = False
+        PenetrationReportGenerator = None  # type: ignore
 
 from backend.schemas.base import BaseSchema
 from pydantic import Field, validator
@@ -81,10 +43,17 @@ class ReportCreate(BaseSchema):
     """创建报告请求"""
     title: str = Field(..., min_length=1, max_length=200, description="报告标题")
     description: Optional[str] = Field(None, description="报告描述")
-    format: ReportFormat = Field(default=ReportFormat.HTML, description="报告格式")
+    format: ReportFormat = Field(default=ReportFormat.HTML, description="报告格式。支持: html（网页）、pdf（PDF，需安装 weasyprint）、markdown（Markdown 文本）、json（原始数据）")
     template: str = Field(default="standard", description="报告模板")
     target: Optional[str] = Field(None, description="目标地址或范围")
     scan_id: Optional[int] = Field(None, description="关联的扫描ID")
+    project_id: Optional[str] = Field(None, description="关联的项目ID")
+    # 报告元信息字段
+    tester_name: Optional[str] = Field(None, description="测试人员姓名")
+    client_name: Optional[str] = Field(None, description="委托方/客户名称")
+    test_start_date: Optional[str] = Field(None, description="测试开始日期，如 2026-04-01")
+    test_end_date: Optional[str] = Field(None, description="测试结束日期，如 2026-04-11")
+    disclaimer: Optional[str] = Field(None, description="免责声明（留空使用默认声明）")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="生成参数")
 
 class ReportUpdate(BaseSchema):
@@ -119,9 +88,27 @@ class ReportListResponse(BaseSchema):
     total_pages: int
 
 # 报告生成器实例
-report_generator = PenetrationReportGenerator()
+report_generator = PenetrationReportGenerator() if REPORT_GENERATOR_AVAILABLE else None
 
-@router.post("/generate", response_model=ReportResponse)
+# ── 内存降级存储（数据库不可用时使用）────────────────────────────
+_mem_reports: Dict[int, Dict[str, Any]] = {}
+_mem_report_id = 1
+
+def _new_mem_id() -> int:
+    global _mem_report_id
+    mid = _mem_report_id
+    _mem_report_id += 1
+    return mid
+
+def _db_ok(db) -> bool:
+    """检查数据库连接是否可用"""
+    try:
+        db.execute("SELECT 1")
+        return True
+    except Exception:
+        return False
+
+@router.post("/generate")  # response_model 不强制，兼容内存降级
 async def generate_report(
     background_tasks: BackgroundTasks,
     report_data: ReportCreate,
@@ -131,10 +118,10 @@ async def generate_report(
     """
     生成新报告
 
-    创建报告记录并异步生成报告内容。
+    创建报告记录并异步生成报告内容。数据库不可用时使用内存存储。
     """
     try:
-        # 创建报告记录
+        # 尝试数据库存储
         report = Report(
             title=report_data.title,
             description=report_data.description,
@@ -145,8 +132,14 @@ async def generate_report(
                 "template": report_data.template,
                 "target": report_data.target,
                 "scan_id": report_data.scan_id,
+                "project_id": report_data.project_id,
+                "tester_name": report_data.tester_name,
+                "client_name": report_data.client_name,
+                "test_start_date": report_data.test_start_date,
+                "test_end_date": report_data.test_end_date,
                 "parameters": report_data.parameters,
-                "generator": "penetration_report_generator"
+                "generator": "penetration_report_generator",
+                "supported_formats": ["html", "pdf", "markdown", "json"],
             }
         )
 
@@ -166,15 +159,74 @@ async def generate_report(
         return report
 
     except Exception as e:
-        logger.error(f"创建报告失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=APIError(
-                code=ErrorCode.UNKNOWN_ERROR,
-                message="创建报告失败",
-                severity="high"
-            ).model_dump()
+        logger.warning(f"数据库不可用，使用内存存储生成报告: {e}")
+        # 内存降级
+        now = datetime.utcnow().isoformat() + "Z"
+        mid = _new_mem_id()
+        mem_report = {
+            "id": mid,
+            "title": report_data.title,
+            "description": report_data.description or "",
+            "format": report_data.format.value if hasattr(report_data.format, 'value') else str(report_data.format),
+            "status": "generating",
+            "created_by": current_user.get('user_id', 'anonymous'),
+            "created_at": now,
+            "updated_at": now,
+            "finding_count": 0,
+            "vulnerability_count": 0,
+            "file_path": None,
+            "rendered_content": None,
+            "content": None,
+            "report_metadata": {
+                "template": report_data.template,
+                "target": report_data.target,
+            },
+        }
+        _mem_reports[mid] = mem_report
+
+        # 后台生成内容
+        background_tasks.add_task(
+            _generate_mem_report_content,
+            mid,
+            report_data,
         )
+        return mem_report
+
+
+async def _generate_mem_report_content(report_id: int, report_data: ReportCreate):
+    """内存模式下后台生成报告内容"""
+    import asyncio
+    await asyncio.sleep(0.5)  # 模拟异步生成
+    mem = _mem_reports.get(report_id)
+    if not mem:
+        return
+    try:
+        if report_generator is not None:
+            report_dict = report_generator.generate_report(
+                target=report_data.target or "unknown",
+                findings=[],
+                report_format=mem["format"],
+                template=report_data.template,
+            )
+            fmt = mem["format"]
+            if fmt == "markdown":
+                rendered = report_generator.generate_markdown_report(report_dict)
+            else:
+                rendered = report_generator.generate_html_report(report_dict)
+            mem["rendered_content"] = rendered
+            mem["content"] = json.dumps(report_dict, ensure_ascii=False)
+            stats = report_dict.get("statistics", {})
+            mem["finding_count"] = sum(stats.values())
+            mem["vulnerability_count"] = stats.get("critical", 0) + stats.get("high", 0) + stats.get("medium", 0)
+        else:
+            mem["rendered_content"] = f"# {mem['title']}\n\n报告生成器未安装，请配置 PenetrationReportGenerator。"
+            mem["content"] = "{}"
+        mem["status"] = "completed"
+    except Exception as e:
+        logger.error(f"内存报告生成失败: {e}")
+        mem["status"] = "failed"
+    mem["updated_at"] = datetime.utcnow().isoformat() + "Z"
+
 
 async def generate_report_content(
     report_id: int,
@@ -190,66 +242,87 @@ async def generate_report_content(
             logger.error(f"报告不存在: {report_id}")
             return
 
-        # 生成报告内容（模拟或真实）
-        # 这里可以集成真实的报告生成器
+        # 生成报告内容（从 scan 获取真实数据或使用传入的 findings）
         try:
-            # 使用渗透测试报告生成器
+            if PenetrationReportGenerator is None:
+                raise ImportError("PenetrationReportGenerator 不可用")
             generator = PenetrationReportGenerator()
 
-            # 模拟报告数据（实际应基于scan_id获取真实数据）
-            mock_findings = [
-                {
-                    "id": "vuln-001",
-                    "name": "SQL注入漏洞",
-                    "severity": "high",
-                    "category": "sql_injection",
-                    "description": "在登录页面发现SQL注入漏洞",
-                    "location": "/login.php",
-                    "evidence": "参数'username'存在SQL注入",
-                    "impact": "可能导致数据库泄露",
-                    "recommendation": "使用参数化查询或ORM",
-                    "cve_id": "CVE-2024-1234",
-                    "cvss_score": 8.5
-                },
-                {
-                    "id": "vuln-002",
-                    "name": "XSS跨站脚本漏洞",
-                    "severity": "medium",
-                    "category": "xss",
-                    "description": "在搜索功能中发现反射型XSS",
-                    "location": "/search.php",
-                    "evidence": "参数'q'未过滤用户输入",
-                    "impact": "可能导致会话劫持",
-                    "recommendation": "对用户输入进行HTML编码",
-                    "cve_id": "CVE-2024-5678",
-                    "cvss_score": 6.5
-                }
-            ]
+            # 从 scan_id 读取真实 findings
+            findings = []
+            target = report_data.target or "unknown"
+            duration = None
+            scan_type = "standard"
+
+            scan_id = report_data.scan_id or report_data.parameters.get("scan_id")
+            if scan_id:
+                try:
+                    from backend.models.scan import Scan
+                except ImportError:
+                    try:
+                        from src.shared.backend.models.scan import Scan
+                    except ImportError:
+                        Scan = None
+
+                if Scan is not None:
+                    scan_obj = db.query(Scan).filter(Scan.id == scan_id).first()
+                    if scan_obj:
+                        findings = scan_obj.findings or []
+                        target = scan_obj.target or target
+                        duration = scan_obj.duration
+                        scan_type = scan_obj.scan_type.value if hasattr(scan_obj.scan_type, "value") else "standard"
 
             # 生成报告
             report_dict = generator.generate_report(
-                target=report_data.target or "example.com",
-                findings=mock_findings,
+                target=target,
+                findings=findings,
                 report_format=report_data.format.value,
                 template=report_data.template,
                 include_executive_summary=True,
                 include_technical_details=True,
-                include_recommendations=True
+                include_recommendations=True,
+                scan_type=scan_type,
+                duration=duration,
+                # 增补字段
+                project_id=report_data.project_id,
+                tester_name=report_data.tester_name,
+                client_name=report_data.client_name,
+                test_start_date=report_data.test_start_date,
+                test_end_date=report_data.test_end_date,
+                disclaimer=report_data.disclaimer,
             )
 
-            # 保存报告内容
+            # 保存报告内容（按格式决定渲染方式）
+            fmt = report_data.format.value
             report.content = json.dumps(report_dict, ensure_ascii=False, indent=2)
-            report.rendered_content = generator.generate_html_report(report_dict)
+            if fmt == "markdown":
+                report.rendered_content = generator.generate_markdown_report(report_dict)
+            elif fmt == "pdf":
+                pdf_bytes = generator.generate_pdf_report(report_dict)
+                if pdf_bytes:
+                    report.rendered_content = f"[PDF binary {len(pdf_bytes)} bytes]"
+                else:
+                    # weasyprint 未安装，降级为 HTML
+                    report.rendered_content = generator.generate_html_report(report_dict)
+            else:
+                report.rendered_content = generator.generate_html_report(report_dict)
+
+            # 更新统计
+            stats = report_dict.get("statistics", {})
+            report.finding_count = sum(stats.values())
+            report.vulnerability_count = stats.get("critical", 0) + stats.get("high", 0) + stats.get("medium", 0)
             report.status = ReportStatus.COMPLETED
 
-            # 生成文件路径
+            # 生成文件路径（后缀与格式一致）
             reports_dir = "data/reports"
             os.makedirs(reports_dir, exist_ok=True)
-            filename = f"report_{report_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+            ext = {"pdf": "html", "json": "json", "markdown": "md"}.get(fmt, fmt)  # pdf 降级存 html
+            filename = f"report_{report_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
             filepath = os.path.join(reports_dir, filename)
 
+            write_content = report.rendered_content or ""
             with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(report.rendered_content)
+                f.write(write_content)
 
             report.file_path = filepath
             report.file_size = os.path.getsize(filepath)
@@ -266,7 +339,7 @@ async def generate_report_content(
     except Exception as e:
         logger.error(f"报告内容生成任务失败: {e}", exc_info=True)
 
-@router.get("", response_model=ReportListResponse)
+@router.get("")  # response_model 不强制，兼容内存降级 dict
 async def list_reports(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -305,14 +378,19 @@ async def list_reports(
         )
 
     except Exception as e:
-        logger.error(f"获取报告列表失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=APIError(
-                code=ErrorCode.UNKNOWN_ERROR,
-                message="获取报告列表失败",
-                severity="high"
-            ).model_dump()
+        logger.warning(f"数据库查询报告失败，降级使用内存存储: {e}")
+        # 数据库不可用时，返回内存中的报告
+        mem_list = list(_mem_reports.values())
+        total = len(mem_list)
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        offset = (page - 1) * page_size
+        page_items = mem_list[offset: offset + page_size]
+        return ReportListResponse(
+            reports=page_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages
         )
 
 @router.get("/{report_id}", response_model=ReportResponse)

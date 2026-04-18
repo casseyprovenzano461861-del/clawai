@@ -38,7 +38,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
             "/redoc",
             "/openapi.json",
             "/favicon.ico",
-            "/static"
+            "/static",
+            "/ws",       # WebSocket 端点不需要审计
         ]
         self.sensitive_headers = sensitive_headers or [
             "authorization",
@@ -70,6 +71,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
         ]
 
     async def dispatch(self, request: Request, call_next: Callable):
+        # WebSocket 升级请求跳过审计（BaseHTTPMiddleware 无法处理 WS upgrade）
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
         # 检查是否排除该路径
         if self._should_exclude(request.url.path):
             return await call_next(request)

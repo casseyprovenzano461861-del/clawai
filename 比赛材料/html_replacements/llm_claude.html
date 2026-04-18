@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width: 600px; height: 600px;
+  background: #050A14;
+  display: flex; align-items: center; justify-content: center;
+}
+.card {
+  width: 480px; height: 480px;
+  background: linear-gradient(145deg, #0d1f3c 0%, #0a1528 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 28px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 28px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.logo-wrap { width: 120px; height: 120px; }
+.logo-wrap svg { width: 100%; height: 100%; }
+.brand-name {
+  font-family: 'Arial Black', Arial, sans-serif;
+  font-size: 42px; font-weight: 900;
+  color: #CC9B7A; /* 官方 Claude 暖棕色 */
+  letter-spacing: -1px;
+}
+.model-tag {
+  background: rgba(204,155,122,0.08);
+  border: 1px solid rgba(204,155,122,0.2);
+  border-radius: 20px; padding: 6px 20px;
+  font-family: Arial, sans-serif; font-size: 16px;
+  color: rgba(204,155,122,0.6); letter-spacing: 1px;
+}
+.desc {
+  font-family: Arial, sans-serif; font-size: 14px;
+  color: rgba(255,255,255,0.3); text-align: center;
+  line-height: 1.6; max-width: 320px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <!-- Anthropic / Claude 官方 Logo -->
+  <div class="logo-wrap">
+    <svg viewBox="0 0 192 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Claude 官方字形：A形状 -->
+      <path d="M89.6 2.4L46.4 126h24.8l8.8-27.2h41.6l8.8 27.2H155L111.8 2.4H89.6zm-3.2 76l13.6-42.4 13.6 42.4H86.4z" fill="#CC9B7A"/>
+    </svg>
+  </div>
+  <div class="brand-name">Claude 3.5</div>
+  <div class="model-tag">Anthropic · 代码生成 &amp; 漏洞分析</div>
+  <div class="desc">适合代码生成和漏洞分析<br>长文档理解与报告撰写</div>
+</div>
+</body>
+</html>

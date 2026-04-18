@@ -9,11 +9,19 @@ import json
 import logging
 import asyncio
 import re
-from typing import List, Dict, Any, Optional, Tuple
+import functools
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 import sys
 import os
+
+# 全局线程池：skill 都是 subprocess 阻塞调用，统一用此池，避免每次 run_in_executor 创建新线程
+_SKILL_THREAD_POOL = ThreadPoolExecutor(max_workers=10, thread_name_prefix="skill_worker")
+
+if TYPE_CHECKING:
+    from ..skills.context import SkillContext
 
 # Flag 检测正则（与 pentest_agent.py 保持一致）
 _FLAG_PATTERNS = [
@@ -153,7 +161,7 @@ class PERExecutor:
         self.skill_registry = skill_registry
         logger.debug("技能注册表已设置")
 
-    def _try_execute_via_skill(
+    async def _try_execute_via_skill(
         self,
         subtask_id: str,
         subtask_data: Dict[str, Any],
@@ -205,7 +213,29 @@ class PERExecutor:
 
         try:
             params = {**self.current_context, "target": target}
-            skill_result = self.skill_registry.execute(skill.id, params)
+
+            # 构建 SkillContext 依赖注入
+            try:
+                from ..skills.context import SkillContext
+                ctx = SkillContext.from_session(
+                    session_id=str(self.current_context.get("session_id", "")),
+                    target=target,
+                    phase=str(self.current_context.get("phase", "recon")),
+                    metadata=dict(self.current_context),
+                )
+            except Exception:
+                ctx = None
+
+            # skill_registry.execute 是同步阻塞（subprocess.run），
+            # 必须放到线程池执行，否则会卡死 asyncio 事件循环导致 WebSocket 事件停发
+            loop = asyncio.get_event_loop()
+            skill_result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _SKILL_THREAD_POOL,
+                    functools.partial(self.skill_registry.execute, skill.id, params, context=ctx)
+                ),
+                timeout=60.0  # 单个 skill 最长 60s（大多数工具 <10s 完成）
+            )
 
             tool_calls.append({
                 "tool_name": skill.id,
@@ -227,6 +257,9 @@ class PERExecutor:
                 "success": skill_result.get("success", False),
                 "summary": f"技能 {skill.id} 执行完成",
             }
+        except asyncio.TimeoutError:
+            logger.warning(f"[统一路径] 技能 {skill.id} 执行超时（120s），降级到任务类型分支")
+            return None
         except Exception as exc:
             logger.warning(f"[统一路径] 技能 {skill.id} 执行失败: {exc}，降级到任务类型分支")
             return None
@@ -314,16 +347,32 @@ class PERExecutor:
                              subtask_id: str,
                              subtask_data: Dict[str, Any],
                              graph_manager=None) -> ExecutionResult:
-        """执行子任务
-        
-        Args:
-            subtask_id: 子任务ID
-            subtask_data: 子任务数据
-            graph_manager: 图谱管理器（可选）
-            
-        Returns:
-            ExecutionResult: 执行结果
-        """
+        """执行子任务（带总超时保护，防止卡死事件循环）"""
+        try:
+            return await asyncio.wait_for(
+                self._execute_subtask_inner(subtask_id, subtask_data, graph_manager),
+                timeout=90.0  # 单个子任务最长 90s（并行执行后单任务不需要那么长）
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"子任务 {subtask_id} 执行超时（90s）")
+            _bus = EventBus.get() if EventBus else None
+            if _bus:
+                _bus.emit_state("error", details=f"子任务 {subtask_id} 超时")
+            return ExecutionResult(
+                success=False,
+                subtask_id=subtask_id,
+                output={},
+                error=f"任务超时（超过90秒）",
+                execution_time=90.0,
+                tool_calls=[],
+                thinking_log=[],
+                llm_assisted=False,
+            )
+
+    async def _execute_subtask_inner(self, 
+                             subtask_id: str,
+                             subtask_data: Dict[str, Any],
+                             graph_manager=None) -> ExecutionResult:
         logger.info(f"开始执行子任务: {subtask_id}")
         
         # 发射任务开始事件
@@ -383,7 +432,7 @@ class PERExecutor:
                 )
             else:
                 # 统一调用路径：优先查 skill_registry，再走任务类型分支
-                skill_result = self._try_execute_via_skill(subtask_id, subtask_data, thinking_log, tool_calls)
+                skill_result = await self._try_execute_via_skill(subtask_id, subtask_data, thinking_log, tool_calls)
                 if skill_result is not None:
                     result = skill_result
                 else:

@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 """
 CVE专项检测模块
-针对比赛要求的特定CVE漏洞进行检测
+针对特定CVE漏洞进行检测
 """
 
 import subprocess
@@ -15,7 +15,7 @@ from .security.sanitize import safe_execute, SecurityError
 class CVEDetector:
     """CVE专项检测器"""
     
-    # 比赛要求的CVE漏洞列表
+    # 需检测的CVE漏洞列表
     TARGET_CVES = {
         # Struts2 漏洞
         "S2-045": {
@@ -261,7 +261,7 @@ class CVEDetector:
             "results": results,
             "summary": {
                 "detection_rate_percent": detection_rate,
-                "meets_requirement": detection_rate >= 1.0,  # 比赛要求 ≥1%
+                "meets_requirement": detection_rate >= 1.0,
                 "detected_cves": [cve_id for cve_id, result in results.items() if result.get("detected", False)]
             }
         }
@@ -285,7 +285,7 @@ CVE专项检测报告
   总CVE数量: {total} 个
   检测到漏洞: {detected} 个
   检测率: {rate}%
-  满足比赛要求(≥1%): {'✅' if rate >= 1.0 else '❌'}
+  满足要求(≥1%): {'✅' if rate >= 1.0 else '❌'}
 
 🔍 详细检测结果:
 """

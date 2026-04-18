@@ -32,30 +32,48 @@ const scanHistoryService = {
   add(scan) {
     const history = this.getAll();
     
+    // 兼容两种数据格式：
+    //   旧格式：{ attack_chain, target_analysis, ... }
+    //   新格式（P-E-R/savePERReport）：{ findings, tasks, report, executionMode:'per' }
+    const findings = scan.findings || [];
+    const tasks    = scan.tasks    || [];
+    const report   = scan.report   || null;
+
+    // 漏洞统计：优先从 findings，回退到 attack_chain
+    const vulnItems = findings.filter(f => f.type !== 'open_ports');
+    const countBySev = (sev) =>
+      vulnItems.length
+        ? vulnItems.filter(f => f.severity === sev).length
+        : (scan.attack_chain?.filter(s => s.severity === sev)?.length || 0);
+
     const newRecord = {
       id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString(),
       target: scan.target,
       executionTime: scan.execution_time,
-      executionMode: scan.execution_mode,
+      executionMode: scan.execution_mode || scan.executionMode,
       success: scan.success,
       attackChainLength: scan.attack_chain?.length || 0,
       vulnerabilities: {
-        critical: scan.attack_chain?.filter(s => s.severity === 'critical')?.length || 0,
-        high: scan.attack_chain?.filter(s => s.severity === 'high')?.length || 0,
-        medium: scan.attack_chain?.filter(s => s.severity === 'medium')?.length || 0,
-        low: scan.attack_chain?.filter(s => s.severity === 'low')?.length || 0
+        critical: countBySev('critical'),
+        high:     countBySev('high'),
+        medium:   countBySev('medium'),
+        low:      countBySev('low'),
       },
-      // 存储完整结果（压缩版本）
+      // P-E-R 结构化结果（Reports 页面详情面板使用）
+      findings,
+      tasks,
+      report,
+      // 旧格式完整结果（向后兼容）
       result: {
-        target: scan.target,
-        execution_time: scan.execution_time,
-        execution_mode: scan.execution_mode,
-        success: scan.success,
-        attack_chain: scan.attack_chain?.slice(0, 20), // 最多保留20个步骤
-        target_analysis: scan.target_analysis,
-        rule_engine_decision: scan.rule_engine_decision
-      }
+        target:               scan.target,
+        execution_time:       scan.execution_time,
+        execution_mode:       scan.execution_mode,
+        success:              scan.success,
+        attack_chain:         scan.attack_chain?.slice(0, 20),
+        target_analysis:      scan.target_analysis,
+        rule_engine_decision: scan.rule_engine_decision,
+      },
     };
 
     // 添加到开头

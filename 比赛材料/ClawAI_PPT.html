@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawAI — 基于大模型的自动化渗透测试系统</title>
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════ */
+:root {
+  --blue:        #2563EB;
+  --blue-50:     #EFF6FF;
+  --blue-100:    #DBEAFE;
+  --blue-200:    #BFDBFE;
+  --blue-600:    #2563EB;
+  --blue-700:    #1D4ED8;
+  --sky:         #0EA5E9;
+  --sky-100:     #E0F2FE;
+  --teal:        #0D9488;
+  --teal-100:    #CCFBF1;
+  --teal-200:    #99F6E4;
+  --green:       #10B981;
+  --green-100:   #D1FAE5;
+  --green-700:   #047857;
+  --orange:      #F59E0B;
+  --orange-100:  #FEF3C7;
+  --red:         #EF4444;
+  --red-100:     #FEE2E2;
+  --purple:      #7C3AED;
+  --purple-100:  #EDE9FE;
+  --indigo:      #4F46E5;
+  --gray-50:     #F9FAFB;
+  --gray-100:    #F3F4F6;
+  --gray-200:    #E5E7EB;
+  --gray-300:    #D1D5DB;
+  --gray-400:    #9CA3AF;
+  --gray-500:    #6B7280;
+  --gray-700:    #374151;
+  --gray-900:    #111827;
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.05);
+  --shadow:      0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+  --shadow-md:   0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+  --shadow-lg:   0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+  --radius-sm:   6px;
+  --radius:      10px;
+  --radius-lg:   16px;
+  --font:        "PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  --mono:        "SF Mono","Fira Code","Courier New",monospace;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: #EEF2F7;
+  color: var(--gray-900);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 40px;
+}
+
+/* ═══════════════════════════════════════════════════
+   TOP PROGRESS BAR + NAV
+═══════════════════════════════════════════════════ */
+.top-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--gray-200);
+  box-shadow: 0 1px 12px rgba(0,0,0,0.06);
+}
+.progress-strip {
+  height: 3px;
+  background: var(--gray-200);
+  position: relative;
+}
+.progress-fill {
+  position: absolute;
+  left: 0; top: 0; height: 100%;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--sky) 100%);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.35s cubic-bezier(.4,0,.2,1);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  height: 44px;
+}
+.nav-brand {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.nav-brand .dot {
+  width: 8px; height: 8px;
+  background: var(--blue);
+  border-radius: 50%;
+  display: inline-block;
+}
+.nav-controls { display: flex; align-items: center; gap: 10px; }
+.nav-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 16px;
+  border: 1.5px solid var(--gray-300);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--gray-700);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+.nav-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-50); }
+.slide-counter {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-weight: 600;
+  min-width: 48px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════
+   SLIDE WRAPPER
+═══════════════════════════════════════════════════ */
+.slides-wrapper {
+  margin-top: 60px;
+  width: 100%;
+  max-width: 1080px;
+  padding: 0 20px;
+}
+
+/* ═══════════════════════════════════════════════════
+   SLIDE BASE
+═══════════════════════════════════════════════════ */
+.slide {
+  display: none;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.04);
+  overflow: hidden;
+  position: relative;
+  flex-direction: column;
+  animation: fadeSlide 0.3s ease;
+}
+.slide.active { display: flex; }
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 统一 slide 装饰：右上角角标页码 ── */
+.slide-pg {
+  position: absolute;
+  top: 16px; right: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-400);
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+
+/* ── 底部 footer ── */
+.slide-footer {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 28px;
+  background: var(--gray-50);
+  border-top: 1px solid var(--gray-100);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 6px;
+  z-index: 2;
+}
+.sf-brand {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 0.5px;
+}
+.sf-sep { color: var(--gray-300); font-size: 10px; }
+.sf-sub { font-size: 10px; color: var(--gray-400); }
+
+/* ── Slide header ── */
+.sh {
+  padding: 20px 28px 0;
+  position: relative;
+}
+.sh::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 16px; bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--blue) 0%, var(--sky) 100%);
+  border-radius: 0 3px 3px 0;
+}
+.sh-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+.sh h2 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--gray-900);
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+.sh h2 em {
+  font-style: normal;
+  color: var(--blue);
+}
+
+/* ── Slide body ── */
+.sb {
+  flex: 1;
+  padding: 14px 28px 36px;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   CARD COMPONENTS
+═══════════════════════════════════════════════════ */
+.kard {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.kard::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.kard.k-blue::after   { background: linear-gradient(90deg, var(--blue), var(--sky)); }
+.kard.k-teal::after   { background: linear-gradient(90deg, var(--teal), var(--green)); }
+.kard.k-orange::after { background: linear-gradient(90deg, var(--orange), #FB923C); }
+.kard.k-purple::after { background: linear-gradient(90deg, var(--purple), var(--indigo)); }
+.kard.k-red::after    { background: linear-gradient(90deg, var(--red), #F97316); }
+.kard.k-green::after  { background: linear-gradient(90deg, var(--green), var(--teal)); }
+
+.kard-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kard-body {
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--gray-700);
+}
+
+/* ── Tag pills ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 20px;
+  line-height: 1.5;
+}
+.pill-blue   { background: var(--blue-100);   color: #1E40AF; }
+.pill-teal   { background: var(--teal-100);   color: #0F766E; }
+.pill-green  { background: var(--green-100);  color: var(--green-700); }
+.pill-orange { background: var(--orange-100); color: #92400E; }
+.pill-red    { background: var(--red-100);    color: #991B1B; }
+.pill-purple { background: var(--purple-100); color: #5B21B6; }
+.pill-gray   { background: var(--gray-100);   color: var(--gray-700); }
+
+/* ── Risk badges ── */
+.rb {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.rb-crit   { background: #FEE2E2; color: #991B1B; }
+.rb-high   { background: #FEF3C7; color: #92400E; }
+.rb-med    { background: #DBEAFE; color: #1E40AF; }
+.rb-ok     { background: #D1FAE5; color: #065F46; }
+
+/* ── Table ── */
+.dt { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.dt thead tr { background: var(--gray-50); }
+.dt th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-500);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--gray-200);
+}
+.dt td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--gray-700);
+}
+.dt tbody tr:hover { background: var(--blue-50); }
+.dt tbody tr:last-child td { border-bottom: none; }
+
+/* ── Progress bars ── */
+.prow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.plabel { font-size: 11.5px; color: var(--gray-700); width: 165px; flex-shrink: 0; }
+.ptrack {
+  flex: 1;
+  height: 8px;
+  background: var(--gray-100);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pfill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--blue), var(--sky));
+  position: relative;
+}
+.pfill::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0;
+  width: 6px; height: 100%;
+  background: rgba(255,255,255,0.4);
+  border-radius: 3px;
+}
+.pval { font-size: 11px; font-weight: 700; color: var(--blue); width: 38px; text-align: right; }
+.pval.done { color: var(--green); }
+.pfill.done { background: linear-gradient(90deg, var(--green), var(--teal)); }
+.pfill.warn { background: linear-gradient(90deg, var(--orange), #FCD34D); }
+
+/* ── Flow steps ── */
+.fstep {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  border-radius: var(--radius);
+  text-align: center;
+  position: relative;
+}
+.fstep-icon { font-size: 20px; margin-bottom: 5px; }
+.fstep-title { font-size: 12px; font-weight: 700; }
+.fstep-sub { font-size: 10px; color: var(--gray-500); margin-top: 3px; line-height: 1.5; }
+.farrow { font-size: 16px; color: var(--gray-300); padding: 0 3px; flex-shrink: 0; }
+
+/* ── Tool chips ── */
+.tc { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: var(--radius-sm); background: var(--gray-100); color: var(--gray-700); margin: 2px; font-weight: 500; }
+
+/* ═══════════════════════════════════════════════════
+   SIDE DOT NAV
+═══════════════════════════════════════════════════ */
+.dot-nav {
+  position: fixed;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 999;
+}
+.dn {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--gray-300);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dn.a { background: var(--blue); transform: scale(1.4); }
+.dn:hover { background: var(--blue-600); }
+
+/* ═══════════════════════════════════════════════════
+   HINT BAR
+═══════════════════════════════════════════════════ */
+.hint {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17,24,39,0.7);
+  backdrop-filter: blur(8px);
+  color: rgba(255,255,255,0.85);
+  font-size: 11px;
+  padding: 5px 16px;
+  border-radius: 20px;
+  z-index: 998;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+
+/* ═══════════════════════════════════════════════════
+   SLIDE 1  COVER
+═══════════════════════════════════════════════════ */
+#s1 {
+  background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 45%, #0C4A6E 100%);
+  color: #fff;
+  display: none;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+}
+#s1.active { display: flex; }
+
+.cover-left {
+  flex: 1.15;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 52px 48px;
+  position: relative;
+  z-index: 2;
+}
+.cover-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(147,216,255,0.9);
+  border: 1px solid rgba(147,216,255,0.3);
+  background: rgba(147,216,255,0.08);
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+.cover-h1 {
+  font-size: 58px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -1px;
+  margin-bottom: 12px;
+}
+.cover-h1 .claw { color: #38BDF8; }
+.cover-h1 .ai   { color: #fff; }
+.cover-subtitle {
+  font-size: 16px;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 340px;
+}
+.cover-line {
+  width: 48px; height: 3px;
+  background: linear-gradient(90deg, #38BDF8, #34D399);
+  border-radius: 2px;
+  margin-bottom: 24px;
+}
+.cover-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+.cover-meta span b { color: rgba(255,255,255,0.85); }
+
+.cover-right {
+  flex: 0.85;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 40px 40px 20px;
+  gap: 14px;
+  position: relative;
+  z-index: 2;
+}
+.cover-stat {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  backdrop-filter: blur(4px);
+}
+.cover-stat-num {
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1;
+}
+.cover-stat-num.blue  { color: #38BDF8; }
+.cover-stat-num.green { color: #34D399; }
+.cover-stat-num.gold  { color: #FCD34D; }
+.cover-stat-label { font-size: 12px; color: rgba(255,255,255,0.65); line-height: 1.5; }
+.cover-stat-label b { color: rgba(255,255,255,0.9); display: block; font-size: 13px; margin-bottom: 2px; }
+
+/* SVG BG */
+.cover-bg-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.06;
+}
+
+/* ═══════════════════════════════════════════════════
+   SLIDE 2  TOC
+═══════════════════════════════════════════════════ */
+.toc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+.toc-item {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  cursor: default;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.toc-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.toc-item:hover { border-color: var(--blue-200); background: var(--blue-50); box-shadow: var(--shadow-sm); }
+.toc-item:hover::before { opacity: 1; }
+.toc-item:nth-child(1)::before,.toc-item:nth-child(5)::before { background: var(--blue); }
+.toc-item:nth-child(2)::before,.toc-item:nth-child(6)::before { background: var(--teal); }
+.toc-item:nth-child(3)::before,.toc-item:nth-child(7)::before { background: var(--orange); }
+.toc-item:nth-child(4)::before,.toc-item:nth-child(8)::before { background: var(--purple); }
+
+.toc-icon { font-size: 22px; flex-shrink: 0; }
+.toc-num { font-size: 9.5px; font-weight: 700; color: var(--gray-400); letter-spacing: 1px; text-transform: uppercase; }
+.toc-name { font-size: 13px; font-weight: 700; color: var(--gray-800); }
+
+/* ═══════════════════════════════════════════════════
+   SLIDE 9  METRICS
+═══════════════════════════════════════════════════ */
+.metric-card {
+  flex: 1;
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px 14px;
+  text-align: center;
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.metric-card.mc-blue::before   { background: linear-gradient(90deg, var(--blue), var(--sky)); }
+.metric-card.mc-green::before  { background: linear-gradient(90deg, var(--green), var(--teal)); }
+.metric-card.mc-orange::before { background: linear-gradient(90deg, var(--orange), #FCD34D); }
+
+.metric-num {
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+.mc-blue .metric-num  { color: var(--blue); }
+.mc-green .metric-num { color: var(--green); }
+.mc-orange .metric-num{ color: var(--orange); }
+
+.metric-name { font-size: 13px; font-weight: 700; color: var(--gray-700); }
+.metric-req  { font-size: 10px; color: var(--gray-400); }
+.metric-badge {
+  position: absolute;
+  top: 12px; right: 12px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--green-100);
+  color: var(--green-700);
+}
+
+/* ═══════════════════════════════════════════════════
+   SLIDE 18  CLOSING
+═══════════════════════════════════════════════════ */
+#s18 {
+  background: linear-gradient(145deg, #F0F7FF 0%, #EFF6FF 40%, #F0FDF4 100%);
+}
+
+/* ═══════════════════════════════════════════════════
+   ARCH LAYERS
+═══════════════════════════════════════════════════ */
+.alayer {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 5px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.alabel {
+  width: 64px;
+  min-width: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+}
+.abody {
+  flex: 1;
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.amini {
+  flex: 1;
+  background: rgba(255,255,255,0.8);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  backdrop-filter: blur(2px);
+}
+.amini-title { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.amini-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.amini-tag { font-size: 9.5px; padding: 1px 5px; border-radius: 10px; }
+
+.aconn {
+  text-align: center;
+  font-size: 10px;
+  color: var(--gray-400);
+  padding: 1px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: 0.3px;
+}
+.aconn-line {
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+/* ═══════════════════════════════════════════════════
+   STEPPER (攻击链阶段)
+═══════════════════════════════════════════════════ */
+.stepper {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.step {
+  flex: 1;
+  padding: 12px 10px;
+  text-align: center;
+  position: relative;
+}
+.step:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--gray-300);
+  z-index: 1;
+}
+.step-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 auto 6px;
+}
+.step-title { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.step-tools { font-size: 10px; color: var(--gray-500); line-height: 1.5; }
+.step-ai { font-size: 9.5px; margin-top: 5px; padding: 3px 6px; border-radius: var(--radius-sm); line-height: 1.4; }
+
+/* ═══════════════════════════════════════════════════
+   COMPARE TABLE
+═══════════════════════════════════════════════════ */
+.ct-ours td { font-weight: 700; }
+.ct-ours { background: var(--blue-50) !important; }
+
+@media print {
+  body { background: #fff; padding: 0; }
+  .top-bar, .dot-nav, .hint { display: none !important; }
+  .slides-wrapper { margin-top: 0; padding: 0; }
+  .slide { display: flex !important; page-break-after: always; aspect-ratio: unset; min-height: 540px; }
+  #s1 { display: flex !important; }
+  .slide-footer { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="progress-strip"><div class="progress-fill" id="pf" style="width:5.56%"></div></div>
+  <div class="nav-inner">
+    <div class="nav-brand"><span class="dot"></span>ClawAI &nbsp;·&nbsp; 自动化渗透测试系统</div>
+    <div class="nav-controls">
+      <button class="nav-btn" onclick="go(-1)">← 上一页</button>
+      <span class="slide-counter" id="sc">01 / 18</span>
+      <button class="nav-btn" onclick="go(1)">下一页 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIDE DOTS -->
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- KEYBOARD HINT -->
+<div class="hint">← → 方向键翻页 &nbsp;·&nbsp; 共 18 页</div>
+
+<!-- ════════════════════ SLIDES ════════════════════ -->
+<div class="slides-wrapper">
+
+<!-- ▌S1 封面 -->
+<div class="slide" id="s1">
+  <svg class="cover-bg-svg" viewBox="0 0 1080 607" preserveAspectRatio="xMidYMid slice">
+    <circle cx="900" cy="100" r="280" fill="#38BDF8"/>
+    <circle cx="120" cy="500" r="200" fill="#818CF8"/>
+    <circle cx="600" cy="600" r="160" fill="#34D399"/>
+    <rect x="200" y="150" width="600" height="2" fill="#fff" opacity="0.3"/>
+    <rect x="100" y="300" width="800" height="1" fill="#fff" opacity="0.2"/>
+    <polygon points="800,50 850,150 750,150" fill="#FCD34D" opacity="0.5"/>
+  </svg>
+  <div class="cover-left">
+    <div class="cover-tag">🔐 AI-Powered Security</div>
+    <div class="cover-h1"><span class="claw">Claw</span><span class="ai">AI</span></div>
+    <div class="cover-subtitle">基于大模型的自动化渗透测试系统<br>让 AI 替代人工，完成端到端安全攻防</div>
+    <div class="cover-line"></div>
+    <div class="cover-meta">
+      <span>提交时间 &nbsp;<b>2026 年 4 月 18–24 日</b></span>
+      <span>版本 &nbsp;<b>ClawAI 2.0</b></span>
+    </div>
+  </div>
+  <div class="cover-right">
+    <div class="cover-stat">
+      <div class="cover-stat-num blue">51</div>
+      <div class="cover-stat-label"><b>个安全工具</b>超额覆盖所有阶段</div>
+    </div>
+    <div class="cover-stat">
+      <div class="cover-stat-num green">100%</div>
+      <div class="cover-stat-label"><b>漏洞检测率</b>误报率 0%</div>
+    </div>
+    <div class="cover-stat">
+      <div class="cover-stat-num gold">9.8s</div>
+      <div class="cover-stat-label"><b>单目标完成</b>进阶要求 ≤15 分钟</div>
+    </div>
+  </div>
+  <div class="slide-pg">01 / 18</div>
+</div>
+
+<!-- ▌S2 目录 -->
+<div class="slide" id="s2">
+  <div class="sh">
+    <div class="sh-tag">Contents</div>
+    <h2>内容概览</h2>
+  </div>
+  <div class="sb" style="align-items:center;padding-bottom:36px;">
+    <div class="toc-grid">
+      <div class="toc-item"><div class="toc-icon">😰</div><div><div class="toc-num">01</div><div class="toc-name">行业痛点</div></div></div>
+      <div class="toc-item"><div class="toc-icon">🎯</div><div><div class="toc-num">02</div><div class="toc-name">产品定位</div></div></div>
+      <div class="toc-item"><div class="toc-icon">🏗️</div><div><div class="toc-num">03</div><div class="toc-name">系统架构</div></div></div>
+      <div class="toc-item"><div class="toc-icon">🔧</div><div><div class="toc-num">04</div><div class="toc-name">工具链集成</div></div></div>
+      <div class="toc-item"><div class="toc-icon">🧠</div><div><div class="toc-num">05</div><div class="toc-name">Skills 技能库</div></div></div>
+      <div class="toc-item"><div class="toc-icon">📊</div><div><div class="toc-num">06</div><div class="toc-name">量化测试结果</div></div></div>
+      <div class="toc-item"><div class="toc-icon">🖥️</div><div><div class="toc-num">07</div><div class="toc-name">界面 / 报告展示</div></div></div>
+      <div class="toc-item"><div class="toc-icon">💡</div><div><div class="toc-num">08</div><div class="toc-name">创新 · 价值 · 总结</div></div></div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">基于大模型的自动化渗透测试系统</span></div>
+  <div class="slide-pg">02 / 18</div>
+</div>
+
+<!-- ▌S3 行业痛点 -->
+<div class="slide" id="s3">
+  <div class="sh">
+    <div class="sh-tag">01 · 行业痛点</div>
+    <h2>传统渗透测试面临的<em>三个核心问题</em></h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:12px;padding-bottom:36px;">
+    <div style="display:flex;gap:14px;flex:1;">
+      <div class="kard k-red" style="flex:1;">
+        <div class="kard-title" style="color:#991B1B;">👤 严重依赖人工经验</div>
+        <div class="kard-body">
+          完整渗透测试通常需要 <strong>3–7 天</strong><br>
+          高度依赖资深工程师个人积累<br>
+          全球网安人才缺口超过 <strong>350 万</strong><br>
+          企业极难组建专业安全团队
+        </div>
+        <div style="margin-top:10px;font-size:22px;font-weight:900;color:#EF4444;line-height:1;">350万<span style="font-size:11px;font-weight:400;color:#9CA3AF;margin-left:4px;">人才缺口</span></div>
+      </div>
+      <div class="kard k-orange" style="flex:1;">
+        <div class="kard-title" style="color:#92400E;">⏳ 效率低 · 覆盖不全</div>
+        <div class="kard-body">
+          手工流程繁琐，精力有限<br>
+          容易遗漏特定漏洞类型<br>
+          企业平均漏洞暴露窗口 <strong>197 天</strong><br>
+          难以实现全面系统的覆盖
+        </div>
+        <div style="margin-top:10px;font-size:22px;font-weight:900;color:#F59E0B;line-height:1;">197天<span style="font-size:11px;font-weight:400;color:#9CA3AF;margin-left:4px;">平均暴露窗口</span></div>
+      </div>
+      <div class="kard k-purple" style="flex:1;">
+        <div class="kard-title" style="color:#5B21B6;">🎲 结果不稳定 · 难复现</div>
+        <div class="kard-body">
+          不同人员测试同一目标差异大<br>
+          误报率通常在 <strong>15%–30%</strong><br>
+          难以标准化和大规模复制<br>
+          结果可信度参差不齐
+        </div>
+        <div style="margin-top:10px;font-size:22px;font-weight:900;color:#7C3AED;line-height:1;">30%<span style="font-size:11px;font-weight:400;color:#9CA3AF;margin-left:4px;">行业误报率上限</span></div>
+      </div>
+    </div>
+    <div style="background:linear-gradient(90deg,#EFF6FF,#F0FDF4);border:1px solid #BFDBFE;border-radius:var(--radius);padding:12px 20px;display:flex;align-items:center;gap:0;">
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:#991B1B;">❌ 传统方式</div>
+        <div style="font-size:11px;color:#6B7280;margin-top:3px;">慢 · 贵 · 依赖个人 · 难以复现</div>
+      </div>
+      <div style="font-size:24px;color:#9CA3AF;padding:0 20px;">→</div>
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:#065F46;">✅ ClawAI 解决方案</div>
+        <div style="font-size:11px;color:#6B7280;margin-top:3px;">自动化 · 标准化 · 可复现 · 分钟级完成</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">行业痛点</span></div>
+  <div class="slide-pg">03 / 18</div>
+</div>
+
+<!-- ▌S4 产品定位 -->
+<div class="slide" id="s4">
+  <div class="sh">
+    <div class="sh-tag">02 · 产品定位</div>
+    <h2><em>ClawAI</em> 是什么</h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div style="background:linear-gradient(90deg,var(--blue-50),#EFF6FF);border:1.5px solid var(--blue-200);border-radius:var(--radius);padding:12px 18px;font-size:13px;color:var(--gray-700);line-height:1.8;">
+      ClawAI 是一个<strong>基于大语言模型的自动化渗透测试系统</strong>，从目标分析开始，自动完成漏洞发现、漏洞利用、权限提升到报告生成的完整流程，<strong>全程无需人工干预</strong>。
+    </div>
+    <!-- 流程图 -->
+    <div class="stepper">
+      <div class="step" style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--blue);">1</div>
+        <div class="step-title" style="color:var(--blue);">目标分析</div>
+        <div class="step-tools">指纹识别<br>服务探测</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:#F0FDF4;border:1.5px solid #A7F3D0;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--teal);">2</div>
+        <div class="step-title" style="color:var(--teal);">漏洞发现</div>
+        <div class="step-tools">扫描·枚举<br>探测</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:#FEF3C7;border:1.5px solid #FDE68A;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--orange);">3</div>
+        <div class="step-title" style="color:var(--orange);">漏洞利用</div>
+        <div class="step-tools">CVE Exploit<br>Skills 调用</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:#FEE2E2;border:1.5px solid #FECACA;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--red);">4</div>
+        <div class="step-title" style="color:var(--red);">权限提升</div>
+        <div class="step-tools">提权<br>横向移动</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:#D1FAE5;border:1.5px solid #6EE7B7;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--green);">5</div>
+        <div class="step-title" style="color:var(--green);">自动报告</div>
+        <div class="step-tools">CVE·CVSS<br>修复建议</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:11px;color:var(--gray-400);margin-top:-4px;">↑ 执行失败时 AI 自动调整策略重试（P-E-R 闭环）</div>
+    <!-- 四核心 -->
+    <div style="display:flex;gap:10px;">
+      <div class="kard k-blue" style="flex:1;">
+        <div class="kard-title" style="color:var(--blue);">🤖 多模型支持</div>
+        <div class="kard-body">GPT-4 / Claude / DeepSeek / GLM-4 统一接口，随时切换</div>
+      </div>
+      <div class="kard k-teal" style="flex:1;">
+        <div class="kard-title" style="color:var(--teal);">🔧 51 个安全工具</div>
+        <div class="kard-body">覆盖信息收集、扫描、利用、后渗透完整攻击链</div>
+      </div>
+      <div class="kard k-orange" style="flex:1;">
+        <div class="kard-title" style="color:var(--orange);">💥 27 类漏洞技能</div>
+        <div class="kard-body">含 21 个 CVE 利用模块，AI 自动匹配执行</div>
+      </div>
+      <div class="kard k-green" style="flex:1;">
+        <div class="kard-title" style="color:var(--green);">📋 专业报告</div>
+        <div class="kard-body">CVE 编号 + CVSS 评分 + 修复建议，达商业交付标准</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">产品定位</span></div>
+  <div class="slide-pg">04 / 18</div>
+</div>
+
+<!-- ▌S5 系统架构 -->
+<div class="slide" id="s5">
+  <div class="sh">
+    <div class="sh-tag">03 · 系统架构</div>
+    <h2>P-E-R 三层智能体架构</h2>
+  </div>
+  <div class="sb" style="gap:14px;padding-bottom:36px;">
+    <div style="flex:3;display:flex;flex-direction:column;gap:3px;justify-content:space-between;">
+      <div class="alayer">
+        <div class="alabel" style="background:#4A6FA5;">用户交互层</div>
+        <div class="abody" style="background:#EEF4FB;gap:8px;">
+          <div class="amini"><div class="amini-title" style="color:#4A6FA5;">Web 可视化界面</div><div class="amini-tags"><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">仪表板</span><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">P-E-R面板</span><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">3D拓扑</span></div></div>
+          <div class="amini"><div class="amini-title" style="color:#4A6FA5;">CLI 对话模式</div><div class="amini-tags"><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">自然语言</span><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">TUI界面</span></div></div>
+          <div class="amini"><div class="amini-title" style="color:#4A6FA5;">REST API</div><div class="amini-tags"><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">FastAPI</span><span class="amini-tag" style="background:#DCE8FB;color:#2C5282;">WebSocket</span></div></div>
+        </div>
+      </div>
+      <div class="aconn"><div class="aconn-line"></div><span>用户指令 / 任务下发</span><div class="aconn-line"></div></div>
+      <div class="alayer">
+        <div class="alabel" style="background:#6C47A6;">大模型决策层</div>
+        <div class="abody" style="background:#F3EEFE;gap:8px;">
+          <div class="amini"><div class="amini-title" style="color:#6C47A6;">LLMBackend 统一接口</div><div class="amini-tags"><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">GPT-4o</span><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">Claude</span><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">DeepSeek</span><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">GLM-4</span></div></div>
+          <div class="amini"><div class="amini-title" style="color:#6C47A6;">提示词工程</div><div class="amini-tags"><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">渗透System Prompt</span><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">上下文压缩</span></div></div>
+          <div class="amini"><div class="amini-title" style="color:#6C47A6;">EventBus 事件系统</div><div class="amini-tags"><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">WebSocket推送</span><span class="amini-tag" style="background:#E8DAFC;color:#553C9A;">日志流</span></div></div>
+        </div>
+      </div>
+      <div class="aconn"><div class="aconn-line"></div><span>任务分解 / 策略决策</span><div class="aconn-line"></div></div>
+      <div class="alayer">
+        <div class="alabel" style="background:#0D9488;">P-E-R 智能体</div>
+        <div class="abody" style="background:#E8FAF7;gap:8px;flex-direction:column;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div class="amini" style="flex:1;"><div class="amini-title" style="color:#0D7A6C;">Planner 规划器</div><div class="amini-tags"><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">目标分析</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">任务图</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">优先级</span></div></div>
+            <div style="color:#0D9488;font-size:16px;">→</div>
+            <div class="amini" style="flex:1;"><div class="amini-title" style="color:#0D7A6C;">Executor 执行器</div><div class="amini-tags"><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">工具调用</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">Skills执行</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">结果解析</span></div></div>
+            <div style="color:#0D9488;font-size:16px;">→</div>
+            <div class="amini" style="flex:1;"><div class="amini-title" style="color:#0D7A6C;">Reflector 反思器</div><div class="amini-tags"><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">结果评估</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">证据提取</span><span class="amini-tag" style="background:#C5F1EC;color:#0D6B5E;">↺ 策略反馈</span></div></div>
+          </div>
+          <div style="text-align:center;font-size:10px;color:#0D9488;font-style:italic;">↑ 失败时 Reflector 生成改进建议 → Planner 重新规划 → 自动重试（闭环）↑</div>
+        </div>
+      </div>
+      <div class="aconn"><div class="aconn-line"></div><span>命令执行 / 网络请求</span><div class="aconn-line"></div></div>
+      <div class="alayer">
+        <div class="alabel" style="background:#34495E;">工具集成层</div>
+        <div class="abody" style="background:#EDF0F3;flex-wrap:wrap;gap:5px;">
+          <span class="tc">nmap</span><span class="tc">nuclei</span><span class="tc">sqlmap</span><span class="tc">gobuster</span><span class="tc">hydra</span><span class="tc">metasploit</span><span class="tc">ffuf</span><span class="tc">dirsearch</span><span class="tc">subfinder</span><span class="tc">amass</span><span class="tc">nikto</span><span class="tc">xsstrike</span><span class="tc">masscan</span><span class="tc">crackmapexec</span><span style="font-size:10px;color:#888;">+37 更多…</span>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center;">
+      <div class="kard" style="background:var(--gray-50);">
+        <div class="kard-title">🧭 Planner（规划器）</div>
+        <div class="kard-body">相当于安全工程师的<strong>思维过程</strong>，把大目标拆解成可执行的子任务图</div>
+      </div>
+      <div class="kard" style="background:var(--gray-50);">
+        <div class="kard-title">⚙️ Executor（执行器）</div>
+        <div class="kard-body">相当于工程师的<strong>双手</strong>，负责实际调用工具和技能执行操作</div>
+      </div>
+      <div class="kard" style="background:var(--gray-50);">
+        <div class="kard-title">🔁 Reflector（反思器）</div>
+        <div class="kard-body">相当于工程师的<strong>复盘习惯</strong>，发现失败自动调整策略重新规划</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">P-E-R 系统架构</span></div>
+  <div class="slide-pg">05 / 18</div>
+</div>
+
+<!-- ▌S6 工具链 -->
+<div class="slide" id="s6">
+  <div class="sh">
+    <div class="sh-tag">04 · 工具链集成</div>
+    <h2><em>51</em> 个安全工具，覆盖攻击全链路</h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div class="stepper">
+      <div class="step" style="background:var(--blue-50);border:1.5px solid var(--blue-200);border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--blue);">1</div>
+        <div class="step-title" style="color:var(--blue);">🌐 信息收集</div>
+        <div class="step-tools">amass · subfinder<br>theharvester · dnsrecon</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:var(--purple-100);border:1.5px solid #DDD6FE;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--purple);">2</div>
+        <div class="step-title" style="color:var(--purple);">🔌 端口扫描</div>
+        <div class="step-tools">nmap · masscan<br>rustscan</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:var(--orange-100);border:1.5px solid #FDE68A;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--orange);">3</div>
+        <div class="step-title" style="color:var(--orange);">🕵️ 漏洞发现</div>
+        <div class="step-tools">nuclei · nikto<br>ffuf · gobuster · dirsearch</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:var(--red-100);border:1.5px solid #FECACA;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--red);">4</div>
+        <div class="step-title" style="color:var(--red);">⚡ 漏洞利用</div>
+        <div class="step-tools">sqlmap · xsstrike<br>commix · hydra · medusa</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 4px;font-size:18px;color:var(--gray-300);">›</div>
+      <div class="step" style="background:var(--green-100);border:1.5px solid #6EE7B7;border-radius:var(--radius);">
+        <div class="step-num" style="background:var(--green);">5</div>
+        <div class="step-title" style="color:var(--green);">🏴 后渗透</div>
+        <div class="step-tools">metasploit · impacket<br>evil-winrm · crackmapexec</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:stretch;">
+      <div style="flex:3;display:flex;gap:10px;">
+        <div style="flex:1;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px 12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--gray-500);border-bottom:1px solid var(--gray-200);padding-bottom:5px;margin-bottom:7px;">信息收集（4）</div>
+          <span class="tc">amass</span><span class="tc">subfinder</span><span class="tc">theharvester</span><span class="tc">dnsrecon</span>
+        </div>
+        <div style="flex:1;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px 12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--gray-500);border-bottom:1px solid var(--gray-200);padding-bottom:5px;margin-bottom:7px;">扫描探测（9）</div>
+          <span class="tc">nmap</span><span class="tc">masscan</span><span class="tc">rustscan</span><span class="tc">nuclei</span><span class="tc">nikto</span><span class="tc">ffuf</span><span class="tc">gobuster</span><span class="tc">dirsearch</span><span class="tc">feroxbuster</span>
+        </div>
+        <div style="flex:1;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px 12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--gray-500);border-bottom:1px solid var(--gray-200);padding-bottom:5px;margin-bottom:7px;">漏洞利用（7）</div>
+          <span class="tc">sqlmap</span><span class="tc">xsstrike</span><span class="tc">commix</span><span class="tc">hydra</span><span class="tc">medusa</span><span class="tc">hashcat</span><span class="tc">john</span>
+        </div>
+        <div style="flex:1;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px 12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--gray-500);border-bottom:1px solid var(--gray-200);padding-bottom:5px;margin-bottom:7px;">后渗透（4）</div>
+          <span class="tc">metasploit</span><span class="tc">impacket</span><span class="tc">evil-winrm</span><span class="tc">crackmapexec</span>
+        </div>
+      </div>
+      <div style="flex:0 0 130px;background:linear-gradient(135deg,var(--blue-50),#EFF6FF);border:1.5px solid var(--blue-200);border-radius:var(--radius-lg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+        <div style="font-size:54px;font-weight:900;color:var(--blue);line-height:1;letter-spacing:-2px;">51</div>
+        <div style="font-size:12px;font-weight:700;color:var(--gray-700);">个安全工具</div>
+        <div style="font-size:10px;color:var(--gray-400);text-align:center;line-height:1.6;">基础要求 ≥30<br>进阶要求 ≥50<br><strong style="color:var(--green);">✓ 已超额完成</strong></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">工具链集成</span></div>
+  <div class="slide-pg">06 / 18</div>
+</div>
+
+<!-- ▌S7 Skills 技能库 -->
+<div class="slide" id="s7">
+  <div class="sh">
+    <div class="sh-tag">05 · Skills 技能库</div>
+    <h2>27 类漏洞技能 + <em>21 个 CVE 利用模块</em></h2>
+  </div>
+  <div class="sb" style="gap:16px;padding-bottom:36px;">
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">漏洞技能分类（27类）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;">
+        <span class="pill pill-red">SQL 注入 ×3</span>
+        <span class="pill pill-orange">XSS ×2</span>
+        <span class="pill pill-orange">命令注入 RCE</span>
+        <span class="pill pill-purple">文件包含 LFI</span>
+        <span class="pill pill-purple">文件上传</span>
+        <span class="pill pill-blue">CSRF</span>
+        <span class="pill pill-blue">SSRF</span>
+        <span class="pill pill-blue">XXE</span>
+        <span class="pill pill-teal">SSTI 模板注入</span>
+        <span class="pill pill-teal">IDOR 越权</span>
+        <span class="pill pill-purple">反序列化</span>
+        <span class="pill pill-purple">NoSQL 注入</span>
+        <span class="pill pill-gray">WAF 检测绕过</span>
+        <span class="pill pill-gray">暴力破解</span>
+        <span class="pill pill-green">Flag 检测器</span>
+        <span class="pill pill-green">OpenSSH 枚举</span>
+        <span class="pill pill-orange">Linux 提权</span>
+        <span class="pill pill-orange">Windows 提权</span>
+      </div>
+      <div style="background:var(--blue-50);border:1px solid var(--blue-200);border-radius:var(--radius);padding:10px 13px;font-size:11.5px;color:var(--gray-700);line-height:1.75;margin-top:4px;">
+        📌 AI 通过<strong>关键词识别</strong>自动匹配对应技能，使用 <strong>OpenAI Function Calling</strong> 接口直接调用，无需人工指定
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">CVE 利用模块（21个）</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;overflow:auto;flex:1;">
+        <div style="background:var(--red-100);border:1px solid #FECACA;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>Apache Struts2 S2-045</span><span class="rb rb-crit">CVE-2017-5638</span></div>
+        <div style="background:var(--red-100);border:1px solid #FECACA;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>Apache Struts2 S2-057</span><span class="rb rb-crit">CVE-2018-11776</span></div>
+        <div style="background:var(--orange-100);border:1px solid #FDE68A;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>Apache Shiro 反序列化</span><span class="rb rb-high">CVE-2016-4437</span></div>
+        <div style="background:var(--orange-100);border:1px solid #FDE68A;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>FastJSON 1.2.24 / 1.2.47 RCE</span><span class="rb rb-crit">反序列化</span></div>
+        <div style="background:var(--red-100);border:1px solid #FECACA;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>WebLogic 未授权访问</span><span class="rb rb-crit">CVE-2023-21839</span></div>
+        <div style="background:var(--orange-100);border:1px solid #FDE68A;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>Tomcat 文件上传 PUT</span><span class="rb rb-high">CVE-2017-12615</span></div>
+        <div style="background:var(--orange-100);border:1px solid #FDE68A;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>PHP-FPM 远程代码执行</span><span class="rb rb-high">CVE-2019-11043</span></div>
+        <div style="background:var(--orange-100);border:1px solid #FDE68A;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>ActiveMQ / JBoss 反序列化</span><span class="rb rb-high">CVE-2022-41678</span></div>
+        <div style="background:var(--green-100);border:1px solid #6EE7B7;border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>GeoServer 命令注入</span><span class="rb rb-ok">CVE-2024-36401</span></div>
+        <div style="background:var(--blue-50);border:1px solid var(--blue-200);border-radius:6px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;"><span>ThinkPHP / Django / Flask SSTI 等</span><span class="rb rb-med">+12 更多</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">Skills 漏洞技能库</span></div>
+  <div class="slide-pg">07 / 18</div>
+</div>
+
+<!-- ▌S8 多模型支持 -->
+<div class="slide" id="s8">
+  <div class="sh">
+    <div class="sh-tag">05 · 技术实现</div>
+    <h2>多模型支持，<em>智能任务路由</em></h2>
+  </div>
+  <div class="sb" style="gap:18px;align-items:stretch;padding-bottom:36px;">
+    <div style="flex:1.5;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">LLMBackend 统一接口层</div>
+      <div style="background:var(--purple-100);border:1.5px solid #DDD6FE;border-radius:var(--radius-lg);padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--purple);font-weight:700;text-align:center;padding-bottom:6px;border-bottom:1px solid #DDD6FE;">用户请求 → 任务类型识别 → 模型路由</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="background:#fff;border:1px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--purple);">GPT-4 / GPT-4o</div>
+            <div style="font-size:10.5px;color:var(--gray-500);margin-top:3px;">复杂推理 · 攻击策略规划</div>
+          </div>
+          <div style="background:#fff;border:1px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--purple);">Claude 3.5</div>
+            <div style="font-size:10.5px;color:var(--gray-500);margin-top:3px;">代码生成 · 漏洞深度分析</div>
+          </div>
+          <div style="background:#fff;border:1px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--purple);">DeepSeek</div>
+            <div style="font-size:10.5px;color:var(--gray-500);margin-top:3px;">低成本 · 日常扫描任务</div>
+          </div>
+          <div style="background:#fff;border:1px solid #DDD6FE;border-radius:var(--radius);padding:10px 12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--purple);">智谱 GLM-4</div>
+            <div style="font-size:10.5px;color:var(--gray-500);margin-top:3px;">国内网络环境备选方案</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <div class="kard k-blue">
+        <div class="kard-title" style="color:var(--blue);">🔄 不绑定单一厂商</div>
+        <div class="kard-body">模型可随时切换，不依赖任何单一 AI 服务商，网络故障自动降级</div>
+      </div>
+      <div class="kard k-orange">
+        <div class="kard-title" style="color:var(--orange);">💰 成本智能优化</div>
+        <div class="kard-body">复杂任务用高端模型，简单扫描用低价模型，自动平衡性能与成本</div>
+      </div>
+      <div class="kard k-purple">
+        <div class="kard-title" style="color:var(--purple);">🎯 专属提示词工程</div>
+        <div class="kard-body">针对渗透测试场景深度优化 System Prompt，确保 AI 准确理解并执行安全指令</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">多模型支持</span></div>
+  <div class="slide-pg">08 / 18</div>
+</div>
+
+<!-- ▌S9 量化测试结果 ★ 重点 -->
+<div class="slide" id="s9">
+  <div class="sh">
+    <div class="sh-tag">06 · 测试结果</div>
+    <h2>量化指标 <em>全部达到进阶标准</em></h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div style="display:flex;gap:12px;">
+      <div class="metric-card mc-green">
+        <div class="metric-badge">✓ 超进阶</div>
+        <div class="metric-num">100%</div>
+        <div class="metric-name">漏洞检测率</div>
+        <div class="metric-req">进阶要求 ≥95%</div>
+      </div>
+      <div class="metric-card mc-green">
+        <div class="metric-badge">✓ 超进阶</div>
+        <div class="metric-num">0%</div>
+        <div class="metric-name">误报率</div>
+        <div class="metric-req">进阶要求 ≤5%</div>
+      </div>
+      <div class="metric-card mc-green">
+        <div class="metric-badge">✓ 超进阶</div>
+        <div class="metric-num">100%</div>
+        <div class="metric-name">CVE 覆盖度</div>
+        <div class="metric-req">进阶要求 ≥5%</div>
+      </div>
+      <div class="metric-card mc-blue">
+        <div class="metric-badge" style="background:var(--teal-100);color:#0F766E;">✓ 达标</div>
+        <div class="metric-num" style="font-size:38px;letter-spacing:-1px;">9.8s</div>
+        <div class="metric-name">单目标测试耗时</div>
+        <div class="metric-req">进阶要求 ≤15 分钟</div>
+      </div>
+    </div>
+    <div style="flex:1;overflow:auto;">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>漏洞名称</th>
+            <th>危害等级</th>
+            <th>检出状态</th>
+            <th>技术手段</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>SQL 注入（结构化查询语言注入）</td><td><span class="rb rb-crit">严重</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>UNION SELECT 提取账号密码</td></tr>
+          <tr><td>SQL 盲注</td><td><span class="rb rb-high">高危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>时延对比法 2.3s vs 0.1s</td></tr>
+          <tr><td>反射型 XSS（跨站脚本攻击）</td><td><span class="rb rb-med">中危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>脚本标签未过滤直接回显</td></tr>
+          <tr><td>存储型 XSS</td><td><span class="rb rb-high">高危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>恶意脚本入库持久触发</td></tr>
+          <tr><td>命令注入（系统命令执行）</td><td><span class="rb rb-crit">严重</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>管道符拼接，成功执行 id</td></tr>
+          <tr><td>文件包含 LFI（本地文件包含）</td><td><span class="rb rb-high">高危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>路径穿越读取系统敏感文件</td></tr>
+          <tr><td>文件上传漏洞</td><td><span class="rb rb-crit">严重</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>PHP WebShell 上传执行成功</td></tr>
+          <tr><td>CSRF（跨站请求伪造）</td><td><span class="rb rb-med">中危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>无 Token 保护，GET 可改密码</td></tr>
+          <tr><td>暴力破解（弱密码攻击）</td><td><span class="rb rb-med">中危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>admin:password 成功登录</td></tr>
+          <tr><td>XXE（XML 外部实体注入）</td><td><span class="rb rb-high">高危</span></td><td><span class="rb rb-ok">✓ 已检出</span></td><td>外部实体注入读取本地文件</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:10px;color:var(--gray-400);text-align:center;">Vulhub CVE 专项验证 15 个全部通过 &nbsp;|&nbsp; S2-045/057 · WebLogic · Tomcat · Shiro · FastJSON 等</div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">量化测试结果</span></div>
+  <div class="slide-pg">09 / 18</div>
+</div>
+
+<!-- ▌S10 攻击链演示 -->
+<div class="slide" id="s10">
+  <div class="sh">
+    <div class="sh-tag">06 · 测试结果 / 攻击链演示</div>
+    <h2>完整攻击链：从<em>信息收集</em>到<em>权限提升</em></h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div style="display:flex;gap:0;align-items:stretch;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);">
+      <div style="flex:1;background:var(--blue-50);border:1.5px solid var(--blue-200);padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px;">① 信息收集</div>
+        <div style="font-size:11px;color:var(--gray-700);line-height:1.75;">nmap 端口扫描<br>subfinder 子域发现<br>DNS 枚举 · 指纹识别</div>
+        <div style="margin-top:8px;font-size:10px;background:#DBEAFE;border-radius:4px;padding:4px 7px;color:#1E40AF;line-height:1.5;">AI 判断：开放80/8080，疑似 Struts2</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:18px;color:var(--gray-300);padding:0 8px;">→</div>
+      <div style="flex:1;background:var(--orange-100);border:1.5px solid #FDE68A;padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:6px;">② 漏洞发现</div>
+        <div style="font-size:11px;color:var(--gray-700);line-height:1.75;">nuclei 批量扫描<br>sqlmap 注入检测<br>目录爆破 · 版本探测</div>
+        <div style="margin-top:8px;font-size:10px;background:#FDE68A;border-radius:4px;padding:4px 7px;color:#92400E;line-height:1.5;">AI 判断：S2-045 特征匹配，调用 CVE Skill</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:18px;color:var(--gray-300);padding:0 8px;">→</div>
+      <div style="flex:1;background:var(--red-100);border:1.5px solid #FECACA;padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px;">③ 漏洞利用</div>
+        <div style="font-size:11px;color:var(--gray-700);line-height:1.75;">CVE Exploit 执行<br>WebShell 上传<br>获取初始 shell</div>
+        <div style="margin-top:8px;font-size:10px;background:#FECACA;border-radius:4px;padding:4px 7px;color:#991B1B;line-height:1.5;">AI 判断：www-data shell，开始提权路径探测</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:18px;color:var(--gray-300);padding:0 8px;">→</div>
+      <div style="flex:1;background:var(--green-100);border:1.5px solid #6EE7B7;padding:12px 14px;border-radius:0 var(--radius-lg) var(--radius-lg) 0;">
+        <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;">④ 后渗透</div>
+        <div style="font-size:11px;color:var(--gray-700);line-height:1.75;">提权到 root<br>敏感信息提取<br>生成攻击报告</div>
+        <div style="margin-top:8px;font-size:10px;background:#6EE7B7;border-radius:4px;padding:4px 7px;color:#065F46;line-height:1.5;">AI 完成：uid=0(root)，生成含 CVE 专业报告</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;flex:1;">
+      <div class="kard k-blue" style="flex:1;">
+        <div class="kard-title" style="color:var(--blue);">🎯 演示一：Vulhub S2-045（CVE-2017-5638）</div>
+        <div class="kard-body">目标识别到 <strong>Struts2 框架</strong> → AI 自动调用 S2-045 利用模块 → OGNL 表达式注入执行系统命令 → 成功获取服务器控制权</div>
+      </div>
+      <div class="kard k-teal" style="flex:1;">
+        <div class="kard-title" style="color:var(--teal);">🏴 演示二：VulnHub 靶机 Phineas</div>
+        <div class="kard-body">Fuel CMS RCE → 数据库凭据提取 → SSH 登录 → Pickle 反序列化提权 → <strong>Root 完成</strong>，体现 P-E-R 跨阶段自动串联能力</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">多阶段攻击链演示</span></div>
+  <div class="slide-pg">10 / 18</div>
+</div>
+
+<!-- ▌S11 系统界面截图 -->
+<div class="slide" id="s11">
+  <div class="sh">
+    <div class="sh-tag">07 · 界面展示</div>
+    <h2>可视化操作界面</h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px;flex:1;">
+      <!-- 主仪表板 -->
+      <div style="background:#0F172A;border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:10px;color:#64B5F6;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">主仪表板</div>
+        <div style="display:flex;gap:8px;align-items:stretch;">
+          <div style="flex:1;background:#1E293B;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#38BDF8;">10</div><div style="font-size:9px;color:#94A3B8;">漏洞检出</div></div>
+          <div style="flex:1;background:#1E293B;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#4ADE80;">100%</div><div style="font-size:9px;color:#94A3B8;">检测率</div></div>
+          <div style="flex:1;background:#1E293B;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#FB923C;">9.8s</div><div style="font-size:9px;color:#94A3B8;">总耗时</div></div>
+          <div style="flex:1;background:#1E293B;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#C084FC;">0%</div><div style="font-size:9px;color:#94A3B8;">误报率</div></div>
+        </div>
+        <div style="font-size:9px;color:#475569;margin-bottom:2px;">工具调用时间线</div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap;">
+          <span style="font-size:8px;color:#38BDF8;background:#1E3A50;padding:2px 6px;border-radius:3px;">nmap 1.2s</span>
+          <span style="font-size:8px;color:#4ADE80;background:#1E3A50;padding:2px 6px;border-radius:3px;">nuclei 3.4s</span>
+          <span style="font-size:8px;color:#FB923C;background:#1E3A50;padding:2px 6px;border-radius:3px;">sqlmap 2.1s</span>
+          <span style="font-size:8px;color:#C084FC;background:#1E3A50;padding:2px 6px;border-radius:3px;">gobuster 2.1s</span>
+          <span style="font-size:8px;color:#FCD34D;background:#1E3A50;padding:2px 6px;border-radius:3px;">hydra 1.0s</span>
+        </div>
+      </div>
+      <!-- P-E-R 面板 -->
+      <div style="background:#0F172A;border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:6px;">
+        <div style="font-size:10px;color:#64B5F6;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">P-E-R 执行面板</div>
+        <div style="font-family:var(--mono);font-size:9px;flex:1;display:flex;flex-direction:column;gap:3px;overflow:hidden;">
+          <div style="color:#38BDF8;">[Planner] 目标分析 → 生成 5 个子任务</div>
+          <div style="color:#4ADE80;">[Executor] 调用 nmap -sV -sC 192.168.1.100</div>
+          <div style="color:#FB923C;">[Executor] 调用 nuclei -u http://192.168.1.100</div>
+          <div style="color:#C084FC;">[Reflector] 检测到 Struts2 特征，匹配 S2-045</div>
+          <div style="color:#4ADE80;">[Executor] 执行 CVE-2017-5638 利用模块</div>
+          <div style="color:#FCD34D;">[Reflector] ✓ 获得 shell: uid=0(root)</div>
+          <div style="color:#38BDF8;">[Report]   生成报告 report_20260413.json</div>
+        </div>
+      </div>
+      <!-- 漏洞报告 -->
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-sm);">
+        <div style="font-size:10px;color:var(--blue);font-weight:700;letter-spacing:1px;text-transform:uppercase;">漏洞报告页</div>
+        <table class="dt" style="font-size:9.5px;">
+          <thead><tr><th>漏洞</th><th>CVE / CWE</th><th>CVSS</th><th>风险</th></tr></thead>
+          <tbody>
+            <tr><td>SQL 注入</td><td>CWE-89</td><td>9.8</td><td><span class="rb rb-crit">严重</span></td></tr>
+            <tr><td>命令注入</td><td>CWE-78</td><td>9.1</td><td><span class="rb rb-crit">严重</span></td></tr>
+            <tr><td>文件上传</td><td>CWE-434</td><td>8.8</td><td><span class="rb rb-high">高危</span></td></tr>
+            <tr><td>存储型 XSS</td><td>CWE-79</td><td>6.1</td><td><span class="rb rb-high">高危</span></td></tr>
+            <tr><td>CSRF</td><td>CWE-352</td><td>5.4</td><td><span class="rb rb-med">中危</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- CLI -->
+      <div style="background:#0F172A;border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:5px;">
+        <div style="font-size:10px;color:#64B5F6;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">CLI 对话界面</div>
+        <div style="font-family:var(--mono);font-size:9px;flex:1;display:flex;flex-direction:column;gap:3px;">
+          <div style="color:#475569;">ClawAI v2.0 &nbsp;|&nbsp; chat &nbsp;|&nbsp; DeepSeek</div>
+          <div style="color:#38BDF8;">❯ 对 192.168.1.100 进行渗透测试</div>
+          <div style="color:#4ADE80;">[AI] 开始综合测试，信息收集 → 漏洞扫描 → 利用</div>
+          <div style="color:#FB923C;">[+] 发现漏洞: SQL注入 (CWE-89, CVSS 9.8)</div>
+          <div style="color:#FB923C;">[+] 发现漏洞: 命令注入 (CWE-78, CVSS 9.1)</div>
+          <div style="color:#C084FC;">[报告] report_20260413.txt 已生成</div>
+          <div style="color:#38BDF8;">❯ <span style="animation:blink 1s infinite;">█</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--gray-400);text-align:center;">前端：React 18 + TailwindCSS · WebSocket 实时推送 · 深色科技感设计 &nbsp;|&nbsp; 后端：FastAPI + SQLAlchemy</div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">可视化界面</span></div>
+  <div class="slide-pg">11 / 18</div>
+</div>
+
+<!-- ▌S12 靶场覆盖 -->
+<div class="slide" id="s12">
+  <div class="sh">
+    <div class="sh-tag">06 · 测试结果 / 靶场覆盖</div>
+    <h2>覆盖比赛要求的<em>主流靶场平台</em></h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:10px;padding-bottom:36px;">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;">VulnHub 实战靶机（5台全程 Root）</div>
+      <table class="dt">
+        <thead><tr><th>靶机名称</th><th>难度</th><th>攻击路径</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Tomato</strong></td><td><span class="rb rb-med">中等</span></td><td>LFI 文件包含 → SSH 日志投毒 RCE → 内核提权</td><td><span class="rb rb-ok">✅ Root 完成</span></td></tr>
+          <tr><td><strong>Phineas</strong></td><td><span class="rb rb-med">中等</span></td><td>Fuel CMS RCE（CVE-2018-16763）→ Pickle 反序列化提权</td><td><span class="rb rb-ok">✅ Root 完成</span></td></tr>
+          <tr><td><strong>Earth</strong></td><td><span class="rb rb-crit">困难</span></td><td>SSL 信息泄露 → XOR 密码破解 → Django CLI 注入 → SUID 提权</td><td><span class="rb rb-ok">✅ Root 完成</span></td></tr>
+          <tr><td><strong>Jangow</strong></td><td><span class="rb rb-crit">困难</span></td><td>Web 命令注入 → 凭据泄露 → CVE-2017-16995 内核提权</td><td><span class="rb rb-ok">✅ Root 完成</span></td></tr>
+          <tr><td><strong>Odin</strong></td><td><span class="rb rb-med">中等</span></td><td>WordPress admin → 主题编辑器 WebShell → CVE-2021-4034 PwnKit 提权</td><td><span class="rb rb-ok">✅ Root 完成</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;">Vulhub CVE 专项验证（15 个全部通过）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        <span class="pill pill-teal">S2-045 CVE-2017-5638</span>
+        <span class="pill pill-teal">S2-057 CVE-2018-11776</span>
+        <span class="pill pill-orange">ThinkPHP 5.0.23 RCE</span>
+        <span class="pill pill-red">WebLogic CVE-2023-21839</span>
+        <span class="pill pill-red">Tomcat CVE-2017-12615</span>
+        <span class="pill pill-orange">PHP-FPM CVE-2019-11043</span>
+        <span class="pill pill-orange">ActiveMQ CVE-2022-41678</span>
+        <span class="pill pill-purple">JBoss CVE-2017-7504</span>
+        <span class="pill pill-purple">Shiro CVE-2016-4437</span>
+        <span class="pill pill-blue">FastJSON 1.2.24 RCE</span>
+        <span class="pill pill-blue">FastJSON 1.2.47 RCE</span>
+        <span class="pill pill-gray">Django CVE-2022-34265</span>
+        <span class="pill pill-gray">Flask SSTI</span>
+        <span class="pill pill-green">GeoServer CVE-2024-36401</span>
+        <span class="pill pill-green">S2-061 CVE-2020-17530</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="kard k-blue" style="flex:1;"><div class="kard-body">📋 <strong>基础要求：</strong>Vulnhub + Vulhub 平台全部覆盖完成</div></div>
+      <div class="kard k-teal" style="flex:1;"><div class="kard-body">🖥️ <strong>操作系统：</strong>Linux + Windows 双平台支持</div></div>
+      <div class="kard k-orange" style="flex:1;"><div class="kard-body">🎯 <strong>进阶要求：</strong>Bugku PAR 平台已列入后续计划</div></div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">靶场覆盖</span></div>
+  <div class="slide-pg">12 / 18</div>
+</div>
+
+<!-- ▌S13 报告生成 -->
+<div class="slide" id="s13">
+  <div class="sh">
+    <div class="sh-tag">07 · 界面展示 / 报告生成</div>
+    <h2>自动生成<em>专业渗透测试报告</em></h2>
+  </div>
+  <div class="sb" style="gap:18px;align-items:stretch;padding-bottom:36px;">
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;">报告结构</div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:11.5px;flex:1;">
+        <div style="background:var(--blue-50);border-left:4px solid var(--blue);border-radius:0 var(--radius) var(--radius) 0;padding:9px 13px;">
+          <strong style="color:var(--blue);">📋 执行摘要</strong><br>
+          <span style="color:var(--gray-500);">目标范围 · 关键发现 · 整体风险评级</span>
+        </div>
+        <div style="background:var(--orange-100);border-left:4px solid var(--orange);border-radius:0 var(--radius) var(--radius) 0;padding:9px 13px;margin-left:14px;">
+          <strong style="color:var(--orange);">🔍 漏洞详情</strong><br>
+          <span style="color:var(--gray-500);">漏洞名称 · CVE编号 · CVSS评分 · CWE分类 · 攻击路径 · 截图证据 · 修复建议</span>
+        </div>
+        <div style="background:var(--green-100);border-left:4px solid var(--green);border-radius:0 var(--radius) var(--radius) 0;padding:9px 13px;margin-left:14px;">
+          <strong style="color:var(--green);">🗺️ 攻击链分析</strong><br>
+          <span style="color:var(--gray-500);">多阶段时序图 · AI 决策轨迹 · 工具调用记录</span>
+        </div>
+        <div style="background:var(--purple-100);border-left:4px solid var(--purple);border-radius:0 var(--radius) var(--radius) 0;padding:9px 13px;margin-left:14px;">
+          <strong style="color:var(--purple);">📊 量化统计</strong><br>
+          <span style="color:var(--gray-500);">检测率 · 误报率 · 工具调用次数 · 总耗时</span>
+        </div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;justify-content:center;">
+      <div class="kard k-blue">
+        <div class="kard-title" style="color:var(--blue);">📁 多格式输出</div>
+        <div class="kard-body">支持 JSON 和 TXT 格式导出，后续计划支持 PDF</div>
+      </div>
+      <div class="kard k-teal">
+        <div class="kard-title" style="color:var(--teal);">🔬 证据完整</div>
+        <div class="kard-body">每条漏洞包含实际攻击 Payload 和服务器响应片段，证据充分可复现</div>
+      </div>
+      <div class="kard k-purple">
+        <div class="kard-title" style="color:var(--purple);">🏷️ 标准化编号</div>
+        <div class="kard-body">漏洞自动关联 CWE 分类和 CVE 编号，符合行业交付标准</div>
+      </div>
+      <div class="kard k-green">
+        <div class="kard-title" style="color:var(--green);">🛡️ 修复建议</div>
+        <div class="kard-body">针对每类漏洞自动生成具体修复建议，可直接交付给开发团队</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">报告生成能力</span></div>
+  <div class="slide-pg">13 / 18</div>
+</div>
+
+<!-- ▌S14 对比表 -->
+<div class="slide" id="s14">
+  <div class="sh">
+    <div class="sh-tag">08 · 创新与总结 / 横向对比</div>
+    <h2>与同类工具对比</h2>
+  </div>
+  <div class="sb" style="flex-direction:column;gap:12px;align-items:stretch;padding-bottom:36px;">
+    <table class="dt" style="font-size:12px;">
+      <thead>
+        <tr>
+          <th style="width:150px;">对比维度</th>
+          <th>同类工具 A<br><span style="font-weight:400;font-size:10px;text-transform:none;">PentestGPT类</span></th>
+          <th>同类工具 B<br><span style="font-weight:400;font-size:10px;text-transform:none;">AutoPentest类</span></th>
+          <th style="background:var(--blue-50);color:var(--blue);">ClawAI ✓</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>工具集成数量</td><td>约 10 个</td><td>约 15 个</td><td class="ct-ours" style="color:var(--blue);">51 个 🏆</td></tr>
+        <tr class="ct-ours"><td>CVE 利用模块</td><td>无</td><td>少量（3–5）</td><td style="color:var(--blue);">21 个 🏆</td></tr>
+        <tr><td>多模型支持</td><td>部分（1–2种）</td><td>无</td><td class="ct-ours" style="color:var(--blue);">4 种统一接口 🏆</td></tr>
+        <tr class="ct-ours"><td>漏洞技能库</td><td>无</td><td>无</td><td style="color:var(--blue);">27 类 Skills 🏆</td></tr>
+        <tr><td>可视化界面</td><td>无</td><td>无</td><td class="ct-ours" style="color:var(--blue);">完整仪表板 + 3D 🏆</td></tr>
+        <tr class="ct-ours"><td>多阶段攻击链</td><td>部分支持</td><td>部分支持</td><td style="color:var(--blue);">P-E-R 全流程闭环 🏆</td></tr>
+        <tr><td>自动报告生成</td><td>简单文本</td><td>无</td><td class="ct-ours" style="color:var(--blue);">结构化含CVE/CVSS 🏆</td></tr>
+        <tr class="ct-ours"><td>漏洞检测率</td><td>约 70%</td><td>约 75%</td><td style="color:var(--blue);">100% 🏆</td></tr>
+      </tbody>
+    </table>
+    <div style="background:var(--blue-50);border:1.5px solid var(--blue-200);border-radius:var(--radius);padding:10px 18px;font-size:12px;color:var(--blue);text-align:center;font-weight:600;">
+      ClawAI 在工具覆盖度、CVE 利用深度、可视化能力、检测准确率上均具有明显优势
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">横向对比</span></div>
+  <div class="slide-pg">14 / 18</div>
+</div>
+
+<!-- ▌S15 商业价值 -->
+<div class="slide" id="s15">
+  <div class="sh">
+    <div class="sh-tag">07 · 商业价值</div>
+    <h2>应用场景与<em>市场价值</em></h2>
+  </div>
+  <div class="sb" style="gap:16px;align-items:stretch;padding-bottom:36px;">
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;">应用场景</div>
+      <div class="kard k-blue"><div class="kard-title" style="color:var(--blue);">🏢 中小企业安全自查</div><div class="kard-body">无需专职安全团队，一键启动自动化测试，分钟级完成</div></div>
+      <div class="kard k-teal"><div class="kard-title" style="color:var(--teal);">🔧 安全服务商工具平台</div><div class="kard-body">大幅提升测试效率，降低人力成本，标准化输出结果</div></div>
+      <div class="kard k-purple"><div class="kard-title" style="color:var(--purple);">🎓 高校网安实验教学</div><div class="kard-body">学生实战练习平台，自动出题自动评分，降低门槛</div></div>
+      <div class="kard k-orange"><div class="kard-title" style="color:var(--orange);">🏴 红队演练 · 漏洞赏金</div><div class="kard-body">辅助红队快速突破，批量验证漏洞，提升作业效率</div></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;">市场数据</div>
+      <div style="background:linear-gradient(135deg,var(--blue-50),#EFF6FF);border:1.5px solid var(--blue-200);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;gap:10px;flex:1;">
+        <div style="text-align:center;"><div style="font-size:36px;font-weight:900;color:var(--blue);line-height:1;">$148亿</div><div style="font-size:11px;color:var(--gray-500);margin-top:3px;">2025年全球渗透测试市场规模</div></div>
+        <div style="text-align:center;"><div style="font-size:36px;font-weight:900;color:var(--teal);line-height:1;">20%+</div><div style="font-size:11px;color:var(--gray-500);margin-top:3px;">中国网安市场年均增速</div></div>
+        <div style="font-size:11px;color:var(--gray-700);background:#fff;border-radius:var(--radius);padding:8px 12px;border:1px solid var(--blue-200);">目标客户：中小企业 · 安全服务商 · 高校院所 · 互联网企业</div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;">效率对比</div>
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px;flex:1;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-sm);">
+        <div style="background:var(--red-100);border-radius:var(--radius);padding:12px;text-align:center;"><div style="font-size:11px;font-weight:700;color:#991B1B;margin-bottom:5px;">❌ 传统人工渗透测试</div><div style="font-size:15px;font-weight:800;">2万–10万元 / 次</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px;">周期 7–14 天</div></div>
+        <div style="text-align:center;font-size:22px;color:var(--gray-300);">↓</div>
+        <div style="background:var(--green-100);border-radius:var(--radius);padding:12px;text-align:center;"><div style="font-size:11px;font-weight:700;color:var(--green-700);margin-bottom:5px;">✅ 使用 ClawAI</div><div style="font-size:15px;font-weight:800;color:var(--green);">千元以内 / 次</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px;">30 分钟内完成基础测试</div></div>
+        <div style="background:var(--blue-50);border-radius:var(--radius);padding:10px;text-align:center;"><div style="font-size:13px;font-weight:800;color:var(--blue);">效率提升 <strong>30×</strong></div><div style="font-size:11px;color:var(--gray-500);">综合成本降低约 <strong>95%</strong></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">商业价值</span></div>
+  <div class="slide-pg">15 / 18</div>
+</div>
+
+<!-- ▌S16 创新点 -->
+<div class="slide" id="s16">
+  <div class="sh">
+    <div class="sh-tag">08 · 创新与总结 / 创新点</div>
+    <h2>五个主要<em>创新点</em></h2>
+  </div>
+  <div class="sb" style="flex-wrap:wrap;gap:12px;align-content:flex-start;padding-bottom:36px;">
+    <div class="kard k-blue" style="flex:1;min-width:170px;">
+      <div style="font-size:28px;margin-bottom:8px;">🔁</div>
+      <div class="kard-title" style="color:var(--blue);font-size:14px;">① P-E-R 自适应攻击循环</div>
+      <div class="kard-body">规划→执行→反思形成<strong>闭环</strong>，执行失败自动调整策略重试，模拟真实安全工程师思维</div>
+    </div>
+    <div class="kard k-orange" style="flex:1;min-width:170px;">
+      <div style="font-size:28px;margin-bottom:8px;">⚡</div>
+      <div class="kard-title" style="color:var(--orange);font-size:14px;">② Skills 即函数调用</div>
+      <div class="kard-body">漏洞利用逻辑封装为标准模块，通过 <strong>OpenAI Function Calling</strong> 让 AI 直接调用，自然流畅</div>
+    </div>
+    <div class="kard k-red" style="flex:1;min-width:170px;">
+      <div style="font-size:28px;margin-bottom:8px;">💣</div>
+      <div class="kard-title" style="color:var(--red);font-size:14px;">③ 21个真实CVE自动化利用</div>
+      <div class="kard-body">针对主流中间件高危漏洞，AI 根据目标特征<strong>自动匹配并执行</strong>，开箱即用</div>
+    </div>
+    <div class="kard k-teal" style="flex:1;min-width:170px;">
+      <div style="font-size:28px;margin-bottom:8px;">📡</div>
+      <div class="kard-title" style="color:var(--teal);font-size:14px;">④ 实时可视化攻击界面</div>
+      <div class="kard-body">攻击过程<strong>全程可视</strong>，工具调用日志实时推送，支持 3D 攻击链拓扑，告别黑盒</div>
+    </div>
+    <div class="kard k-purple" style="flex:1;min-width:170px;">
+      <div style="font-size:28px;margin-bottom:8px;">🔌</div>
+      <div class="kard-title" style="color:var(--purple);font-size:14px;">⑤ 多模型统一接口</div>
+      <div class="kard-body">一套代码同时支持 GPT / Claude / DeepSeek / GLM，灵活切换，<strong>不依赖单一厂商</strong></div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">五大创新点</span></div>
+  <div class="slide-pg">16 / 18</div>
+</div>
+
+<!-- ▌S17 完成情况 -->
+<div class="slide" id="s17">
+  <div class="sh">
+    <div class="sh-tag">08 · 创新与总结 / 完成情况</div>
+    <h2>项目当前<em>完成情况</em></h2>
+  </div>
+  <div class="sb" style="gap:20px;align-items:stretch;padding-bottom:36px;">
+    <div style="flex:1.3;display:flex;flex-direction:column;justify-content:center;gap:1px;">
+      <div class="prow"><div class="plabel">核心功能开发</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">工具链集成（51个）</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">漏洞技能库（27类）</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">CVE利用模块（21个）</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">前端界面</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">Vulhub CVE专项验证</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">VulnHub靶机渗透（5台）</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">文档和报告生成</div><div class="ptrack"><div class="pfill done" style="width:100%;"></div></div><div class="pval done">100%</div></div>
+      <div class="prow"><div class="plabel">公网部署</div><div class="ptrack"><div class="pfill warn" style="width:80%;"></div></div><div class="pval" style="color:var(--orange);">80%</div></div>
+      <div class="prow"><div class="plabel">演示视频录制</div><div class="ptrack"><div class="pfill" style="width:50%;"></div></div><div class="pval">50%</div></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:9px;justify-content:center;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:2px;">4月18日前计划完成</div>
+      <div class="kard k-green"><div class="kard-title" style="color:var(--green);">✅ 公网部署</div><div class="kard-body">生成可访问演示 URL，供评委实时体验系统</div></div>
+      <div class="kard k-green"><div class="kard-title" style="color:var(--green);">✅ 演示视频</div><div class="kard-body">录制 ≤50MB 演示视频，脚本已完成，按稿录制</div></div>
+      <div class="kard k-blue"><div class="kard-title" style="color:var(--blue);">✅ PPT 精修</div><div class="kard-body">与老师提前预演一遍，确认内容无误</div></div>
+      <div class="kard k-purple"><div class="kard-title" style="color:var(--purple);">📝 软著申请</div><div class="kard-body">材料不复杂，可加分，时间来得及则申请</div></div>
+    </div>
+  </div>
+  <div class="slide-footer"><span class="sf-brand">ClawAI</span><span class="sf-sep">·</span><span class="sf-sub">项目完成情况</span></div>
+  <div class="slide-pg">17 / 18</div>
+</div>
+
+<!-- ▌S18 总结封底 -->
+<div class="slide" id="s18">
+  <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;gap:22px;background:linear-gradient(145deg,#F0F7FF 0%,#EFF6FF 40%,#F0FDF4 100%);">
+    <div style="text-align:center;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:3px;color:var(--gray-400);text-transform:uppercase;margin-bottom:10px;">Conclusion · 总结</div>
+      <h2 style="font-size:30px;font-weight:900;color:var(--gray-900);margin-bottom:10px;letter-spacing:-0.5px;">ClawAI，让 AI 成为每个人的<span style="color:var(--blue);">渗透测试专家</span></h2>
+      <div style="width:56px;height:4px;background:linear-gradient(90deg,var(--blue),var(--sky));margin:0 auto;border-radius:2px;"></div>
+    </div>
+    <div style="display:flex;gap:20px;width:100%;max-width:820px;">
+      <div style="flex:1;background:#fff;border:1px solid var(--blue-200);border-radius:var(--radius-lg);padding:20px;text-align:center;box-shadow:var(--shadow-sm);">
+        <div style="font-size:28px;font-weight:900;color:var(--blue);margin-bottom:8px;line-height:1;">01</div>
+        <div style="font-size:16px;font-weight:800;color:var(--blue);margin-bottom:6px;">自动化</div>
+        <div style="font-size:11.5px;color:var(--gray-500);line-height:1.7;">全流程无人干预<br>目标确定后自动运行到出报告</div>
+      </div>
+      <div style="flex:1;background:#fff;border:1px solid #A7F3D0;border-radius:var(--radius-lg);padding:20px;text-align:center;box-shadow:var(--shadow-sm);">
+        <div style="font-size:28px;font-weight:900;color:var(--teal);margin-bottom:8px;line-height:1;">02</div>
+        <div style="font-size:16px;font-weight:800;color:var(--teal);margin-bottom:6px;">专业化</div>
+        <div style="font-size:11.5px;color:var(--gray-500);line-height:1.7;">CVE/CWE 标准全覆盖<br>报告格式达到商业交付水平</div>
+      </div>
+      <div style="flex:1;background:#fff;border:1px solid #6EE7B7;border-radius:var(--radius-lg);padding:20px;text-align:center;box-shadow:var(--shadow-sm);">
+        <div style="font-size:28px;font-weight:900;color:var(--green);margin-bottom:8px;line-height:1;">03</div>
+        <div style="font-size:16px;font-weight:800;color:var(--green);margin-bottom:6px;">规模化</div>
+        <div style="font-size:11.5px;color:var(--gray-500);line-height:1.7;">支持并发多目标测试<br>分钟级完成单目标</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;width:100%;max-width:820px;box-shadow:var(--shadow-sm);">
+      <div style="flex:1;padding:14px 8px;text-align:center;border-right:1px solid var(--gray-100);"><div style="font-size:28px;font-weight:900;color:var(--blue);line-height:1;letter-spacing:-1px;">51</div><div style="font-size:10px;color:var(--gray-500);margin-top:3px;">个安全工具</div></div>
+      <div style="flex:1;padding:14px 8px;text-align:center;border-right:1px solid var(--gray-100);"><div style="font-size:28px;font-weight:900;color:var(--orange);line-height:1;">27</div><div style="font-size:10px;color:var(--gray-500);margin-top:3px;">类 Skills</div></div>
+      <div style="flex:1;padding:14px 8px;text-align:center;border-right:1px solid var(--gray-100);"><div style="font-size:28px;font-weight:900;color:var(--purple);line-height:1;">21</div><div style="font-size:10px;color:var(--gray-500);margin-top:3px;">个 CVE 利用</div></div>
+      <div style="flex:1;padding:14px 8px;text-align:center;border-right:1px solid var(--gray-100);"><div style="font-size:28px;font-weight:900;color:var(--green);line-height:1;letter-spacing:-1px;">100%</div><div style="font-size:10px;color:var(--gray-500);margin-top:3px;">漏洞检测率</div></div>
+      <div style="flex:1;padding:14px 8px;text-align:center;"><div style="font-size:28px;font-weight:900;color:var(--teal);line-height:1;letter-spacing:-1px;">0%</div><div style="font-size:10px;color:var(--gray-500);margin-top:3px;">误报率</div></div>
+    </div>
+    <div style="font-size:13px;color:var(--gray-400);">感谢各位评委老师的宝贵时间 🙏</div>
+  </div>
+  <div class="slide-pg">18 / 18</div>
+</div>
+
+</div><!-- end slides-wrapper -->
+
+<style>
+@keyframes blink {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>
+
+<script>
+const TOTAL = 18;
+let cur = 1;
+
+function show(n) {
+  if (n < 1 || n > TOTAL) return;
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  const s = document.getElementById('s' + n);
+  if (s) s.classList.add('active');
+  cur = n;
+  // counter
+  document.getElementById('sc').textContent = String(n).padStart(2,'0') + ' / ' + TOTAL;
+  // progress bar
+  document.getElementById('pf').style.width = (n / TOTAL * 100) + '%';
+  // dots
+  document.querySelectorAll('.dn').forEach((d, i) => d.classList.toggle('a', i + 1 === n));
+  // scroll to top
+  window.scrollTo({ top: 60, behavior: 'smooth' });
+}
+
+function go(d) { show(cur + d); }
+
+// Build dot nav
+const nav = document.getElementById('dotNav');
+for (let i = 1; i <= TOTAL; i++) {
+  const d = document.createElement('div');
+  d.className = 'dn' + (i === 1 ? ' a' : '');
+  d.title = '第 ' + i + ' 页';
+  d.onclick = () => show(i);
+  nav.appendChild(d);
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); go(1); }
+  if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); go(-1); }
+  if (e.key === 'Home') show(1);
+  if (e.key === 'End') show(TOTAL);
+});
+
+// Touch swipe
+let tx = 0;
+document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const d = e.changedTouches[0].clientX - tx;
+  if (d < -50) go(1);
+  if (d > 50) go(-1);
+}, { passive: true });
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 # ClawAI Nmap 工具配置
-# 基于 CyberStrikeAI 格式适配，适用于 Kali Linux 容器化执行
+# 适用于 Kali Linux 容器化执行
 
 name: "nmap"
 command: "nmap"

@@ -4,7 +4,20 @@
 import axios from 'axios';
 
 // API基础URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api/v1';
+
+// 全局 Toast 事件总线（避免循环依赖：apiClient ← ToastContext）
+// 组件层调用：window.__clawai_toast?.error('msg')
+const emitToast = (type, message) => {
+  if (typeof window !== 'undefined' && window.__clawai_toast?.[type]) {
+    window.__clawai_toast[type](message);
+  }
+};
+
+// 需要重试的网络/服务端错误状态码
+const RETRYABLE = new Set([502, 503, 504]);
+// 不弹 Toast 的静默端点（心跳、轮询等）
+const SILENT_URLS = ['/auth/me', '/health', '/auth/health'];
 
 // 创建axios实例
 const apiClient = axios.create({
@@ -31,6 +44,9 @@ apiClient.interceptors.request.use(
   }
 );
 
+// 令牌刷新状态（防止并发刷新）
+let _refreshPromise = null;
+
 // 响应拦截器：处理错误和令牌刷新
 apiClient.interceptors.response.use(
   (response) => {
@@ -43,44 +59,76 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // 处理401错误：尝试刷新令牌
+    // 处理401错误：尝试刷新令牌（防止并发多次刷新）
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          // 尝试刷新令牌
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refresh_token: refreshToken
-          });
+      if (!_refreshPromise) {
+        _refreshPromise = (async () => {
+          try {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (!refreshToken) throw new Error('No refresh token');
 
-          if (response.data.access_token) {
-            localStorage.setItem('access_token', response.data.access_token);
-            // 更新原请求的Authorization头
-            originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
-            return apiClient(originalRequest);
+            const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+              refresh_token: refreshToken
+            });
+
+            if (response.data.access_token) {
+              localStorage.setItem('access_token', response.data.access_token);
+              apiClient.defaults.headers.common['Authorization'] =
+                `Bearer ${response.data.access_token}`;
+              return response.data.access_token;
+            }
+            throw new Error('Refresh response missing access_token');
+          } finally {
+            _refreshPromise = null;
           }
-        }
-      } catch (refreshError) {
-        // 刷新失败，跳转到登录页
+        })();
+      }
+
+      try {
+        const newToken = await _refreshPromise;
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient(originalRequest);
+      } catch {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
+        delete apiClient.defaults.headers.common['Authorization'];
+        // 派发自定义事件，让 React Router 处理跳转，避免强制刷新页面
+        window.dispatchEvent(new CustomEvent('clawai:unauthorized'));
+        return Promise.reject(error);
       }
     }
 
     // 处理其他错误
+    const status = error.response?.status;
     const errorMessage = error.response?.data?.detail ||
                         error.response?.data?.message ||
                         error.message ||
                         '请求失败';
 
+    const url = error.config?.url || '';
+    const isSilent = SILENT_URLS.some(s => url.includes(s));
+
+    // 网络/服务端错误自动重试一次
+    if ((RETRYABLE.has(status) || !error.response) && !originalRequest?._retried) {
+      originalRequest._retried = true;
+      return new Promise(resolve => setTimeout(resolve, 800))
+        .then(() => apiClient(originalRequest));
+    }
+
+    // 非静默端点弹 Toast
+    if (!isSilent && status !== 401) {
+      const userMsg = status >= 500
+        ? `服务器错误 (${status})，请稍后重试`
+        : errorMessage;
+      emitToast('error', userMsg);
+    }
+
     console.error('API请求错误:', {
-      url: error.config?.url,
+      url,
       method: error.config?.method,
-      status: error.response?.status,
+      status,
       message: errorMessage
     });
 

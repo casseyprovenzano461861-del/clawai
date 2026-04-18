@@ -948,7 +948,7 @@ def print_report(report: Dict[str, Any]) -> None:
         print(f"  {status} {gt['name']:<27} {gt['cwe']:<10} {gt['cvss']:>5}  {detail_short}")
 
     # 比赛指标评估
-    print(f"\n{BOLD}  比赛指标评估（赛题 A10 标准）{RESET}")
+    print(f"\n{BOLD}  指标评估{RESET}")
     checks = [
         ("漏洞检测率 ≥ 90%",   m["detection_rate"] >= 90,   f"{m['detection_rate']}%"),
         ("进阶：检测率 ≥ 95%", m["detection_rate"] >= 95,   f"{m['detection_rate']}%"),
@@ -1021,7 +1021,7 @@ def save_report(report: Dict[str, Any]) -> Tuple[str, str]:
 
     lines += [
         "",
-        "  比赛指标评估（赛题 A10 标准）",
+        "指标评估",
     ]
     checks = [
         ("漏洞检测率 >= 90%",      m["detection_rate"] >= 90,     f"{m['detection_rate']}%"),

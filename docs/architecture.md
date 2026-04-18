@@ -100,7 +100,7 @@ The Skills system encapsulates penetration testing techniques as callable units 
 
 - `core.py` -- `Skill` dataclass, `SkillExecutor` that runs a skill against a target, and `get_openai_tools()` that generates Function Calling schemas from skill definitions
 - `registry.py` -- `SkillRegistry` singleton holding all skills, with `execute()`, `search()`, and `get_openai_tools()` methods
-- `extended_skills.py` -- 13 additional skills integrated from open-source projects (CyberStrikeAI, NeuroSploit, PentestGPT), plus `PayloadMutator` and WAF fingerprint database
+- `extended_skills.py` -- 13 additional skills covering XXE, SSRF, SSTI, IDOR, CSRF, deserialization, NoSQL injection, flag detection, WAF detection, and privilege escalation, plus `PayloadMutator` and WAF fingerprint database
 
 **Built-in skills (14):** sqli_basic, sqli_union, sqli_time_blind, xss_reflected, xss_stored, auth_bypass_sql, auth_bruteforce, info_backup_files, info_sensitive_paths, rce_command_injection, lfi_basic, dvwa_sqli, dvwa_xss, dvwa_bruteforce
 

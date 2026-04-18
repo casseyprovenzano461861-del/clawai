@@ -242,20 +242,20 @@ ClawAI/
 | DVWA 专用 | dvwa_sqli, dvwa_xss, dvwa_bruteforce |
 
 ### 扩展技能（13 个）
-| 技能 ID | 来源项目 |
+| 技能 ID | 类型 |
 |---------|---------|
-| xxe_testing | CyberStrikeAI |
-| ssrf_testing | CyberStrikeAI |
-| file_upload_testing | CyberStrikeAI |
-| ssti_testing | NeuroSploit |
-| idor_testing | CyberStrikeAI |
-| csrf_testing | CyberStrikeAI |
-| deserialization_testing | CyberStrikeAI |
-| nosql_injection | NeuroSploit |
-| flag_detector | PentestGPT |
-| waf_detect | NeuroSploit |
-| openssh_user_enum | PentestGPT |
-| privesc_linux / privesc_windows | NeuroSploit |
+| xxe_testing | Web漏洞 |
+| ssrf_testing | Web漏洞 |
+| file_upload_testing | Web漏洞 |
+| ssti_testing | 注入类 |
+| idor_testing | 访问控制 |
+| csrf_testing | Web漏洞 |
+| deserialization_testing | 反序列化 |
+| nosql_injection | 注入类 |
+| flag_detector | CTF辅助 |
+| waf_detect | 指纹识别 |
+| openssh_user_enum | 信息收集 |
+| privesc_linux / privesc_windows | 权限提升 |
 
 ### 辅助工具
 - **PayloadMutator**：Payload 变异器，生成 WAF 绕过变体

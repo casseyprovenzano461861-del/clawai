@@ -323,7 +323,6 @@ agent_config:
 ### 相关项目
 - **HackSynth**: arXiv:2412.01778 - Evaluating LLM Agents for Autonomous Penetration Testing
 - **PentAGI**: 微服务架构的渗透测试 AI 平台
-- **CyberStrikeAI**: 工具丰富的安全测试平台
 
 ### 数据来源
 - **PicoCTF**: https://picoctf.org/ - 教育 CTF 平台

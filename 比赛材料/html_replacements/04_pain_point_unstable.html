@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1080px; height: 1080px; overflow: hidden;
+  background: #050a18;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+.bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 25% 70%, #0a1a40 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 75% 30%, #1a0a30 0%, transparent 55%),
+    #050a18;
+}
+.grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,150,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,150,255,0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.title-area {
+  position: absolute; top: 60px; left: 0; right: 0; text-align: center;
+}
+.title { font-size: 52px; font-weight: 900; color: #fff; }
+
+/* 两列布局 */
+.cols {
+  position: absolute; top: 180px; left: 60px; right: 60px; bottom: 60px;
+  display: flex; gap: 40px;
+}
+
+/* 左：折线图 */
+.chart-box {
+  flex: 1;
+  background: rgba(5,15,40,0.85);
+  border: 1px solid #0066ff33;
+  border-radius: 16px;
+  padding: 30px;
+  display: flex; flex-direction: column;
+}
+.box-title {
+  font-size: 20px; color: #fff; font-weight: 700; margin-bottom: 8px;
+}
+.box-sub { font-size: 14px; color: #ff6633; margin-bottom: 24px; }
+
+.chart-area {
+  flex: 1; position: relative;
+  border-left: 2px solid #0066ff44;
+  border-bottom: 2px solid #0066ff44;
+  margin: 0 10px 20px 30px;
+}
+/* Y轴标签 */
+.y-labels {
+  position: absolute; left: -30px; top: 0; bottom: 0;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.y-label { font-size: 12px; color: #ffffff44; text-align: right; }
+/* X轴标签 */
+.x-labels {
+  display: flex; justify-content: space-between;
+  padding: 8px 0 0 30px;
+}
+.x-label { font-size: 12px; color: #ffffff44; }
+
+/* 右：碎裂烧杯 */
+.flask-box {
+  flex: 1;
+  background: rgba(5,15,40,0.85);
+  border: 1px solid #0066ff33;
+  border-radius: 16px;
+  padding: 30px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.flask-svg { width: 280px; height: 320px; margin: 20px 0; }
+
+.comparison-list { width: 100%; margin-top: 10px; }
+.cmp-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid #ffffff11;
+}
+.cmp-label { font-size: 14px; color: #ffffff88; }
+.cmp-bad { font-size: 14px; color: #ff4444; font-weight: 700; }
+.cmp-good { font-size: 14px; color: #00cc88; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="grid"></div>
+
+<div class="title-area">
+  <div class="title">行业痛点</div>
+</div>
+
+<div class="cols">
+  <!-- 左：折线图 -->
+  <div class="chart-box">
+    <div class="box-title">结果不稳定</div>
+    <div class="box-sub">● 同一目标多次测试，结果差异极大</div>
+
+    <div class="chart-area" id="chart">
+      <div class="y-labels">
+        <div class="y-label">300</div>
+        <div class="y-label">200</div>
+        <div class="y-label">100</div>
+        <div class="y-label">0</div>
+      </div>
+      <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 400 280" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- 网格横线 -->
+        <line x1="0" y1="93" x2="400" y2="93" stroke="#ffffff08" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="0" y1="186" x2="400" y2="186" stroke="#ffffff08" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- 人工测试结果（波动剧烈，蓝色） -->
+        <polyline points="0,200 50,100 100,240 150,80 200,210 250,120 300,200 350,90 400,180"
+          stroke="#00aaff" stroke-width="2.5" fill="none" stroke-linejoin="round"/>
+        <!-- 面积填充 -->
+        <polygon points="0,280 0,200 50,100 100,240 150,80 200,210 250,120 300,200 350,90 400,180 400,280"
+          fill="rgba(0,170,255,0.08)"/>
+        <!-- AI结果（稳定，绿色） -->
+        <polyline points="0,150 100,145 200,148 300,143 400,146"
+          stroke="#00cc88" stroke-width="2" fill="none" stroke-dasharray="6,3"/>
+        <!-- 图例 -->
+        <rect x="10" y="10" width="16" height="3" fill="#00aaff" rx="1"/>
+        <text x="32" y="14" font-size="12" fill="#00aaffaa" font-family="Arial">人工测试</text>
+        <rect x="10" y="26" width="16" height="3" fill="#00cc88" rx="1"/>
+        <text x="32" y="30" font-size="12" fill="#00cc88aa" font-family="Arial">AI自动化（稳定）</text>
+        <!-- 波动幅度标注 -->
+        <line x1="50" y1="100" x2="50" y2="240" stroke="#ff444488" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="54" y="175" font-size="11" fill="#ff4444aa" font-family="Arial">波动 ±140%</text>
+      </svg>
+    </div>
+    <div class="x-labels">
+      <span class="x-label">第1次</span>
+      <span class="x-label">第2次</span>
+      <span class="x-label">第3次</span>
+      <span class="x-label">第4次</span>
+      <span class="x-label">第5次</span>
+    </div>
+  </div>
+
+  <!-- 右：碎裂烧杯 -->
+  <div class="flask-box">
+    <div class="box-title">难以复现</div>
+    <div class="box-sub">● 测试过程依赖个人经验，无法标准化</div>
+
+    <svg class="flask-svg" viewBox="0 0 280 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="fl" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#4488ff"/>
+          <stop offset="100%" stop-color="#0033aa"/>
+        </linearGradient>
+      </defs>
+      <!-- 烧杯主体（碎裂） -->
+      <!-- 左半部分 -->
+      <path d="M110 30 L110 160 L30 280 L130 280 L140 160 L140 30 Z"
+        stroke="#4488ff" stroke-width="2" fill="rgba(30,60,150,0.25)"/>
+      <!-- 右半部分（错位） -->
+      <path d="M150 26 L148 155 L260 285 L175 285 L145 155 L147 26 Z"
+        stroke="#4488ff" stroke-width="2" fill="rgba(30,60,150,0.2)" transform="translate(8, -5) rotate(4, 148, 155)"/>
+      <!-- 碎片 -->
+      <polygon points="135,120 155,110 160,135 138,140" stroke="#6699ff" stroke-width="1.5" fill="rgba(50,100,200,0.3)" transform="translate(20,-10)"/>
+      <polygon points="120,200 142,190 145,215 118,218" stroke="#6699ff" stroke-width="1.5" fill="rgba(50,100,200,0.2)" transform="translate(-15,15) rotate(-8,130,205)"/>
+      <polygon points="150,160 170,155 172,175 148,178" stroke="#6699ff" stroke-width="1.5" fill="rgba(50,100,200,0.25)" transform="translate(15,5)"/>
+      <!-- 液体流出 -->
+      <path d="M130 240 Q110 260 95 290" stroke="#3366ff88" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M150 250 Q170 270 185 300" stroke="#3366ff88" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <!-- 顶部瓶口 -->
+      <rect x="105" y="20" width="45" height="14" rx="3" stroke="#5599ff" stroke-width="1.5" fill="rgba(40,80,200,0.3)"/>
+      <!-- 裂缝光效 -->
+      <line x1="138" y1="30" x2="142" y2="280" stroke="#ffffff22" stroke-width="1" stroke-dasharray="3,8"/>
+    </svg>
+
+    <div class="comparison-list">
+      <div class="cmp-row">
+        <span class="cmp-label">测试过程记录</span>
+        <span class="cmp-bad">手工笔记，难共享</span>
+      </div>
+      <div class="cmp-row">
+        <span class="cmp-label">漏洞复现能力</span>
+        <span class="cmp-bad">强依赖操作者</span>
+      </div>
+      <div class="cmp-row">
+        <span class="cmp-label">自动化程度</span>
+        <span class="cmp-bad">几乎全手工</span>
+      </div>
+      <div class="cmp-row">
+        <span class="cmp-label">知识沉淀</span>
+        <span class="cmp-bad">个人经验孤岛</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

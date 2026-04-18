@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="400" height="400" viewBox="0 0 400 400">
+  <defs>
+    <radialGradient id="radialGradient0" cx="200.000000" cy="200.000000" r="282.842712" gradientTransform="translate(200.000000 200.000000) scale(1.000000 1.000000) translate(-200.000000 -200.000000)" gradientUnits="userSpaceOnUse">
+      <stop offset="0.000000" stop-color="rgb(0,150,200)" stop-opacity="0.050980"/>
+      <stop offset="0.700000" stop-color="rgb(0,150,200)" stop-opacity="0.000000"/>
+    </radialGradient>
+  </defs>
+  <defs>
+    <radialGradient id="radialGradient1" cx="200.000000" cy="200.000000" r="282.842712" gradientTransform="translate(200.000000 200.000000) scale(1.000000 1.000000) translate(-200.000000 -200.000000)" gradientUnits="userSpaceOnUse">
+      <stop offset="0.000000" stop-color="rgb(0,0,0)" stop-opacity="0.000000"/>
+      <stop offset="0.700000" stop-color="rgb(0,0,0)" stop-opacity="0.000000"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="400" height="400" fill="url(#radialGradient0)"/>
+  <rect x="0" y="0" width="400" height="400" fill="url(#radialGradient1)"/>
+</svg>

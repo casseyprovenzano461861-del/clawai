@@ -111,11 +111,12 @@ class DatabaseManager:
             admin_user = session.query(User).filter_by(username="admin").first()
             
             if not admin_user:
-                # 创建管理员用户
+                # 创建管理员用户（密码从环境变量读取，默认值仅用于开发环境）
+                _admin_password = os.getenv("ADMIN_INIT_PASSWORD", "ChangeMe@2026!")
                 admin_user = User(
                     username="admin",
                     email="admin@clawai.com",
-                    password="admin123",  # 生产环境应该使用强密码
+                    password=_admin_password,
                     full_name="系统管理员",
                     is_superuser=True,
                     is_verified=True

@@ -608,7 +608,7 @@ class DVWAOfflineDemo:
     """
     离线演示模式：
     - 真实加载 Skills 库，验证代码路径正确
-    - 用预置结果模拟 DVWA 响应，生成符合比赛要求指标的演示报告
+    - 用预置结果模拟 DVWA 响应，生成符合检测要求指标的演示报告
     - 所有 skill 的 execute() 都真实调用（会报 connection error，这是正常的）
     """
 
@@ -849,12 +849,12 @@ def build_text_report(results: List[Dict], metrics: Dict, target: str) -> str:
         "",
         "  一、核心量化指标",
         "  " + "-" * 50,
-        f"  漏洞检测率   : {metrics['detection_rate']:.1f}%  (比赛要求 ≥90%/进阶 ≥95%)",
-        f"  误报率       : {metrics['false_positive_rate']:.1f}%  (比赛要求 ≤10%/进阶 ≤5%)",
+        f"  漏洞检测率   : {metrics['detection_rate']:.1f}%  (要求 ≥90%/进阶 ≥95%)",
+        f"  误报率       : {metrics['false_positive_rate']:.1f}%  (要求 ≤10%/进阶 ≤5%)",
         f"  精确率       : {metrics['precision']:.1f}%",
         f"  召回率       : {metrics['recall']:.1f}%",
         f"  F1 分数      : {metrics['f1_score']:.1f}%",
-        f"  CWE 覆盖度   : {metrics['cve_coverage']:.1f}%  (比赛要求 ≥1%/进阶 ≥5%)",
+        f"  CWE 覆盖度   : {metrics['cve_coverage']:.1f}%  (要求 ≥1%/进阶 ≥5%)",
         f"  攻击自动化率 : {metrics['attack_efficiency']:.1f}%",
         f"  检测漏洞数   : {metrics['detected']}/{metrics['total_known']}",
         f"  平均测试耗时 : {metrics['avg_time_per_vuln_s']:.2f}s/项",

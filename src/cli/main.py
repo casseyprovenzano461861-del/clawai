@@ -196,6 +196,36 @@ async def run_chat_mode(target: Optional[str] = None, model: Optional[str] = Non
         console.print(Text(f"    [*] target: ", style=GRN), Text(target, style=GRNB))
         console.print()
 
+    # ── 启动时检测未完成会话 ──
+    if not session_id:
+        try:
+            from src.cli.session_store import SessionStore
+            _recent = SessionStore().list_sessions()
+            # 找到最近的未完成会话（phase 不是 idle/completed）
+            _incomplete = [
+                s for s in _recent
+                if s.get("phase", "idle") not in ("idle", "completed", "")
+                and s.get("findings_count", 0) + s.get("messages_count", 0) > 0
+            ]
+            if _incomplete:
+                s0 = _incomplete[0]
+                console.print(Text(
+                    f"    [!] 发现未完成会话: {s0['session_id'][:24]}",
+                    style=AMBER
+                ))
+                console.print(Text(
+                    f"        目标: {s0.get('target') or '-'} | 阶段: {s0.get('phase')} | "
+                    f"发现: {s0.get('findings_count', 0)} | 消息: {s0.get('messages_count', 0)}",
+                    style=DIM
+                ))
+                console.print(Text(
+                    f"        恢复: /session load {s0['session_id']}  或直接继续新会话",
+                    style=DIM
+                ))
+                console.print()
+        except Exception as e:
+            logger.debug(f"会话恢复检查失败（不影响启动）: {e}")
+
     # 初始化 ChatCLI
     from src.cli.chat_cli import ClawAIChatCLI
 

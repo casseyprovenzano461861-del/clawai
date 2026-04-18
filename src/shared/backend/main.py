@@ -311,6 +311,14 @@ if _allowed_origins_raw.strip() == "*":
         _cors_origins = ["*"]
 else:
     _cors_origins = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()]
+    # 开发环境自动补充 127.0.0.1 等价地址，避免浏览器用 127.0.0.1 访问时 CORS 失败
+    if os.getenv("ENVIRONMENT", "development") != "production":
+        _extra = []
+        for origin in list(_cors_origins):
+            alt = origin.replace("localhost", "127.0.0.1") if "localhost" in origin else origin.replace("127.0.0.1", "localhost")
+            if alt not in _cors_origins:
+                _extra.append(alt)
+        _cors_origins.extend(_extra)
 
 app.add_middleware(
     CORSMiddleware,
@@ -335,6 +343,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 设置审计中间件
 setup_audit_middleware(app)
+
+# WebSocket 路由优先注册（必须在所有 HTTP 路由之前，避免中间件处理顺序问题）
+try:
+    from .api.websocket import router as _ws_router_early
+    app.include_router(_ws_router_early)
+    logger.info("WebSocket路由已优先加载（/ws/per-events, /ws/monitoring）")
+except ImportError as _ws_err:
+    logger.warning(f"WebSocket路由预加载失败: {_ws_err}")
 
 # 注册API路由（统一在底部注册，避免重复）
 
@@ -848,7 +864,7 @@ except ImportError as e:
 
 # 导入工具API路由
 try:
-    from src.shared.backend.api.v1.tools import router as tools_router
+    from backend.api.v1.tools import router as tools_router
     app.include_router(tools_router, prefix="/api/v1/tools", tags=["工具管理"])
     logger.info("工具API路由已加载")
 except ImportError as e:
@@ -856,7 +872,7 @@ except ImportError as e:
 
 # 导入渗透测试API路由
 try:
-    from src.shared.backend.api.v1.pentest import router as pentest_router
+    from backend.api.v1.pentest import router as pentest_router
     app.include_router(pentest_router, prefix="/api/v1/pentest", tags=["渗透测试"])
     logger.info("渗透测试API路由已加载")
 except ImportError as e:
@@ -864,11 +880,27 @@ except ImportError as e:
 
 # 导入实时扫描API路由
 try:
-    from src.shared.backend.api.v1.scan import router as scan_router
+    from backend.api.v1.scan import router as scan_router
     app.include_router(scan_router, prefix="/api/v1/scan", tags=["实时扫描"])
     logger.info("实时扫描API路由已加载")
 except ImportError as e:
     logger.warning(f"实时扫描API路由导入失败: {e}")
+
+# 导入靶机发现API路由
+try:
+    from backend.api.v1.discover import router as discover_router
+    app.include_router(discover_router, prefix="/api/v1/discover", tags=["靶机发现"])
+    logger.info("靶机发现API路由已加载")
+except ImportError as e:
+    logger.warning(f"靶机发现API路由导入失败: {e}")
+
+# 导入聊天API路由
+try:
+    from backend.api.v1.chat import router as chat_router
+    app.include_router(chat_router, tags=["AI对话"])
+    logger.info("聊天API路由已加载")
+except ImportError as e:
+    logger.warning(f"聊天API路由导入失败: {e}")
 
 # 导入知识图谱API路由
 try:
@@ -935,13 +967,7 @@ except ImportError as e:
     app.include_router(knowledge_graph_router)
     logger.info("知识图谱API路由已加载（回退到模拟数据）")
 
-# 注册 WebSocket 路由（P-E-R 事件 + 监控）
-try:
-    from .api.websocket import router as websocket_router
-    app.include_router(websocket_router)
-    logger.info("WebSocket路由已加载（/ws/per-events, /ws/monitoring）")
-except ImportError as e:
-    logger.warning(f"WebSocket路由导入失败: {e}")
+# WebSocket 路由已在文件顶部（审计中间件之后）优先注册，此处跳过重复注册
 
 
 def _validate_config():

@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 扩展 Skills 库
-
-整合自优秀项目:
-- CyberStrikeAI: 知识型 Skills (XXE, SSRF, 文件上传等)
-- PentestGPT: 实战 Exploit (Flag检测, OpenSSH枚举)
-- NeuroSploit: PoC生成器, WAF绕过, Payload变异
+多类型漏洞利用技能实现
 """
 
 import re
@@ -18,7 +14,7 @@ from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# ==================== Flag 检测模式 (来自 PentestGPT) ====================
+# ==================== Flag 检测模式 ====================
 
 FLAG_PATTERNS = [
     r"flag\{[^\}]+\}",           # flag{...}
@@ -30,7 +26,7 @@ FLAG_PATTERNS = [
 ]
 
 
-# ==================== WAF 检测签名 (来自 NeuroSploit) ====================
+# ==================== WAF 检测签名 ====================
 
 WAF_SIGNATURES = {
     "cloudflare": {
@@ -76,7 +72,7 @@ WAF_SIGNATURES = {
 }
 
 
-# ==================== Payload 变异器 (来自 NeuroSploit) ====================
+# ==================== Payload 变异器 ====================
 
 class PayloadMutator:
     """Payload 变异器 - 生成绕过变体"""
@@ -170,7 +166,7 @@ def get_extended_skills() -> List[Dict[str, Any]]:
     
     skills = []
     
-    # ==================== XXE 测试 (来自 CyberStrikeAI) ====================
+    # ==================== XXE 测试 ====================
     skills.append(Skill(
         id="xxe_testing",
         name="XXE外部实体注入测试",
@@ -223,7 +219,7 @@ except Exception as e:
 '''
     ))
     
-    # ==================== SSRF 测试 (来自 CyberStrikeAI) ====================
+    # ==================== SSRF 测试 ====================
     skills.append(Skill(
         id="ssrf_testing",
         name="SSRF服务器端请求伪造测试",
@@ -300,7 +296,7 @@ else:
 '''
     ))
     
-    # ==================== 文件上传测试 (来自 CyberStrikeAI) ====================
+    # ==================== 文件上传测试 ====================
     skills.append(Skill(
         id="file_upload_testing",
         name="文件上传漏洞测试",
@@ -370,7 +366,7 @@ else:
 '''
     ))
     
-    # ==================== SSTI 模板注入测试 (来自 NeuroSploit) ====================
+    # ==================== SSTI 模板注入测试 ====================
     skills.append(Skill(
         id="ssti_testing",
         name="SSTI服务端模板注入测试",
@@ -441,7 +437,7 @@ else:
 '''
     ))
     
-    # ==================== IDOR 测试 (来自 CyberStrikeAI) ====================
+    # ==================== IDOR 测试 ====================
     skills.append(Skill(
         id="idor_testing",
         name="IDOR不安全直接对象引用测试",
@@ -508,7 +504,7 @@ elif accessible_count == 0:
 '''
     ))
     
-    # ==================== CSRF 测试 (来自 CyberStrikeAI) ====================
+    # ==================== CSRF 测试 ====================
     skills.append(Skill(
         id="csrf_testing",
         name="CSRF跨站请求伪造测试",
@@ -587,7 +583,7 @@ except Exception as e:
 '''
     ))
     
-    # ==================== 反序列化测试 (来自 CyberStrikeAI) ====================
+    # ==================== 反序列化测试 ====================
     skills.append(Skill(
         id="deserialization_testing",
         name="反序列化漏洞测试",
@@ -665,7 +661,7 @@ else:
 '''
     ))
     
-    # ==================== Flag 检测 (来自 PentestGPT) ====================
+    # ==================== Flag 检测 ====================
     skills.append(Skill(
         id="flag_detector",
         name="CTF Flag自动检测",
@@ -710,7 +706,7 @@ else:
 '''
     ))
     
-    # ==================== WAF 检测 (来自 NeuroSploit) ====================
+    # ==================== WAF 检测 ====================
     skills.append(Skill(
         id="waf_detect",
         name="WAF防火墙检测",
@@ -798,7 +794,7 @@ else:
 '''
     ))
     
-    # ==================== 权限提升检测 - Linux (来自 NeuroSploit) ====================
+    # ==================== 权限提升检测 - Linux ====================
     skills.append(Skill(
         id="privesc_linux",
         name="Linux权限提升检测",
@@ -850,7 +846,7 @@ cat /proc/1/cgroup 2>/dev/null | head -5
 '''
     ))
     
-    # ==================== 权限提升检测 - Windows (来自 NeuroSploit) ====================
+    # ==================== 权限提升检测 - Windows ====================
     skills.append(Skill(
         id="privesc_windows",
         name="Windows权限提升检测",
@@ -903,7 +899,7 @@ dir /s /b C:\\Users\\*.kdbx 2>/dev/null
 '''
     ))
     
-    # ==================== OpenSSH 用户枚举 (来自 PentestGPT) ====================
+    # ==================== OpenSSH 用户枚举 ====================
     skills.append(Skill(
         id="openssh_user_enum",
         name="OpenSSH用户名枚举 (CVE-2018-15473)",
@@ -964,7 +960,7 @@ except Exception as e:
 '''
     ))
     
-    # ==================== NoSQL 注入测试 (来自 NeuroSploit) ====================
+    # ==================== NoSQL 注入测试 ====================
     skills.append(Skill(
         id="nosql_injection",
         name="NoSQL注入测试",

@@ -5,17 +5,19 @@
  *   <GlowCard>内容</GlowCard>
  *   <GlowCard active>激活发光状态</GlowCard>
  *   <GlowCard color="purple" padding="lg">自定义颜色</GlowCard>
+ *   <GlowCard variant="glass">毛玻璃模式</GlowCard>
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 
 const COLOR_MAP = {
-  cyan:   'rgba(0,212,255',
-  blue:   'rgba(59,130,246',
-  purple: 'rgba(139,92,246',
-  pink:   'rgba(236,72,153',
-  green:  'rgba(16,185,129',
-  red:    'rgba(239,68,68',
+  cyan:   { rgb: '0,212,255'  },
+  blue:   { rgb: '59,130,246' },
+  purple: { rgb: '139,92,246' },
+  pink:   { rgb: '236,72,153' },
+  green:  { rgb: '16,185,129' },
+  red:    { rgb: '239,68,68'  },
+  yellow: { rgb: '245,158,11' },
 };
 
 const PADDING_MAP = {
@@ -23,6 +25,7 @@ const PADDING_MAP = {
   sm:   'p-3',
   md:   'p-4',
   lg:   'p-6',
+  xl:   'p-8',
 };
 
 const GlowCard = ({
@@ -31,42 +34,44 @@ const GlowCard = ({
   active = false,
   color = 'cyan',
   padding = 'md',
+  variant = 'default',  // 'default' | 'glass' | 'solid'
   onClick,
   as: Tag = 'div',
+  animate = '',         // 动画类名，如 'animate-slide-up'
 }) => {
-  const rgb = COLOR_MAP[color] || COLOR_MAP.cyan;
-  const borderOpacity  = active ? '0.55' : '0.18';
-  const shadowOpacity  = active ? '0.25' : '0.00';
-  const hoverStyle = {
-    '--glow-rgb': rgb,
-  };
+  const [hovered, setHovered] = useState(false);
+  const c = COLOR_MAP[color] || COLOR_MAP.cyan;
+
+  const isActive = active || hovered;
+  const borderOpacity = isActive ? '0.5' : '0.15';
+  const shadowStr = isActive
+    ? `0 0 24px rgba(${c.rgb},0.2), 0 8px 32px rgba(${c.rgb},0.12), inset 0 0 12px rgba(${c.rgb},0.04)`
+    : '0 2px 8px rgba(0,0,0,0.3)';
+
+  const bgClass = variant === 'glass'
+    ? 'bg-[#060910]/60 backdrop-blur-xl'
+    : variant === 'solid'
+    ? 'bg-[#0d1220]'
+    : 'bg-[#0a0e17]/85 backdrop-blur-sm';
 
   return (
     <Tag
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className={[
-        'relative rounded-xl transition-all duration-300',
-        'bg-[#0a0e17]/85 backdrop-blur-sm',
+        'relative rounded-xl',
+        bgClass,
         PADDING_MAP[padding] || PADDING_MAP.md,
         onClick ? 'cursor-pointer' : '',
+        animate,
         className,
       ].join(' ')}
       style={{
-        border: `1px solid ${rgb},${borderOpacity})`,
-        boxShadow: active
-          ? `0 0 28px ${rgb},${shadowOpacity}), inset 0 0 12px ${rgb},0.04)`
-          : 'none',
-        ...hoverStyle,
-      }}
-      onMouseEnter={e => {
-        if (active) return;
-        e.currentTarget.style.border = `1px solid ${rgb},0.45)`;
-        e.currentTarget.style.boxShadow = `0 0 18px ${rgb},0.10)`;
-      }}
-      onMouseLeave={e => {
-        if (active) return;
-        e.currentTarget.style.border = `1px solid ${rgb},0.18)`;
-        e.currentTarget.style.boxShadow = 'none';
+        border: `1px solid rgba(${c.rgb},${borderOpacity})`,
+        boxShadow: shadowStr,
+        transition: 'border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease',
+        transform: hovered && onClick ? 'translateY(-2px)' : 'translateY(0)',
       }}
     >
       {children}

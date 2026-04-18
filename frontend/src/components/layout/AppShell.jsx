@@ -1,17 +1,16 @@
 /**
- * AppShell — 整体布局容器
- * 提供固定 Navbar + 内容区滚动区域
+ * AppShell — 整体布局容器（侧边栏版本）
+ * 左侧固定 Sidebar + 右侧内容区自适应滚动
  */
 
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import Navbar from './Navbar';
+import Sidebar from './Sidebar';
 
 const AppShell = () => (
-  <div className="min-h-screen" style={{ background: '#060910' }}>
-    <Navbar />
-    {/* 内容区：顶部留出 Navbar 高度 (56px = h-14) */}
-    <main className="pt-14 min-h-[calc(100vh-3.5rem)]">
+  <div className="flex h-screen overflow-hidden" style={{ background: '#060910' }}>
+    <Sidebar />
+    <main className="flex-1 overflow-y-auto overflow-x-hidden">
       <Outlet />
     </main>
   </div>

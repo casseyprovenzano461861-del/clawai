@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 增强漏洞检测模块
-
-整合自优秀项目的漏洞检测精华:
-- PentestGPT: Flag检测、漏洞验证链
-- LuaN1aoAgent: 漏洞搜索、Exploit集成
-- strix: 漏洞报告、CVSS评分
-- CyberStrikeAI: 多类型漏洞检测
-
+多类型漏洞检测、WAF识别、Payload变异
 目标: 将检测率从80%提升到90%+
 """
 
@@ -88,7 +82,7 @@ class DetectedVulnerability:
 
 
 class VulnerabilityPatterns:
-    """漏洞检测模式库 - 整合自多个优秀项目"""
+    """漏洞检测模式库"""
     
     # ==================== SQL 注入检测模式 ====================
     SQL_ERROR_PATTERNS = {
@@ -422,7 +416,7 @@ class VulnerabilityPatterns:
 
 
 class WAFDetector:
-    """WAF检测器 - 整合自NeuroSploit"""
+    """WAF检测器"""
     
     WAF_FINGERPRINTS = {
         "cloudflare": {
@@ -509,7 +503,7 @@ class WAFDetector:
 
 
 class PayloadMutator:
-    """Payload变异器 - 整合自NeuroSploit"""
+    """Payload变异器"""
     
     @staticmethod
     def case_variation(payload: str) -> str:

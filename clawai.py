@@ -306,6 +306,31 @@ def cmd_tui(args):
         cmd_chat(args)
 
 
+def _is_host_reachable(host: str, port: int = 80, timeout: float = 2.0) -> bool:
+    """快速检测目标主机是否可达（TCP 探测）"""
+    import socket
+    try:
+        s = socket.socket()
+        s.settimeout(timeout)
+        s.connect((host, port))
+        s.close()
+        return True
+    except Exception:
+        pass
+    # 尝试 ping
+    import subprocess, os
+    try:
+        if os.name == "nt":
+            r = subprocess.run(["ping", "-n", "1", "-w", "1000", host],
+                               capture_output=True, timeout=3)
+        else:
+            r = subprocess.run(["ping", "-c", "1", "-W", "1", host],
+                               capture_output=True, timeout=3)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def cmd_scan(args):
     """快速安全扫描"""
     print_banner()
@@ -315,18 +340,87 @@ def cmd_scan(args):
         print_info("用法: clawai scan <目标>")
         return
 
-    print_info(f"开始扫描目标: {args.target}")
+    target = args.target
+
+    # ── 自动 VM 配网（目标是 IP 且不可达时）──────────────────────
+    vmx_path = getattr(args, "vmx", None)
+    if vmx_path or not _is_host_reachable(target):
+        _vmx = vmx_path or getattr(args, "vm", None)
+        if _vmx:
+            print_info(f"目标不可达，尝试通过 vmrun 自动配网: {_vmx}")
+            try:
+                from src.cli.vm_manager import get_vm_manager
+                mgr = get_vm_manager()
+                if mgr.vmrun:
+                    new_ip = mgr.ensure_running(_vmx)
+                    if new_ip:
+                        print_info(f"靶机已就绪，IP: {new_ip}")
+                        target = new_ip
+                    else:
+                        print_error("VM 自动配网失败，继续尝试原始目标")
+            except Exception as e:
+                print_error(f"VM 管理器错误: {e}")
+
+    print_info(f"开始扫描目标: {target}")
 
     from src.cli.chat_cli import ClawAIChatCLI
     chat_cli = ClawAIChatCLI()
-    chat_cli.set_target(args.target)
+    chat_cli.set_target(target)
+
+    # 将 --profile 映射到关键词，让 _detect_scan_profile 直接识别跳过交互
+    _profile_kw = {"quick": "快速", "standard": "标准", "deep": "深度"}
+    profile_hint = _profile_kw.get(getattr(args, "profile", "standard"), "标准")
 
     # 异步执行扫描
     async def _scan():
-        response = await chat_cli.chat(f"扫描 {args.target}")
+        response = await chat_cli.chat(f"{profile_hint}扫描 {target}")
         print(f"\n{response}")
 
     asyncio.run(_scan())
+
+
+def cmd_vm(args):
+    """VMware 靶机管理"""
+    print_banner()
+
+    from src.cli.commands.vm import VMCommand
+    from rich.console import Console
+
+    console = Console()
+    cmd = VMCommand()
+    action = getattr(args, "vm_action", None) or "list"
+    vmx = getattr(args, "vmx", None)
+    ip_arg = getattr(args, "ip", None)  # register 子命令的 ip 参数
+    extra = []
+    if vmx:
+        extra.append(vmx)
+    if ip_arg:
+        extra.append(ip_arg)
+    cmd.execute(action, extra, console)
+
+
+def cmd_discover(args):
+    """主动靶机发现"""
+    print_banner()
+
+    from src.cli.commands.discover import DiscoverCommand
+    from rich.console import Console
+
+    console = Console()
+    cmd = DiscoverCommand()
+
+    cli_args = []
+    if getattr(args, "network", None):
+        cli_args += ["--network", args.network]
+    if getattr(args, "quick", False):
+        cli_args.append("--quick")
+    if getattr(args, "auto_scan", False):
+        cli_args.append("--auto-scan")
+
+    ctx = {"console": console}
+    result = cmd.execute(cli_args, ctx)
+    if result:
+        print(f"\n{result}")
 
 
 # ---------------------------------------------------------------------------
@@ -402,25 +496,72 @@ def cmd_session(args):
     print_banner()
 
     from src.cli.chat_cli import ClawAIChatCLI
+    from src.cli.session_store import SessionStore
 
     if args.action == "list":
         print_info("已保存的会话:")
         sessions = ClawAIChatCLI.list_saved_sessions()
+        if not sessions:
+            print_warning("暂无保存的会话")
+            return
         for s in sessions:
-            print_command(f"  {s['session_id'][:20]}", f"{s.get('target', '-')} | {s.get('updated_at', '')[:19]}")
+            phase = s.get("phase", "")
+            target = s.get("target") or "-"
+            updated = s.get("updated_at", "")[:19]
+            findings = s.get("findings_count", 0)
+            incomplete = " [未完成]" if phase not in ("idle", "completed", "") else ""
+            print_command(
+                f"  {s['session_id'][:28]}",
+                f"{target} | {phase}{incomplete} | 发现:{findings} | {updated}"
+            )
+
     elif args.action == "load" and args.session_id:
         print_info(f"加载会话: {args.session_id}")
-        # TODO: 实现会话加载
-        print_warning("会话加载功能开发中")
+        from src.cli.main import run_chat_mode
+        asyncio.run(run_chat_mode(target=None, session_id=args.session_id))
+
     elif args.action == "export" and args.session_id:
         print_info(f"导出会话: {args.session_id}")
-        # TODO: 实现会话导出
-        print_warning("会话导出功能开发中")
+        data = SessionStore().load(args.session_id)
+        if data is None:
+            print_error(f"未找到会话: {args.session_id}")
+            return
+        from src.cli.exporter import export_session
+        try:
+            path = export_session(data, fmt="html")
+            print_success(f"报告已导出: {path}")
+        except Exception as e:
+            print_error(f"导出失败: {e}")
+
+    elif args.action == "compare":
+        # compare 需要两个 session_id，从 session_id 字段（第一个）和额外参数解析
+        # clawai session compare <id1> <id2>
+        ids = (args.session_id or "").split()
+        if len(ids) < 2:
+            print_error("用法: clawai session compare <id1> <id2>")
+            return
+        id1, id2 = ids[0], ids[1]
+        data1 = SessionStore().load(id1)
+        data2 = SessionStore().load(id2)
+        if data1 is None:
+            print_error(f"未找到会话: {id1}")
+            return
+        if data2 is None:
+            print_error(f"未找到会话: {id2}")
+            return
+        from src.cli.exporter import compare_sessions
+        try:
+            path = compare_sessions(data1, data2)
+            print_success(f"对比报告已生成: {path}")
+        except Exception as e:
+            print_error(f"对比失败: {e}")
+
     else:
         print_info("会话管理子命令:")
         print_command("  clawai session list", "列出所有会话")
-        print_command("  clawai session load <id>", "加载指定会话")
-        print_command("  clawai session export <id>", "导出指定会话")
+        print_command("  clawai session load <id>", "加载并继续会话")
+        print_command("  clawai session export <id>", "导出会话为 HTML 报告")
+        print_command("  clawai session compare <id1> <id2>", "对比两次扫描结果")
 
 
 def cmd_check(args):
@@ -593,6 +734,30 @@ def main():
     scan_parser = subparsers.add_parser("scan", help="快速安全扫描")
     scan_parser.add_argument("target", help="扫描目标")
     scan_parser.add_argument("--profile", choices=["quick", "standard", "deep"], default="standard", help="扫描配置")
+    scan_parser.add_argument("--vmx", help="靶机 VMX 路径，目标不可达时自动启动并配网", default=None)
+
+    # vm 命令
+    vm_parser = subparsers.add_parser("vm", help="VMware 靶机管理")
+    vm_subparsers = vm_parser.add_subparsers(dest="vm_action", help="VM 操作")
+    vm_list_p   = vm_subparsers.add_parser("list",   help="列出运行中的 VM")
+    vm_start_p  = vm_subparsers.add_parser("start",  help="启动 VM")
+    vm_start_p.add_argument("vmx", help="VMX 文件路径")
+    vm_stop_p   = vm_subparsers.add_parser("stop",   help="停止 VM")
+    vm_stop_p.add_argument("vmx", help="VMX 文件路径")
+    vm_ip_p     = vm_subparsers.add_parser("ip",     help="获取 VM IP")
+    vm_ip_p.add_argument("vmx", help="VMX 文件路径")
+    vm_ensure_p = vm_subparsers.add_parser("ensure", help="启动 VM 并自动配网，返回可用 IP")
+    vm_ensure_p.add_argument("vmx", help="VMX 文件路径")
+    vm_register_p = vm_subparsers.add_parser("register", help="手动注册靶机 IP（自动配网失败时使用）")
+    vm_register_p.add_argument("vmx", help="VMX 文件路径")
+    vm_register_p.add_argument("ip", help="靶机 IP 地址")
+
+    # discover 命令
+    discover_parser = subparsers.add_parser("discover", help="主动靶机发现（自动扫局域网）")
+    discover_parser.add_argument("-n", "--network", help="指定网段 CIDR，如 192.168.1.0/24（不填则自动检测）")
+    discover_parser.add_argument("--quick", action="store_true", help="快速模式（仅主机发现，不扫端口）")
+    discover_parser.add_argument("--auto-scan", dest="auto_scan", action="store_true",
+                                  help="发现后自动对 Top1 目标开始扫描")
 
     # tools 命令
     tools_parser = subparsers.add_parser("tools", help="管理安全工具")
@@ -600,8 +765,8 @@ def main():
 
     # session 命令
     session_parser = subparsers.add_parser("session", help="会话管理")
-    session_parser.add_argument("action", choices=["list", "load", "export"], help="操作类型")
-    session_parser.add_argument("session_id", nargs="?", help="会话 ID")
+    session_parser.add_argument("action", choices=["list", "load", "export", "compare"], help="操作类型")
+    session_parser.add_argument("session_id", nargs="?", help="会话 ID（compare 时填 'id1 id2'）")
 
     # check 命令
     check_parser = subparsers.add_parser("check", help="检查依赖和环境")
@@ -637,6 +802,8 @@ def main():
         "chat": cmd_chat,
         "tui": cmd_tui,
         "scan": cmd_scan,
+        "discover": cmd_discover,
+        "vm": cmd_vm,
         "status": cmd_status,
         "tools": cmd_tools,
         "session": cmd_session,

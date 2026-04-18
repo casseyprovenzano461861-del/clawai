@@ -134,7 +134,7 @@ class NiktoTool(BaseTool):
             clean_target = f"http://{target}"
         
         # 提取选项参数
-        timeout = options.get("timeout", 600)  # 10分钟超时
+        timeout = options.get("timeout", 90)  # 90秒超时（nikto内部-timeout 30）
         tuning = options.get("tuning", "x")  # 排除某些检查以避免误报
         port = options.get("port", None)
         

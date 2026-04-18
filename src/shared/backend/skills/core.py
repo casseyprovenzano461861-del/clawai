@@ -8,14 +8,18 @@ Skills 是可被 AI 自动调用的渗透测试技能单元
 
 import json
 import os
+import sys
 import re
 import shlex
 import subprocess
 import logging
-from typing import Dict, List, Any, Optional, Callable
+from typing import TYPE_CHECKING, Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from .context import SkillContext
 
 logger = logging.getLogger(__name__)
 
@@ -133,13 +137,14 @@ class SkillExecutor:
             "skills"
         )
     
-    def execute(self, skill: Skill, params: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, skill: Skill, params: Dict[str, Any], context: Optional["SkillContext"] = None) -> Dict[str, Any]:
         """
         执行技能
         
         Args:
             skill: 技能定义
             params: 执行参数
+            context: 可选的 SkillContext 依赖注入（session 状态、findings、abort 控制等）
             
         Returns:
             执行结果
@@ -155,18 +160,23 @@ class SkillExecutor:
         }
         
         try:
+            # 检查 abort 信号
+            if context is not None and context.is_aborted():
+                result["error"] = "已收到中止信号，跳过执行"
+                return result
+
             # 验证参数
             validated_params = self._validate_params(skill, params)
             
             # 执行
             if skill.executor == "python":
-                output = self._execute_python(skill, validated_params)
+                output = self._execute_python(skill, validated_params, context=context)
             elif skill.executor == "bash":
-                output = self._execute_bash(skill, validated_params)
+                output = self._execute_bash(skill, validated_params, context=context)
             elif skill.executor == "curl":
-                output = self._execute_curl(skill, validated_params)
+                output = self._execute_curl(skill, validated_params, context=context)
             elif skill.executor == "builtin":
-                output = self._execute_builtin(skill, validated_params)
+                output = self._execute_builtin(skill, validated_params, context=context)
             else:
                 raise ValueError(f"未知的执行器: {skill.executor}")
             
@@ -216,7 +226,7 @@ class SkillExecutor:
             )
         return str_val
 
-    def _execute_python(self, skill: Skill, params: Dict[str, Any]) -> str:
+    def _execute_python(self, skill: Skill, params: Dict[str, Any], context: Optional["SkillContext"] = None) -> str:
         """执行 Python 脚本"""
         # 清理参数，防止代码注入
         # cookie/header 参数允许包含 ; (分号是 Cookie 的正常分隔符)
@@ -237,28 +247,61 @@ class SkillExecutor:
         for key, value in safe_params.items():
             code = code.replace(f"{{{{{key}}}}}", str(value))
 
-        # 写入临时文件（显式指定 utf-8 避免 Windows cp936 编码问题）
+        # 注入 SkillContext（序列化为 JSON 字符串，用 json.loads 解析）
+        # 不直接展开为 Python 字面量，避免 JSON true/false/null 与 Python 不兼容
+        # Skill code 中可通过 globals().get("__skill_context__", {}) 读取
+        ctx_prefix = ""
+        if context is not None:
+            ctx_json = json.dumps(
+                json.dumps(context.to_dict(), ensure_ascii=False),
+                ensure_ascii=False,
+            )
+            ctx_prefix = f"import json as _json; __skill_context__ = _json.loads({ctx_json})\n\n"
+
+        full_code = ctx_prefix + code
+
+        # 写入临时文件到系统 temp 目录（远离项目目录，避免触发 uvicorn 热重载）
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
+        _py_drive = os.path.splitdrive(sys.executable)[0]
+        _tmp_base = os.environ.get("TEMP", os.environ.get("TMP", tempfile.gettempdir()))
+        _tmp_drive = os.path.splitdrive(_tmp_base)[0]
+        if _py_drive and _tmp_drive and _py_drive.lower() != _tmp_drive.lower():
+            # 驱动器不同时，在 Python 所在驱动器根目录下建 clawai_tmp
+            _skill_tmp = _py_drive + "\\clawai_tmp"
+        else:
+            _skill_tmp = _tmp_base
+        # 确保目录路径使用正斜杠（Windows 兼容性）
+        _skill_tmp = _skill_tmp.replace('/', '\\')
+        os.makedirs(_skill_tmp, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8', dir=_skill_tmp) as f:
             f.write('# -*- coding: utf-8 -*-\n')
-            f.write(code)
+            # 注入 logging，避免 skill code 中 logger.debug/info 报 NameError
+            f.write('import logging as _logging; logger = _logging.getLogger("skill")\n')
+            f.write(full_code)
             temp_path = f.name
 
         try:
+            # 用户自定义技能（author != "ClawAI"）给更长超时，内置技能保持 30s
+            exec_timeout = 120 if getattr(skill, 'author', 'ClawAI') != 'ClawAI' else 30
+            # Windows: 强制正斜杠路径，避免 subprocess 传参时反斜杠被解析为转义字符
+            safe_temp_path = temp_path.replace('\\', '/')
             result = subprocess.run(
-                ['python', temp_path],
+                [sys.executable, safe_temp_path],
                 shell=False,
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                timeout=30
+                timeout=exec_timeout
             )
             return result.stdout + result.stderr
         finally:
-            os.unlink(temp_path)
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
     
-    def _execute_bash(self, skill: Skill, params: Dict[str, Any]) -> str:
+    def _execute_bash(self, skill: Skill, params: Dict[str, Any], context: Optional["SkillContext"] = None) -> str:
         """执行 Bash 脚本（安全模式：参数转义 + shell=False）"""
         # 清理参数，防止命令注入
         safe_params = {}
@@ -273,16 +316,24 @@ class SkillExecutor:
         # 使用 shlex 分割命令为列表，避免 shell=True
         cmd_list = shlex.split(cmd)
 
+        # 将 context 基本信息注入环境变量，供 Bash script 读取
+        env = os.environ.copy()
+        if context is not None:
+            env["SKILL_SESSION_ID"] = context.session_id
+            env["SKILL_TARGET"] = context.target
+            env["SKILL_PHASE"] = context.phase
+
         result = subprocess.run(
             cmd_list,
             shell=False,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
+            env=env
         )
         return result.stdout + result.stderr
     
-    def _execute_curl(self, skill: Skill, params: Dict[str, Any]) -> str:
+    def _execute_curl(self, skill: Skill, params: Dict[str, Any], context: Optional["SkillContext"] = None) -> str:
         """执行 curl 命令（安全模式：参数转义 + shell=False）"""
         # 清理参数，防止命令注入
         safe_params = {}
@@ -297,16 +348,24 @@ class SkillExecutor:
         # 使用 shlex 分割命令为列表，避免 shell=True
         cmd_list = shlex.split(cmd)
 
+        # 将 context 基本信息注入环境变量
+        env = os.environ.copy()
+        if context is not None:
+            env["SKILL_SESSION_ID"] = context.session_id
+            env["SKILL_TARGET"] = context.target
+            env["SKILL_PHASE"] = context.phase
+
         result = subprocess.run(
             cmd_list,
             shell=False,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            env=env
         )
         return result.stdout
     
-    def _execute_builtin(self, skill: Skill, params: Dict[str, Any]) -> str:
+    def _execute_builtin(self, skill: Skill, params: Dict[str, Any], context: Optional["SkillContext"] = None) -> str:
         """执行内置检测逻辑"""
         target = params.get("target", "")
         

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>渗透测试安全评估报告 - http://localhost:19005/</title>
+<style>
+  :root {
+    --critical: #dc2626; --high: #ea580c; --medium: #d97706;
+    --low: #2563eb; --info: #6b7280;
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --text-muted: #94a3b8; --accent: #06b6d4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text);
+         line-height: 1.6; padding: 2rem; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #0c1a2e 0%, #162032 100%);
+    border: 1px solid var(--accent); border-radius: 12px; padding: 2rem 2.5rem;
+    margin-bottom: 2rem; position: relative; overflow: hidden; }
+  .report-header::before { content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(6,182,212,.03) 2px, rgba(6,182,212,.03) 4px);
+    pointer-events: none; }
+  .report-title { font-size: 1.8rem; font-weight: 700; color: var(--accent); margin-bottom: .5rem; }
+  .report-meta { display: flex; gap: 2rem; flex-wrap: wrap; font-size: .85rem; color: var(--text-muted); margin-top: 1rem; }
+  .report-meta span { display: flex; align-items: center; gap: .4rem; }
+  /* Risk banner */
+  .risk-banner { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem;
+    border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid; }
+  .risk-critical { background: rgba(220,38,38,.12); border-color: var(--critical); color: #fca5a5; }
+  .risk-high     { background: rgba(234,88,12,.12);  border-color: var(--high);     color: #fdba74; }
+  .risk-medium   { background: rgba(217,119,6,.12);  border-color: var(--medium);   color: #fcd34d; }
+  .risk-low      { background: rgba(37,99,235,.12);  border-color: var(--low);      color: #93c5fd; }
+  .risk-banner .risk-label { font-size: 1.1rem; font-weight: 700; }
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.2rem; text-align: center; }
+  .stat-num { font-size: 2rem; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: .75rem; color: var(--text-muted); margin-top: .3rem; text-transform: uppercase; letter-spacing: .05em; }
+  .num-critical { color: var(--critical); }
+  .num-high     { color: var(--high); }
+  .num-medium   { color: var(--medium); }
+  .num-low      { color: var(--low); }
+  .num-info     { color: var(--info); }
+  /* Section */
+  .section { margin-bottom: 2rem; }
+  .section-title { font-size: 1.1rem; font-weight: 600; color: var(--accent);
+    border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: 1rem; }
+  /* Executive summary */
+  .exec-summary { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.5rem; line-height: 1.8; color: var(--text-muted); }
+  /* Finding card */
+  .finding { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 1rem; overflow: hidden; }
+  .finding-header { display: flex; align-items: center; gap: .8rem; padding: .9rem 1.2rem;
+    border-bottom: 1px solid var(--border); }
+  .sev-badge { font-size: .7rem; font-weight: 700; padding: .2rem .6rem; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: .05em; }
+  .sev-critical { background: rgba(220,38,38,.2); color: #fca5a5; }
+  .sev-high     { background: rgba(234,88,12,.2);  color: #fdba74; }
+  .sev-medium   { background: rgba(217,119,6,.2);  color: #fcd34d; }
+  .sev-low      { background: rgba(37,99,235,.2);  color: #93c5fd; }
+  .sev-info     { background: rgba(107,114,128,.2);color: #d1d5db; }
+  .finding-title { font-weight: 600; flex: 1; }
+  .cvss-score { font-size: .8rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+  .finding-body { padding: 1.2rem; display: grid; gap: 1rem; }
+  .finding-body table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .finding-body td { padding: .4rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .finding-body td:first-child { color: var(--text-muted); width: 6rem; white-space: nowrap; }
+  .remediation { background: rgba(6,182,212,.06); border: 1px solid rgba(6,182,212,.2);
+    border-radius: 6px; padding: 1rem; }
+  .remediation-title { font-size: .8rem; color: var(--accent); font-weight: 600; margin-bottom: .5rem; }
+  .remediation-steps { font-size: .83rem; color: var(--text-muted); white-space: pre-wrap; }
+  .refs { margin-top: .6rem; }
+  .refs a { font-size: .78rem; color: var(--accent); text-decoration: none; display: block; }
+  .refs a:hover { text-decoration: underline; }
+  /* Methodology */
+  .methodology ol { padding-left: 1.5rem; color: var(--text-muted); font-size: .9rem; }
+  .methodology li { margin-bottom: .4rem; }
+  /* Footer */
+  .report-footer { text-align: center; color: var(--text-muted); font-size: .78rem;
+    border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 2rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <div class="report-title">渗透测试安全评估报告 - http://localhost:19005/</div>
+  <div class="report-meta">
+    <span>&#x1F3AF; 目标：<strong>http://localhost:19005/</strong></span>
+    <span>&#x1F4C5; 生成时间：2026-04-15 10:17:27</span>
+    <span>&#x1F527; 扫描类型：standard</span>
+    <span>&#x231B; 扫描时长：N/A</span>
+  </div>
+  <div class="report-meta" style="margin-top:6px;border-top:1px solid rgba(0,212,255,0.1);padding-top:8px">
+    <span>&#x1F464; 测试人员：ClawAI 自动化渗透测试系统</span>
+    <span>&#x1F3E2; 委托方：</span>
+    <span>&#x1F4CB; 测试周期：2026-04-15 ~ 2026-04-15</span>
+    
+  </div>
+</div>
+
+<!-- Risk Banner -->
+<div class="risk-banner risk-critical">
+  <div>
+    <div class="risk-label">&#x26A0; 整体风险等级：Critical（严重）</div>
+    <div style="font-size:.85rem;margin-top:.3rem;">共发现 7 个安全问题，其中 1 Critical / 0 High / 6 Medium / 0 Low。</div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat-card"><div class="stat-num num-critical">1</div><div class="stat-label">Critical</div></div>
+  <div class="stat-card"><div class="stat-num num-high">0</div><div class="stat-label">High</div></div>
+  <div class="stat-card"><div class="stat-num num-medium">6</div><div class="stat-label">Medium</div></div>
+  <div class="stat-card"><div class="stat-num num-low">0</div><div class="stat-label">Low</div></div>
+  <div class="stat-card"><div class="stat-num num-info">0</div><div class="stat-label">Info</div></div>
+  <div class="stat-card"><div class="stat-num" style="color:var(--accent)">7</div><div class="stat-label">总计</div></div>
+</div>
+
+<!-- Executive Summary -->
+<div class="section">
+  <div class="section-title">&#x1F4CB; 执行摘要</div>
+  <div class="exec-summary">本次对目标 http://localhost:19005/ 的安全评估共发现 7 个安全问题，其中严重漏洞 1 个、高危漏洞 0 个、中危漏洞 6 个、低危漏洞 0 个、信息类 0 个。<br>高危及以上漏洞包括：完整攻击链等，建议立即修复。<br>评估团队建议优先修复严重和高危漏洞，防止攻击者利用这些漏洞获取系统权限或敏感数据，并在修复完成后进行复测确认。</div>
+</div>
+
+<!-- Findings -->
+<div class="section">
+  <div class="section-title">&#x1F50D; 漏洞详情</div>
+  <div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-critical">CRITICAL</span>
+    <span class="finding-title">完整攻击链</span>
+    <span class="cvss-score">CVSS 9.8 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>完整渗透路径</td></tr>
+      
+      <tr><td>影响</td><td>攻击者已完成从初始访问到系统控制的完整攻击链，目标系统已被完全攻陷。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 严禁将用户输入直接拼接到 shell 命令中，使用语言内置 API 替代。
+2. 若必须执行外部命令，使用参数列表（非字符串）调用方式，并严格白名单校验参数。
+3. 在独立的沙箱/容器中运行用户触发的命令，限制系统调用权限。
+4. 启用应用层防火墙，监控异常进程创建行为。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-community/attacks/Command_Injection" target="_blank">https://owasp.org/www-community/attacks/Command_Injection</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">Apache Tomcat/8.5.19</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>HTTP 200 | Title: Apache Tomcat/8.5.19</td></tr>
+      
+      <tr><td>影响</td><td>Web 服务版本、框架信息暴露，增加被针对性攻击的风险。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">敏感目录/文件暴露</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>http://localhost:19005/</code></td></tr>
+      <tr><td>描述</td><td>发现 1 个敏感路径：http://localhost:19005/manager</td></tr>
+      
+      <tr><td>影响</td><td>敏感目录或备份文件暴露，可能泄露源代码、配置文件或管理入口。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">403 Access Denied</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>HTTP 403 | Title: 403 Access Denied</td></tr>
+      
+      <tr><td>影响</td><td>Web 服务版本、框架信息暴露，增加被针对性攻击的风险。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">403 Access Denied</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>HTTP 403 | Title: 403 Access Denied</td></tr>
+      
+      <tr><td>影响</td><td>Web 服务版本、框架信息暴露，增加被针对性攻击的风险。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">Web 服务信息暴露</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>HTTP 201</td></tr>
+      
+      <tr><td>影响</td><td>Web 服务版本、框架信息暴露，增加被针对性攻击的风险。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="finding-header">
+    <span class="sev-badge sev-medium">MEDIUM</span>
+    <span class="finding-title">HTTP Status 404 – Not Found</span>
+    <span class="cvss-score">CVSS 5.3 &nbsp;|&nbsp; CVSS:3.1</span>
+  </div>
+  <div class="finding-body">
+    <table>
+      <tr><td>位置</td><td><code>N/A</code></td></tr>
+      <tr><td>描述</td><td>HTTP 404 | Title: HTTP Status 404 – Not Found</td></tr>
+      
+      <tr><td>影响</td><td>Web 服务版本、框架信息暴露，增加被针对性攻击的风险。</td></tr>
+      
+    </table>
+    <div class="remediation">
+      <div class="remediation-title">&#x1F527; 修复建议</div>
+      <div class="remediation-steps">1. 配置 Web 服务器隐藏版本号（如 Apache ServerTokens Prod，Nginx server_tokens off）。
+2. 禁用目录列表（Apache Options -Indexes，Nginx autoindex off）。
+3. 删除或保护备份文件（.bak/.zip/.sql）、配置文件、.git 目录。
+4. 配置 robots.txt 不暴露敏感路径，并配合访问控制限制实际访问。
+5. 定期使用目录扫描工具自查暴露资产。</div>
+      <div class="refs">参考链接：<a href="https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/" target="_blank">https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/</a></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Methodology -->
+<div class="section methodology">
+  <div class="section-title">&#x1F9EA; 测试方法</div>
+  <ol>
+    <li>信息收集：目标侦察、端口扫描、服务指纹识别</li>
+    <li>漏洞扫描：自动化工具扫描（Nuclei、Nikto、SQLMap 等）</li>
+    <li>手工验证：对自动化发现的漏洞进行手工确认和 PoC 复现</li>
+    <li>漏洞利用：在授权范围内验证漏洞可利用性</li>
+    <li>风险评估：基于 CVSS v3 评分和业务影响综合评级</li>
+    <li>报告输出：整理发现、提供修复建议</li>
+  </ol>
+</div>
+
+<div class="report-footer">
+  本报告由 ClawAI 自动生成 · 仅供授权安全评估使用 · 2026-04-15 10:17:27
+</div>
+
+<section style='margin-top:32px;padding:16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px'><h3 style='color:#6b7280;font-size:12px;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px'>免责声明</h3><p style='color:#6b7280;font-size:12px;line-height:1.6;margin:0'>本报告仅供授权范围内的安全评估参考使用。报告内容、截图及漏洞细节属机密信息，未经书面授权，不得向第三方披露或用于任何商业目的。本次评估结果反映特定时间点的安全状况，不构成对目标系统安全性的完整保证。</p></section>
+
+</div>
+</body>
+</html>

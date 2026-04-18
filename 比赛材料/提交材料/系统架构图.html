@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>ClawAI 系统架构图</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f0f4f8;
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    padding: 40px 60px;
+    color: #1a1a2e;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 36px;
+  }
+
+  /* ── 整体三列布局 ── */
+  .arch {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── 通用层 ── */
+  .layer {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .layer-label {
+    width: 90px;
+    min-width: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: #fff;
+    border-radius: 10px 0 0 10px;
+    padding: 16px 0;
+  }
+
+  .layer-body {
+    flex: 1;
+    border-radius: 0 10px 10px 0;
+    padding: 20px 24px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  /* ── 箭头连接层 ── */
+  .connector {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 36px;
+    gap: 8px;
+    color: #999;
+    font-size: 11px;
+  }
+
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .arrow-down .line {
+    width: 2px;
+    height: 14px;
+    background: #bbb;
+  }
+  .arrow-down .tip {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #bbb;
+  }
+
+  /* ── 卡片 ── */
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 14px 16px;
+    flex: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    position: relative;
+  }
+
+  .card .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .card .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  /* ── 颜色方案 ── */
+  /* 用户交互层 — 蓝灰 */
+  .l-ui .layer-label   { background: #4a6fa5; }
+  .l-ui .layer-body    { background: #eef2f8; border: 1.5px solid #c5d3e8; }
+  .l-ui .card-title    { color: #4a6fa5; }
+  .l-ui .tag           { background: #dce8fb; color: #2c5282; }
+
+  /* LLM决策层 — 紫 */
+  .l-llm .layer-label  { background: #6c47a6; }
+  .l-llm .layer-body   { background: #f3eefe; border: 1.5px solid #d6c5f3; }
+  .l-llm .card-title   { color: #6c47a6; }
+  .l-llm .tag          { background: #e8dafc; color: #553c9a; }
+
+  /* P-E-R层 — 青绿 */
+  .l-per .layer-label  { background: #0d9e8c; }
+  .l-per .layer-body   { background: #e8faf7; border: 1.5px solid #9eddd6; }
+  .l-per .card-title   { color: #0d7a6c; }
+  .l-per .tag          { background: #c5f1ec; color: #0d6b5e; }
+
+  /* Skills层 — 橙 */
+  .l-skills .layer-label { background: #e06c1a; }
+  .l-skills .layer-body  { background: #fff4ec; border: 1.5px solid #f5c99a; }
+  .l-skills .card-title  { color: #c05a10; }
+  .l-skills .tag         { background: #ffe3c5; color: #a0490d; }
+
+  /* 工具层 — 深蓝灰 */
+  .l-tools .layer-label { background: #34495e; }
+  .l-tools .layer-body  { background: #edf0f3; border: 1.5px solid #bec9d4; }
+  .l-tools .card-title  { color: #2c3e50; }
+  .l-tools .tag         { background: #d5dce4; color: #2c3e50; }
+
+  /* 输出层 — 绿 */
+  .l-out .layer-label  { background: #27ae60; }
+  .l-out .layer-body   { background: #eafaf1; border: 1.5px solid #a9dfbf; }
+  .l-out .card-title   { color: #1e8449; }
+  .l-out .tag          { background: #c8f0d8; color: #196f3d; }
+
+  /* ── P-E-R 特殊三列带箭头 ── */
+  .per-inner {
+    flex: 1;
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .per-card {
+    flex: 1;
+    background: #fff;
+    border-radius: 8px;
+    padding: 14px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+
+  .per-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    color: #0d9e8c;
+    font-size: 20px;
+    font-weight: 300;
+  }
+
+  .per-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    margin-top: 4px;
+    margin-right: 4px;
+  }
+
+  /* ── 双向反馈注解 ── */
+  .feedback-note {
+    text-align: center;
+    font-size: 11px;
+    color: #0d9e8c;
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  /* ── 工具分类行 ── */
+  .tool-group {
+    flex: 1;
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+
+  .tool-group .g-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #34495e;
+    margin-bottom: 6px;
+    border-bottom: 1.5px solid #dde3ea;
+    padding-bottom: 4px;
+  }
+
+  .tool-group .g-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tool-name {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #d5dce4;
+    color: #2c3e50;
+  }
+
+  /* ── 图例 ── */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #555;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* ── 打印/截图提示 ── */
+  .hint {
+    text-align: center;
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 20px;
+  }
+
+  @media print {
+    body { background: #fff; padding: 20px; }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>ClawAI 系统架构图</h1>
+<p class="subtitle">基于大模型的自动化渗透测试系统 · 51 工具 · 27 类漏洞技能 · 21 CVE 利用模块 · P-E-R 智能体</p>
+
+<div class="arch">
+
+  <!-- ══ 第一层：用户交互层 ══ -->
+  <div class="layer l-ui">
+    <div class="layer-label">用户交互层</div>
+    <div class="layer-body">
+      <div class="card">
+        <div class="card-title">Web 可视化界面</div>
+        <div class="tag-row">
+          <span class="tag">实时攻击仪表板</span>
+          <span class="tag">P-E-R 执行面板</span>
+          <span class="tag">漏洞报告页</span>
+          <span class="tag">3D 攻击链拓扑</span>
+        </div>
+        <div class="tag-row" style="margin-top:4px;">
+          <span class="tag" style="background:#f0f4f8;color:#555;font-size:10px;">React 18 · TailwindCSS · Three.js · WebSocket</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">CLI 对话模式</div>
+        <div class="tag-row">
+          <span class="tag">自然语言输入目标</span>
+          <span class="tag">Textual TUI 界面</span>
+          <span class="tag">chat / scan / tools</span>
+        </div>
+        <div class="tag-row" style="margin-top:4px;">
+          <span class="tag" style="background:#f0f4f8;color:#555;font-size:10px;">python clawai.py chat</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">REST API</div>
+        <div class="tag-row">
+          <span class="tag">任务管理接口</span>
+          <span class="tag">报告查询接口</span>
+          <span class="tag">Skills 调用接口</span>
+        </div>
+        <div class="tag-row" style="margin-top:4px;">
+          <span class="tag" style="background:#f0f4f8;color:#555;font-size:10px;">FastAPI 0.104 · SQLAlchemy · Redis</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接箭头 -->
+  <div class="connector">
+    <div class="arrow-down"><div class="line"></div><div class="tip"></div></div>
+    <span>用户指令 / 任务下发</span>
+  </div>
+
+  <!-- ══ 第二层：LLM 决策层 ══ -->
+  <div class="layer l-llm">
+    <div class="layer-label">大模型决策层</div>
+    <div class="layer-body">
+      <div class="card">
+        <div class="card-title">LLMBackend 统一接口</div>
+        <div class="tag-row">
+          <span class="tag">GPT-4 / GPT-4o</span>
+          <span class="tag">Claude 3.5</span>
+          <span class="tag">DeepSeek</span>
+          <span class="tag">智谱 GLM-4</span>
+        </div>
+        <div class="tag-row" style="margin-top:4px;">
+          <span class="tag" style="background:#f3eefe;color:#6c47a6;font-size:10px;">多模型路由 · 成本优化 · 自动切换</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">提示词工程 &amp; 上下文管理</div>
+        <div class="tag-row">
+          <span class="tag">渗透测试 System Prompt</span>
+          <span class="tag">对话历史压缩</span>
+          <span class="tag">安全指令绕过</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">EventBus 事件系统</div>
+        <div class="tag-row">
+          <span class="tag">任务状态广播</span>
+          <span class="tag">WebSocket 实时推送</span>
+          <span class="tag">工具调用日志流</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接箭头 -->
+  <div class="connector">
+    <div class="arrow-down"><div class="line"></div><div class="tip"></div></div>
+    <span>任务分解 / 策略决策</span>
+  </div>
+
+  <!-- ══ 第三层：P-E-R 智能体层 ══ -->
+  <div class="layer l-per">
+    <div class="layer-label">P-E-R 智能体层</div>
+    <div class="layer-body" style="flex-direction: column; gap: 10px;">
+      <div class="per-inner">
+        <div class="per-card">
+          <div class="card-title" style="color:#0d7a6c; font-size:13px;">Planner 规划器</div>
+          <div style="font-size:11px; color:#444; margin-top:4px; line-height:1.6;">
+            理解用户目标，将高级指令拆解为可执行的子任务有向图，分配优先级和依赖关系
+          </div>
+          <div style="margin-top:8px;">
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">目标分析</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">任务图生成</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">优先级排序</span>
+          </div>
+        </div>
+        <div class="per-arrow">→</div>
+        <div class="per-card">
+          <div class="card-title" style="color:#0d7a6c; font-size:13px;">Executor 执行器</div>
+          <div style="font-size:11px; color:#444; margin-top:4px; line-height:1.6;">
+            按任务图顺序调用工具和 Skills，处理参数填充、超时重试、结果解析
+          </div>
+          <div style="margin-top:8px;">
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">工具调用</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">Skills 执行</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">结果解析</span>
+          </div>
+        </div>
+        <div class="per-arrow">→</div>
+        <div class="per-card">
+          <div class="card-title" style="color:#0d7a6c; font-size:13px;">Reflector 反思器</div>
+          <div style="font-size:11px; color:#444; margin-top:4px; line-height:1.6;">
+            评估执行结果，判断成功或失败，提取漏洞证据，失败时生成改进建议反馈给 Planner
+          </div>
+          <div style="margin-top:8px;">
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">结果评估</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">证据提取</span>
+            <span class="per-badge" style="background:#c5f1ec;color:#0d6b5e;">策略反馈</span>
+          </div>
+        </div>
+      </div>
+      <div class="feedback-note">↑ 执行失败时 Reflector 将改进建议反馈给 Planner，自动调整策略重试（闭环）↑</div>
+    </div>
+  </div>
+
+  <!-- 连接箭头 -->
+  <div class="connector">
+    <div class="arrow-down"><div class="line"></div><div class="tip"></div></div>
+    <span>调用指令 / 参数传递</span>
+  </div>
+
+  <!-- ══ 第四层：Skills 技能层 ══ -->
+  <div class="layer l-skills">
+    <div class="layer-label">Skills 技能层</div>
+    <div class="layer-body">
+      <div class="card">
+        <div class="card-title">漏洞利用技能库（27 类）</div>
+        <div class="tag-row">
+          <span class="tag">SQL 注入 ×3</span>
+          <span class="tag">XSS ×2</span>
+          <span class="tag">命令注入</span>
+          <span class="tag">文件包含</span>
+          <span class="tag">文件上传</span>
+          <span class="tag">CSRF / SSRF</span>
+          <span class="tag">XXE / SSTI / IDOR</span>
+          <span class="tag">反序列化</span>
+          <span class="tag">NoSQL 注入</span>
+          <span class="tag">WAF 检测</span>
+          <span class="tag">暴力破解</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">CVE Exploit 模块（21 个）</div>
+        <div class="tag-row">
+          <span class="tag">S2-045 / S2-057 / S2-061</span>
+          <span class="tag">ThinkPHP RCE</span>
+          <span class="tag">Shiro-550</span>
+          <span class="tag">FastJSON 1.2.24/47</span>
+          <span class="tag">WebLogic CVE-2021-21839</span>
+          <span class="tag">Tomcat PUT</span>
+          <span class="tag">PHP-FPM 11043</span>
+          <span class="tag">ActiveMQ / JBoss</span>
+          <span class="tag">Django / Flask SSTI</span>
+          <span class="tag">GeoServer CVE-2024-36401</span>
+          <span class="tag">CVE-2021-4034 PwnKit</span>
+          <span class="tag">CVE-2017-16995 eBPF</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Function Calling 接口</div>
+        <div class="tag-row">
+          <span class="tag">OpenAI 标准 Schema</span>
+          <span class="tag">AI 自动选技能</span>
+          <span class="tag">参数自动填充</span>
+          <span class="tag">Payload 变异器</span>
+          <span class="tag">WAF 绕过策略</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接箭头 -->
+  <div class="connector">
+    <div class="arrow-down"><div class="line"></div><div class="tip"></div></div>
+    <span>命令执行 / 网络请求</span>
+  </div>
+
+  <!-- ══ 第五层：工具集成层 ══ -->
+  <div class="layer l-tools">
+    <div class="layer-label">工具集成层</div>
+    <div class="layer-body" style="gap: 12px;">
+      <div class="tool-group">
+        <div class="g-title">信息收集</div>
+        <div class="g-tags">
+          <span class="tool-name">amass</span>
+          <span class="tool-name">subfinder</span>
+          <span class="tool-name">theharvester</span>
+          <span class="tool-name">dnsrecon</span>
+        </div>
+      </div>
+      <div class="tool-group">
+        <div class="g-title">端口 / 网络扫描</div>
+        <div class="g-tags">
+          <span class="tool-name">nmap</span>
+          <span class="tool-name">masscan</span>
+          <span class="tool-name">rustscan</span>
+        </div>
+      </div>
+      <div class="tool-group">
+        <div class="g-title">漏洞 / Web 扫描</div>
+        <div class="g-tags">
+          <span class="tool-name">nuclei</span>
+          <span class="tool-name">nikto</span>
+          <span class="tool-name">ffuf</span>
+          <span class="tool-name">gobuster</span>
+          <span class="tool-name">dirsearch</span>
+          <span class="tool-name">feroxbuster</span>
+          <span class="tool-name">xsstrike</span>
+          <span class="tool-name">sqlmap</span>
+          <span class="tool-name">commix</span>
+        </div>
+      </div>
+      <div class="tool-group">
+        <div class="g-title">漏洞利用</div>
+        <div class="g-tags">
+          <span class="tool-name">metasploit</span>
+          <span class="tool-name">impacket</span>
+          <span class="tool-name">searchsploit</span>
+        </div>
+      </div>
+      <div class="tool-group">
+        <div class="g-title">密码爆破</div>
+        <div class="g-tags">
+          <span class="tool-name">hydra</span>
+          <span class="tool-name">medusa</span>
+          <span class="tool-name">hashcat</span>
+          <span class="tool-name">john</span>
+        </div>
+      </div>
+      <div class="tool-group">
+        <div class="g-title">后渗透</div>
+        <div class="g-tags">
+          <span class="tool-name">evil-winrm</span>
+          <span class="tool-name">crackmapexec</span>
+          <span class="tool-name">chisel</span>
+          <span class="tool-name">ligolo</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接箭头 -->
+  <div class="connector">
+    <div class="arrow-down"><div class="line"></div><div class="tip"></div></div>
+    <span>测试结果 / 漏洞证据</span>
+  </div>
+
+  <!-- ══ 第六层：输出层 ══ -->
+  <div class="layer l-out">
+    <div class="layer-label">输出层</div>
+    <div class="layer-body">
+      <div class="card">
+        <div class="card-title">漏洞报告</div>
+        <div class="tag-row">
+          <span class="tag">CVE / CWE 编号</span>
+          <span class="tag">CVSS 评分</span>
+          <span class="tag">攻击路径 + 证据</span>
+          <span class="tag">修复建议</span>
+          <span class="tag">JSON / TXT 导出</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">攻击链记录</div>
+        <div class="tag-row">
+          <span class="tag">多阶段时序图</span>
+          <span class="tag">工具调用日志</span>
+          <span class="tag">AI 决策轨迹</span>
+          <span class="tag">Neo4j 攻击图谱</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">量化指标</div>
+        <div class="tag-row">
+          <span class="tag">漏洞检测率 100%</span>
+          <span class="tag">误报率 0%</span>
+          <span class="tag">CVE 覆盖度 100%（21/21）</span>
+          <span class="tag">DVWA 平均耗时 9.8s</span>
+          <span class="tag">VulnHub 5台靶机全 root</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 图例 -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4a6fa5;"></div>用户交互层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6c47a6;"></div>大模型决策层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0d9e8c;"></div>P-E-R 智能体层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e06c1a;"></div>Skills 技能层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34495e;"></div>工具集成层（51个）</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#27ae60;"></div>输出层</div>
+</div>
+
+<p class="hint">截图建议：浏览器缩放调到 80%，Ctrl+Shift+P → Print → Save as PDF，或直接截图</p>
+
+</body>
+</html>
